@@ -131,9 +131,6 @@ export function getAvailableSTTEngines(customGroqKey?: string): STTEngineConfig[
   return list
 }
 
-export const STT_ENGINES: STTEngineConfig[] = DEFAULT_LOCAL_STT_ENGINES
-export const AVAILABLE_MODELS: AIModelConfig[] = []
-
 // Fallback placeholder when no API keys are entered yet
 export const EMPTY_PLACEHOLDER_MODEL: AIModelConfig = {
   id: 'no-model-configured',

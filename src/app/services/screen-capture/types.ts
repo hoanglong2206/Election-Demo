@@ -71,8 +71,6 @@ export interface MultimodalModelOption {
   description?: string
 }
 
-export const DEFAULT_MULTIMODAL_MODELS: MultimodalModelOption[] = []
-
 import { modelRegistryService } from '../ai-model/model-registry'
 
 export function getAvailableMultimodalModels(): MultimodalModelOption[] {
