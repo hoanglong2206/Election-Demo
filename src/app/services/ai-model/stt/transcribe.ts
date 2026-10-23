@@ -1,0 +1,260 @@
+import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
+import { settingsManager } from '../../settings'
+import type { TranscribeResult } from './types'
+import { base64ToBlob, blobToBase64 } from './audioUtils'
+import { translateSTTText } from './translate'
+import { usageTrackerService } from '../../usage-tracker'
+
+/**
+ * Estimate audio duration in seconds based on 16kHz 16-bit mono PCM bytes.
+ */
+function estimateAudioDurationSeconds(audioData: string | Blob): number {
+  try {
+    let byteLength = 0
+    if (typeof audioData === 'string') {
+      const clean = audioData.replace(/^data:[^;]+;base64,/, '').trim()
+      byteLength = Math.floor((clean.length * 3) / 4)
+    } else {
+      byteLength = audioData.size
+    }
+    // 16kHz, 16-bit mono = 32000 bytes/sec
+    const pcmBytes = Math.max(0, byteLength - 44)
+    const duration = pcmBytes / 32000
+    return Math.max(0.1, Math.round(duration * 10) / 10)
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Transcribe audio using the chosen STT Engine:
+ * - Local Whisper (ggml-base.bin, ggml-tiny.bin) via C++ whisper-cli
+ * - Groq Whisper (whisper-large-v3-turbo, whisper-large-v3) via Groq Cloud LPU
+ */
+export async function transcribeAudio(
+  audioData: string | Blob,
+  customEngineId?: string,
+  language = 'auto',
+  prompt?: string,
+  sessionId?: string
+): Promise<TranscribeResult> {
+  const engineId = customEngineId || getSavedSTTEngineId()
+  const available = getAvailableSTTEngines()
+  const engine = available.find((e) => e.id === engineId) || available[0]
+  const startTime = performance.now()
+  const durationSec = estimateAudioDurationSeconds(audioData)
+
+  // ── 1. LOCAL WHISPER C++ ENGINE ──────────────────────────────────────────
+  if (engine?.provider === 'Local') {
+    if (window.api?.nativeWhisper) {
+      let base64 = ''
+      if (typeof audioData === 'string') {
+        base64 = audioData
+      } else {
+        base64 = await blobToBase64(audioData)
+      }
+
+      const res = await window.api.nativeWhisper.transcribe(base64, {
+        modelId: engineId,
+        language: language || 'auto',
+        prompt,
+      })
+
+      // Track usage (Local is always $0 free)
+      try {
+        usageTrackerService.trackUsage({
+          sessionId,
+          provider: 'Local',
+          model: engineId,
+          feature: 'stt',
+          audioDurationSeconds: durationSec,
+        })
+      } catch {}
+
+      const elapsed = Math.round(performance.now() - startTime)
+      const cleanText = (res.text || '')
+        .replace(/\[BLANK_AUDIO\]/gi, '')
+        .replace(/\[MUSIC\]/gi, '')
+        .replace(/\(music\)/gi, '')
+        .replace(/\[pause\]/gi, '')
+        .trim()
+
+      const translatedVi = cleanText ? await translateSTTText(cleanText) : ''
+
+      return {
+        success: res.success && Boolean(cleanText),
+        text: cleanText,
+        translatedVi,
+        latencyMs: res.latencyMs || elapsed,
+        engineId,
+        engineName: engine.name,
+        provider: 'Local',
+        isNative: res.isNative,
+        confidence: engineId.includes('base') ? 99 : 97,
+        error: res.error,
+      }
+    } else {
+      const elapsed = Math.round(performance.now() - startTime)
+      return {
+        success: false,
+        text: 'Native Whisper API chỉ khả dụng khi chạy trên ứng dụng Desktop Electron.',
+        translatedVi: 'Chưa thể kết nối Native C++ Whisper.',
+        latencyMs: elapsed,
+        engineId,
+        engineName: engine?.name || engineId,
+        provider: 'Local',
+        confidence: 0,
+        error: 'API Desktop unavailable',
+      }
+    }
+  }
+
+  // ── 2. GROQ WHISPER CLOUD LPU ENGINE ──────────────────────────────────────
+  if (engine?.provider === 'Groq') {
+    // High security path: Transcribe via Electron Main Process (no plaintext key in renderer!)
+    if (typeof window !== 'undefined' && window.api?.credentials?.transcribeGroq) {
+      try {
+        const audioBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(audioData)
+        const res = await window.api.credentials.transcribeGroq(audioBase64, engineId, language, prompt)
+        if (res && res.text) {
+          try {
+            usageTrackerService.trackUsage({
+              sessionId,
+              provider: 'Groq',
+              model: engineId,
+              feature: 'stt',
+              audioDurationSeconds: durationSec,
+            })
+          } catch {}
+
+          const cleanText = res.text.trim()
+          const translatedVi = cleanText ? await translateSTTText(cleanText) : ''
+          return {
+            success: Boolean(cleanText),
+            text: cleanText,
+            translatedVi,
+            latencyMs: res.latencyMs || Math.round(performance.now() - startTime),
+            engineId,
+            engineName: engine.name,
+            provider: 'Groq',
+            confidence: 98,
+          }
+        }
+      } catch (err: any) {
+        console.warn('[transcribe] Secure Groq STT via Main process error:', err)
+        return {
+          success: false,
+          text: '',
+          translatedVi: '',
+          latencyMs: 0,
+          engineId,
+          engineName: engine.name,
+          provider: 'Groq',
+          confidence: 0,
+          error: err?.message || 'Groq STT failed',
+        }
+      }
+    }
+
+    const groqKey = String(settingsManager.get('groqKey') || '').trim()
+    if (!groqKey) {
+      return {
+        success: false,
+        text: 'Vui lòng nhập Groq API Key trong tab Cài Đặt để sử dụng mô hình Whisper LPU.',
+        translatedVi: 'Chưa có Groq API Key.',
+        latencyMs: 0,
+        engineId,
+        engineName: engine.name,
+        provider: 'Groq',
+        confidence: 0,
+        error: 'Groq API Key is missing',
+      }
+    }
+
+    try {
+      let blob: Blob
+      if (typeof audioData === 'string') {
+        blob = base64ToBlob(audioData)
+      } else {
+        blob = audioData
+      }
+
+      const formData = new FormData()
+      formData.append('file', blob, 'audio.wav')
+      formData.append('model', engineId)
+      formData.append('response_format', 'json')
+      formData.append('temperature', '0')
+      if (language && language !== 'auto') {
+        formData.append('language', language)
+      }
+      if (prompt && prompt.trim()) {
+        formData.append('prompt', prompt.trim())
+      }
+
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+        },
+        body: formData,
+      })
+
+      const elapsed = Math.round(performance.now() - startTime)
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson?.error?.message || `Lỗi Groq STT (${res.status})`)
+      }
+
+      const data = await res.json()
+      const text = data.text || ''
+
+      try {
+        usageTrackerService.trackUsage({
+          sessionId,
+          provider: 'Groq',
+          model: engineId,
+          feature: 'stt',
+          audioDurationSeconds: durationSec,
+        })
+      } catch {}
+
+      const translatedVi = await translateSTTText(text)
+
+      return {
+        success: true,
+        text,
+        translatedVi,
+        latencyMs: elapsed,
+        engineId,
+        engineName: engine.name,
+        provider: 'Groq',
+        confidence: 99,
+      }
+    } catch (err) {
+      return {
+        success: false,
+        text: '',
+        translatedVi: '',
+        latencyMs: Math.round(performance.now() - startTime),
+        engineId,
+        engineName: engine.name,
+        provider: 'Groq',
+        confidence: 0,
+        error: (err as Error).message,
+      }
+    }
+  }
+
+  return {
+    success: false,
+    text: '',
+    translatedVi: '',
+    latencyMs: 0,
+    engineId,
+    engineName: 'Unknown',
+    provider: 'Local',
+    confidence: 0,
+    error: 'Không tìm thấy cấu hình STT phù hợp.',
+  }
+}
