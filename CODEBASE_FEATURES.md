@@ -2,7 +2,7 @@
 
 > **Dự án**: Electron AI Meeting & Interview Copilot  
 > **Kiến trúc**: React 19 + TypeScript + Vite + Electron 44 + Whisper C++ Native + OS Credential Store (DPAPI/Keychain)  
-> **Cập nhật gần nhất**: 23/10/2026  
+> **Cập nhật gần nhất**: 23/10/2026
 
 ---
 
@@ -55,16 +55,18 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
 ---
 
 ### TRANG 1: HOME (Chuẩn Bị, Quản Lý Profile & Phân Tích Trước Cuộc Họp)
-*File chính: `src/app/features/home/Home.tsx` và thư mục `src/app/features/home/components/`*
+
+_File chính: `src/app/features/home/Home.tsx` và thư mục `src/app/features/home/components/`_
 
 #### Chức năng chi tiết:
+
 1. **Hero Launch Bar**:
    - Chuyển đổi nhanh 2 chế độ cốt lõi:
      - **Interview Mode**: Chế độ phỏng vấn ứng viên tuyển dụng (sinh câu trả lời STAR, bám sát CV & JD).
      - **Discussion Mode**: Chế độ hội thảo công việc / kỹ thuật (sinh giải pháp, luận điểm phản biện, kiến trúc hệ thống).
    - Nút **"Bắt đầu cuộc họp"**: Kiểm tra các điều kiện an toàn (thiết bị âm thanh, context) trước khi chuyển sang Meeting Mode.
 2. **Profile Preset Bar (Quản lý Đa Hồ Sơ)**:
-   - Cho phép lưu và chuyển đổi linh hoạt nhiều bộ hồ sơ ứng viên khác nhau (VD: *Senior Frontend Engineer*, *DevOps Specialist*, *System Architect*).
+   - Cho phép lưu và chuyển đổi linh hoạt nhiều bộ hồ sơ ứng viên khác nhau (VD: _Senior Frontend Engineer_, _DevOps Specialist_, _System Architect_).
    - Hộp thoại `ProfilePresetDialog`: Thêm mới, chỉnh sửa thông tin ứng viên, số năm kinh nghiệm, kỹ năng trọng tâm, ghi chú riêng.
    - Hộp thoại `ProfileImportExportDialog`: Sao lưu và nhập dữ liệu hồ sơ qua file JSON chuẩn hóa.
    - Hộp thoại `ProfileDeleteDialog`: Xác nhận xóa an toàn hồ sơ cũ kèm dọn dẹp liên kết.
@@ -78,8 +80,8 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
    - Nút nạp nhanh dữ liệu mẫu: Sample CV Senior Developer, Sample JD Software Engineer, Sample Discussion Topic.
 4. **Phân tích tương thích CV - JD (CV-JD Match Analysis)**:
    - Tích hợp 2 cơ chế phân tích:
-     - *Heuristic Keyword Matching* (chạy offline ngay lập tức không tốn token API).
-     - *AI Deep Semantic Matching* (dùng LLM phân tích chuyên sâu năng lực).
+     - _Heuristic Keyword Matching_ (chạy offline ngay lập tức không tốn token API).
+     - _AI Deep Semantic Matching_ (dùng LLM phân tích chuyên sâu năng lực).
    - Hộp thoại `CvJdMatchDialog` hiển thị:
      - Điểm số tương thích tổng quan (0 - 100%).
      - Danh sách kỹ năng trùng khớp (Matched Skills).
@@ -99,9 +101,11 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
 ---
 
 ### TRANG 2: MEETING MODE (Trợ Lý Realtime Trong Cuộc Họp & Giải Đề Thị Giác)
-*File chính: `src/app/features/meeting-mode/MeetingMode.tsx` và `src/app/features/meeting-mode/components/`*
+
+_File chính: `src/app/features/meeting-mode/MeetingMode.tsx` và `src/app/features/meeting-mode/components/`_
 
 #### Chức năng chi tiết:
+
 1. **Audio Capture 2 Chiều & Visualizer 60 FPS**:
    - Thu âm đồng thời 2 nguồn: Micro cá nhân của bạn + System Loopback Audio (tiếng đối tác phát ra từ Google Meet, Zoom, Teams, Skype...).
    - Chạy trên Web Audio `AudioWorkletNode` ở luồng riêng, không nghẽn CPU giao diện.
@@ -136,9 +140,11 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
 ---
 
 ### TRANG 3: AUDIO TEST & LAB (Phòng Lab Đo Lường Âm Thanh & Cân Chỉnh VAD)
-*File chính: `src/app/features/audio-test/AudioTest.tsx` và `src/app/features/audio-test/components/`*
+
+_File chính: `src/app/features/audio-test/AudioTest.tsx` và `src/app/features/audio-test/components/`_
 
 #### Chức năng chi tiết:
+
 1. **Audio Controls Toolbar**:
    - Chuyển đổi linh hoạt giữa Micro vật lý và System Audio Loopback.
    - Nút Bắt đầu / Dừng thu âm thử nghiệm.
@@ -165,12 +171,14 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
 ---
 
 ### TRANG 4: AI DIAGNOSTIC & BENCHMARK (Đo Tốc Độ AI & Thử Nghiệm Vision OCR)
-*File chính: `src/app/features/ai-diagnostic/AIDiagnostic.tsx` và `src/app/features/ai-diagnostic/components/`*
+
+_File chính: `src/app/features/ai-diagnostic/AIDiagnostic.tsx` và `src/app/features/ai-diagnostic/components/`_
 
 #### Chức năng chi tiết:
+
 1. **Tab 1: LLM Latency & Speed Benchmark**:
    - Cho phép chọn bất kỳ model LLM nào từ Groq, OpenAI hoặc Google Gemini.
-   - Cung cấp các mẫu prompt thử nghiệm thực tế: *Giải thuật toán LeetCode*, *Câu hỏi phỏng vấn System Design*, *Dịch thuật kỹ thuật*.
+   - Cung cấp các mẫu prompt thử nghiệm thực tế: _Giải thuật toán LeetCode_, _Câu hỏi phỏng vấn System Design_, _Dịch thuật kỹ thuật_.
    - Đo lường và hiển thị các chỉ số hiệu năng AI chuẩn xác:
      - **TTFT (Time to First Token)**: Thời gian từ lúc gửi yêu cầu đến khi nhận được ký tự đầu tiên (ms).
      - **Tốc độ sinh token (Tokens/sec)**: Tốc độ tạo chữ thực tế của model.
@@ -185,24 +193,26 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
 ---
 
 ### TRANG 5: SESSION HISTORY (Quản Lý, Xem Lại & Hậu Kỳ Cuộc Họp)
-*File chính: `src/app/features/session-history/SessionHistory.tsx` và `src/app/features/session-history/components/`*
+
+_File chính: `src/app/features/session-history/SessionHistory.tsx` và `src/app/features/session-history/components/`_
 
 #### Chức năng chi tiết:
+
 1. **Bố Cục Master-Detail & Sidebar Đa Bộ Lọc**:
    - Cột trái hiển thị danh sách các phiên họp đã lưu kèm bộ lọc đa tiêu chí:
      - Lọc theo chế độ: Tất cả, Phỏng vấn (Interview), Thảo luận (Discussion).
-     - Lọc theo Profile ứng viên: *Frontend Dev*, *DevOps Lead*...
-     - Lọc theo mốc thời gian: *Hôm nay*, *7 ngày qua*, *30 ngày qua*, *Tất cả*.
+     - Lọc theo Profile ứng viên: _Frontend Dev_, _DevOps Lead_...
+     - Lọc theo mốc thời gian: _Hôm nay_, _7 ngày qua_, _30 ngày qua_, _Tất cả_.
      - Tìm kiếm theo Tên công ty / Vị trí ứng tuyển.
    - **Full-Text Search Toàn Diện**: Tìm kiếm tức thì trong toàn bộ tiêu đề, transcript tiếng Anh, transcript dịch tiếng Việt, gợi ý của AI và nội dung OCR từ ảnh chụp màn hình.
    - Thao tác quản lý session: Đổi tên cuộc họp trực tiếp (inline rename), xóa từng session hoặc chọn nhiều để xóa hàng loạt (Bulk Delete) kèm hộp thoại xác nhận an toàn.
 2. **Interactive Timeline & Chi Tiết Cuộc Họp**:
    - Header hiển thị tổng quan: Ngày giờ, thời lượng, profile áp dụng, tổng token sử dụng và ước tính chi phí API ($USD).
    - **Tab 1 - Dòng thời gian tích hợp (Unified Timeline)**: Liệt kê sự kiện theo thời gian thực với phân loại màu sắc trực quan:
-     - *Câu hỏi người phỏng vấn* (Theme màu hổ phách, nhãn Question).
-     - *Câu trả lời của bạn* (Theme màu tím, nhãn You).
-     - *Gợi ý AI STAR Copilot* (Theme phát sáng emerald/violet, nhãn AI Suggestion kèm nút copy).
-     - *Câu hỏi hình ảnh màn hình* (Theme cyan/indigo, trích xuất OCR, tóm tắt và code thuật toán).
+     - _Câu hỏi người phỏng vấn_ (Theme màu hổ phách, nhãn Question).
+     - _Câu trả lời của bạn_ (Theme màu tím, nhãn You).
+     - _Gợi ý AI STAR Copilot_ (Theme phát sáng emerald/violet, nhãn AI Suggestion kèm nút copy).
+     - _Câu hỏi hình ảnh màn hình_ (Theme cyan/indigo, trích xuất OCR, tóm tắt và code thuật toán).
    - **Tính năng Click-to-Correlate**: Bấm vào mốc thời gian của bất kỳ sự kiện nào để tự động cuộn và highlight câu hỏi hoặc gợi ý AI tương ứng.
    - **Tab 2 - Lời thoại song ngữ (Transcript)**: Xem toàn bộ hội thoại gốc và dịch với chế độ progressive load chống giật lag.
    - **Tab 3 - Gợi ý AI Copilot**: Toàn bộ câu trả lời STAR kèm số token tiêu thụ.
@@ -219,9 +229,11 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
 ---
 
 ### TRANG 6: COST TRACKER (Quản Lý Ngân Sách & Theo Dõi Chi Phí Token API)
-*File chính: `src/app/features/cost-tracker/CostTracker.tsx` và `src/app/features/cost-tracker/components/`*
+
+_File chính: `src/app/features/cost-tracker/CostTracker.tsx` và `src/app/features/cost-tracker/components/`_
 
 #### Chức năng chi tiết:
+
 1. **Top Metric Cards (Chỉ Số Tổng Quan Hàng Tháng)**:
    - Hiển thị tức thì: Tổng chi phí tháng hiện tại ($USD), Tổng số lượt gọi API (Requests), Tổng số token tiêu thụ (Input / Output / Cache), Tỷ lệ ngân sách đã dùng (%).
 2. **Tab 1: Overview Dashboard (Bàn Điều Khiển Tổng Thể)**:
@@ -247,9 +259,11 @@ Hệ thống được tổ chức thành **7 màn hình chuyên biệt** trên t
 ---
 
 ### TRANG 7: SETTINGS & SECURITY (Cấu Hình, Engine Native & An Toàn Dữ Liệu)
-*File chính: `src/app/features/settings/Settings.tsx` và `src/app/features/settings/components/`*
+
+_File chính: `src/app/features/settings/Settings.tsx` và `src/app/features/settings/components/`_
 
 #### Chức năng chi tiết:
+
 1. **Khóa API AI (Bảo Mật Bằng OS Credential Store)**:
    - Tích hợp chuẩn mã hóa cấp OS: **Windows Credential Manager / DPAPI, macOS Keychain**.
    - Tuyệt đối không lưu plaintext key trong `localStorage`, `IndexedDB` hay file JSON cấu hình.
@@ -439,7 +453,7 @@ sequenceDiagram
     IPC->>Disk: Ghi Buffer mã hóa xuống đĩa
     IPC-->>Renderer: Chỉ trả về `{ configured: true, maskedKey: 'gsk_••••••••6789' }`
     Note over Renderer: Tuyệt đối KHÔNG lưu plaintext key trong bộ nhớ trình duyệt!
-    
+
     rect rgb(30, 41, 59)
     Note over Renderer,Cloud: Khi cần gọi AI Inference:
     Renderer->>IPC: Gửi prompt và modelId (không gửi API Key)
@@ -450,51 +464,3 @@ sequenceDiagram
     IPC-->>Renderer: Trả về nội dung phản hồi
     end
 ```
-
----
-
-## 🧹 4. BÁO CÁO PHÂN TÍCH DEAD CODE & TỐI ƯU HÓA
-
-Qua kiểm tra chuyên sâu bằng AST Parser và Dependency Graph từ các entry point, hệ thống đã xác định được:
-
-### 1. 23 File thừa không còn được import hoặc sử dụng:
-- **5 file Facade cũ**: `src/app/features/AudioTest.tsx`, `Home.tsx`, `MeetingMode.tsx`, `SessionHistory.tsx`, `Settings.tsx` (App.tsx đã import trực tiếp từ thư mục con).
-- **2 file Component bị bỏ rơi**: `src/app/features/audio-test/components/AIBenchmarkCard.tsx` (168 dòng), `AudioSignalMonitor.tsx` (187 dòng).
-- **7 file Service/Provider cũ**: `src/electron/services/nativeWhisper.ts` (403 dòng - đã thay thế hoàn toàn bằng `whisperProcessManager.ts`), `claudeModel.ts`, `googleModel.ts`, `groqModel.ts`, `openAIModel.ts`, `translateService.ts`, `sttService.ts`.
-- **9 file Barrel (`index.ts`)**: Các file `index.ts` trong `src/app/features/*/` và `src/app/services/` không còn được nơi nào import.
-
-### 2. Các hàm chết (Dead Functions) trong các file đang hoạt động:
-- `createTransferablePcmBuffer` trong `src/app/lib/audioPipeline.ts`.
-- `isIncompleteSpeechFragment` trong `src/app/services/ai-model/copilot/questionDetector.ts`.
-- `stitchFragments` trong `src/app/services/ai-model/copilot/scanLatestExchange.ts`.
-- `formatTranscriptForPrompt` trong `src/app/services/ai-model/copilot/transcript.ts`.
-- `getProviderBadgeLabel` trong `src/app/services/ai-model/copilot/universalLlm.ts`.
-- `generateTestSpeechWavBlob` trong `src/app/services/ai-model/stt/audioUtils.ts`.
-- `clearMeetingContext` trong `src/app/services/meeting-context/repository.ts`.
-- `getSessionById` trong `src/app/services/session-history/repository.ts`.
-- `subscribeAppSettings` và `exportSanitizedSettings` trong `src/app/services/settings/settingsManager.ts`.
-- Bộ 4 hàm `getAllVADCalibrations`, `removeVADCalibration`, `clearAllVADCalibrations`, `onVADCalibrationChange` trong `src/app/services/vad-calibration/vadCalibrationStorage.ts`.
-
----
-
-## 🧭 5. MA TRẬN TÍNH NĂNG & ĐỘ ƯU TIÊN NÂNG CẤP
-
-| Hạng mục | Độ ưu tiên | Trạng thái hiện tại | Lợi ích mang lại |
-| :--- | :---: | :---: | :--- |
-| **1. Web Audio AudioWorklet Node** | **P0** | **ĐÃ HOÀN THÀNH** | Âm thanh mượt mà trên audio thread riêng, không giật lag khi CPU bận |
-| **2. VAD Calibration theo Device ID** | **P0** | **ĐÃ HOÀN THÀNH** | Tự cân chỉnh tiếng ồn phòng bằng phân vị IQR, cách ly theo từng Micro |
-| **3. Giải Đề Thị Giác (Screen Vision & Crop)** | **P0** | **ĐÃ HOÀN THÀNH** | Chụp đề bài LeetCode/sơ đồ và giải trực tiếp bằng Multimodal AI |
-| **4. Quản Lý Ngân Sách & Cost Tracker** | **P0** | **ĐÃ HOÀN THÀNH** | Kiểm soát chi phí USD, cảnh báo 80%, biểu đồ xu hướng và xuất CSV |
-| **5. Bảo Mật OS Credential Store** | **P0** | **ĐÃ HOÀN THÀNH** | Mã hóa DPAPI/Keychain an toàn tuyệt đối, chống lộ key |
-| **6. Dọn Dẹp Code Chết (23 files & dead functions)** | **P1** | **Chờ thực hiện** | Giảm dung lượng build, code gọn gàng, tăng tốc độ bundling |
-| **7. Global Hotkeys & Stealth Teleprompter** | **P1** | **Đang phát triển** | Phím tắt chụp màn hình/bắt AI trả lời, chế độ thanh mỏng nhìn webcam |
-| **8. Local LLM Offline (Ollama / Llama.cpp)** | **P2** | **Kế hoạch** | Hỗ trợ môi trường làm việc 100% offline, không cần internet |
-| **9. Speaker Diarization (Phân biệt người nói)** | **P2** | **Kế hoạch** | Tách bạch giọng nói từng người trong cuộc họp nhiều đối tác |
-
----
-
-## 🎯 6. KẾ HOẠCH HÀNH ĐỘNG TIẾP THEO
-
-1. **Bước 1**: Tiến hành dọn dẹp an toàn các file và hàm dead code đã xác định ở Mục 4 để làm sạch codebase.
-2. **Bước 2**: Hoàn thiện tính năng **Stealth Teleprompter Mode** (HUD siêu gọn gắn trên camera) kết hợp **Global Hotkeys** (`Ctrl + Shift + S` chụp màn hình, `Ctrl + Shift + Space` ép AI gợi ý).
-3. **Bước 3**: Tích hợp thêm tùy chọn **Local LLM qua Ollama** vào `Settings.tsx` để hỗ trợ chế độ hoàn toàn bảo mật 100% Offline (Local Whisper + Local Llama).
