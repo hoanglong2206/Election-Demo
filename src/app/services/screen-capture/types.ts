@@ -47,6 +47,9 @@ export interface VisualAnalysisResult {
   language?: string
   difficulty?: 'Easy' | 'Medium' | 'Hard'
   extractedCode?: string
+  solutionCode?: string
+  timeComplexity?: string
+  spaceComplexity?: string
   problemSummary: string
   keyInsights: string[]
   stepByStepSolution: string
@@ -89,4 +92,3 @@ export function getAvailableMultimodalModels(): MultimodalModelOption[] {
   } catch {}
   return []
 }
-

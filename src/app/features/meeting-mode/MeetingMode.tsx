@@ -1117,6 +1117,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           mode === 'interview'
             ? activeJD || activeCV || undefined
             : contextData.discussionTopic || undefined,
+        responseLanguage: responseLang,
+        languageContext: mode === 'interview' ? `${activeJD}\n${activeCV}` : undefined,
       })
 
       const ocrText = await ocrPromise

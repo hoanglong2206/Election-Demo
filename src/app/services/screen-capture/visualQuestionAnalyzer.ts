@@ -2,6 +2,7 @@ import type { VisualAnalysisResult, VisualContentType } from './types'
 import { settingsManager } from '../settings'
 import { modelRegistryService } from '../ai-model/model-registry'
 import { usageTrackerService } from '../usage-tracker'
+import { languageInstruction, type ResponseLanguage } from '../ai-model/language'
 
 export const VISUAL_ANALYSIS_SYSTEM_PROMPT = `Bạn là Trợ lý AI Cố vấn Kỹ thuật và Phỏng vấn Cấp cao.
 Nhiệm vụ của bạn là xem ảnh chụp màn hình chứa câu hỏi phỏng vấn kỹ thuật, bài toán coding (LeetCode/HackerRank/Codeforces), thông báo lỗi, sơ đồ kiến trúc hệ thống, hoặc câu hỏi tình huống công nghệ.
@@ -10,15 +11,18 @@ Hãy phân tích kỹ lưỡng các chi tiết hình ảnh, code, diagram, const
 {
   "contentType": "coding_question" | "error_trace" | "architecture_diagram" | "system_design" | "text_question",
   "title": "Tiêu đề ngắn gọn rõ ràng của câu hỏi/vấn đề",
-  "language": "Ngôn ngữ lập trình chính nếu có (ví dụ: TypeScript, Python, Java, Go, C++, SQL)",
+  "language": "Ngôn ngữ lập trình chính được nhận diện từ code/signature/đề bài (ví dụ: TypeScript, Python, Java, Go, C++, SQL); nếu không có code thì ghi null",
   "difficulty": "Easy" | "Medium" | "Hard",
-  "extractedCode": "Đoạn mã nguồn hoặc function signature trích xuất từ ảnh (nếu có)",
+  "extractedCode": "Chỉ trích xuất code hoặc function signature THỰC SỰ NHÌN THẤY trong ảnh; nếu ảnh chỉ có đề bài/văn bản, bắt buộc ghi null",
+  "solutionCode": "Lời giải hoàn chỉnh, chạy được bằng đúng ngôn ngữ trong trường language; nếu không phải bài coding thì ghi null",
+  "timeComplexity": "Độ phức tạp thời gian của lời giải tối ưu, ký hiệu Big-O",
+  "spaceComplexity": "Độ phức tạp bộ nhớ của lời giải tối ưu, ký hiệu Big-O",
   "problemSummary": "Tóm tắt 1-3 câu đề bài đang yêu cầu gì và các ràng buộc cốt lõi (constraints)",
   "keyInsights": [
     "Nhận định then chốt 1 (edge case, bẫy thường gặp)",
     "Cấu trúc dữ liệu / thuật toán tối ưu (Two Pointers, DP, Monotonic Stack, Cache L1/L2...)"
   ],
-  "stepByStepSolution": "Các bước giải quyết tối ưu (nêu rõ Time & Space Complexity)",
+  "stepByStepSolution": "Các bước giải quyết tối ưu; phải giải thích vì sao không thể cải thiện thêm theo constraints và nêu rõ Time & Space Complexity",
   "recommendedAnswer": "Lời gợi ý trả lời tự tin, súc tích để người dùng nói trực tiếp với interviewer hoặc đồng nghiệp trong cuộc họp"
 }`
 
@@ -30,6 +34,9 @@ export interface AnalyzeVisualOptions {
   customModelId?: string
   customProvider?: 'Google' | 'OpenAI' | 'Groq'
   sessionId?: string
+  responseLanguage?: ResponseLanguage
+  implementationLanguage?: string
+  languageContext?: string
 }
 
 export class VisualQuestionAnalyzer {
@@ -39,12 +46,31 @@ export class VisualQuestionAnalyzer {
    */
   public async analyzeVisualQuestion(options: AnalyzeVisualOptions): Promise<VisualAnalysisResult> {
     const startTime = performance.now()
-    const { imageBase64, mimeType = 'image/jpeg', thumbnailUrl = '', userContext, customModelId, customProvider, sessionId } = options
+    const {
+      imageBase64,
+      mimeType = 'image/jpeg',
+      thumbnailUrl = '',
+      userContext,
+      customModelId,
+      customProvider,
+      sessionId,
+      responseLanguage = 'bilingual',
+      implementationLanguage,
+      languageContext,
+    } = options
 
     const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '').trim()
-    const userPrompt = userContext
+    const languagePreference = languageInstruction(responseLanguage)
+    const userPrompt = `${userContext
       ? `Hãy phân tích câu hỏi/nội dung kỹ thuật trong ảnh này. Lưu ý ngữ cảnh bổ sung từ người dùng: ${userContext}`
-      : 'Hãy phân tích chi tiết câu hỏi/nội dung kỹ thuật xuất hiện trong ảnh chụp màn hình này.'
+      : 'Hãy phân tích chi tiết câu hỏi/nội dung kỹ thuật xuất hiện trong ảnh chụp màn hình này.'}
+
+${languagePreference}
+${implementationLanguage
+  ? `Ngôn ngữ triển khai BẮT BUỘC: ${implementationLanguage}. Hãy viết solutionCode bằng ngôn ngữ này, dù ảnh không có mã nguồn.`
+  : 'Nếu đây là bài toán thuật toán trên màn kiểm tra, hãy dùng ngôn ngữ được nhận diện từ code/signature nếu có. Nếu không có code, không tự bịa extractedCode; chỉ viết solutionCode sau khi xác định được ngôn ngữ từ ngữ cảnh.'}
+${languageContext ? `Ngữ cảnh JD/CV để xác định ngôn ngữ công nghệ phù hợp:\n${languageContext.slice(0, 12000)}` : ''}
+Nếu không có mã nguồn trong ảnh, extractedCode phải là null. solutionCode là phần code AI tự viết và phải được phân biệt rõ với code trích xuất.`
 
     // Determine target provider & model
     const savedMultimodalId = (settingsManager.get('selectedMultimodal') as string) || ''
@@ -89,7 +115,7 @@ export class VisualQuestionAnalyzer {
           systemPrompt: VISUAL_ANALYSIS_SYSTEM_PROMPT,
           imageBase64: cleanBase64,
           mimeType,
-          maxTokens: 1800,
+          maxTokens: 3000,
           temperature: 0.2,
         })
 
@@ -173,7 +199,7 @@ export class VisualQuestionAnalyzer {
               },
             ],
             systemInstruction: { parts: [{ text: VISUAL_ANALYSIS_SYSTEM_PROMPT }] },
-            generationConfig: { maxOutputTokens: 1800, temperature: 0.2 },
+            generationConfig: { maxOutputTokens: 3000, temperature: 0.2 },
           }),
         }
       )
@@ -265,20 +291,52 @@ export class VisualQuestionAnalyzer {
     const timestamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
     let parsed: any = null
-    try {
-      // Strip markdown ```json fences if present
-      let cleaned = rawText.trim()
-      if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim()
+    const candidates = [
+      rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim(),
+      ...(rawText.match(/```(?:json)?\s*([\s\S]*?)```/i)?.slice(1) || []),
+    ]
+
+    // Prefer a complete JSON object, including responses preceded by prose.
+    const objectStart = rawText.indexOf('{')
+    const objectEnd = rawText.lastIndexOf('}')
+    if (objectStart >= 0 && objectEnd > objectStart) {
+      candidates.push(rawText.slice(objectStart, objectEnd + 1))
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const value = JSON.parse(candidate)
+        parsed = typeof value === 'string' ? JSON.parse(value) : value
+        if (parsed && typeof parsed === 'object') break
+      } catch {
+        // Try the next representation; the model may have added a markdown fence.
       }
-      parsed = JSON.parse(cleaned)
-    } catch {
-      // Fallback regex search for JSON block
-      const match = rawText.match(/\{[\s\S]*\}/)
-      if (match) {
+    }
+
+    // Preserve useful fields when a provider truncates the JSON after producing
+    // the main answer. This prevents the UI from rendering the entire raw JSON.
+    if (!parsed || typeof parsed !== 'object') {
+      const readStringField = (field: string): string | undefined => {
+        const match = rawText.match(new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)`, 's'))
+        if (!match?.[1]) return undefined
         try {
-          parsed = JSON.parse(match[0])
-        } catch {}
+          return JSON.parse(`"${match[1]}"`)
+        } catch {
+          return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')
+        }
+      }
+      const partialTitle = readStringField('title')
+      const partialLanguage = readStringField('language')
+      const partialSolution = readStringField('solutionCode')
+      const partialSummary = readStringField('problemSummary')
+      if (partialTitle || partialLanguage || partialSolution || partialSummary) {
+        parsed = {
+          title: partialTitle,
+          language: partialLanguage,
+          solutionCode: partialSolution,
+          problemSummary: partialSummary,
+          recommendedAnswer: partialSolution,
+        }
       }
     }
 
@@ -302,6 +360,9 @@ export class VisualQuestionAnalyzer {
         language: parsed.language || undefined,
         difficulty: parsed.difficulty || undefined,
         extractedCode: parsed.extractedCode || undefined,
+        solutionCode: parsed.solutionCode || undefined,
+        timeComplexity: parsed.timeComplexity || undefined,
+        spaceComplexity: parsed.spaceComplexity || undefined,
         problemSummary: parsed.problemSummary || rawText.slice(0, 300),
         keyInsights: Array.isArray(parsed.keyInsights)
           ? parsed.keyInsights

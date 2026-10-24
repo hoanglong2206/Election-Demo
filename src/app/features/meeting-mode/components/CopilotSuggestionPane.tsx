@@ -578,6 +578,7 @@ export function CopilotSuggestionPane({
             <VisualQuestionCard
               item={visualQuestion}
               onDismiss={onDismissVisualQuestion}
+              showTranslate={showTranslate}
             />
           )}
 

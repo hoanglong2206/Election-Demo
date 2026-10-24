@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useVietnameseTranslation } from '@/hooks/useVietnameseTranslation'
 import {
   Camera,
   Code2,
@@ -21,6 +22,7 @@ interface VisualQuestionCardProps {
   item: VisualQuestionItem
   onDismiss?: () => void
   onRetake?: () => void
+  showTranslate?: boolean
 }
 
 function getContentTypeMeta(type: VisualContentType) {
@@ -58,11 +60,14 @@ export function VisualQuestionCard({
   item,
   onDismiss,
   onRetake,
+  showTranslate = false,
 }: VisualQuestionCardProps) {
   const [copiedAnswer, setCopiedAnswer] = useState(false)
   const [copiedCode, setCopiedCode] = useState(false)
   const [showFullImage, setShowFullImage] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
+  const { entries: translations, toggle: toggleTranslation } = useVietnameseTranslation()
+  const answerTranslation = translations['visual-answer']
 
   const meta = getContentTypeMeta(item.contentType)
   const IconComponent = meta.icon
@@ -219,6 +224,15 @@ export function VisualQuestionCard({
             </div>
           )}
 
+          {item.solutionCode && (
+            <div className="relative rounded-xl bg-emerald-950/20 border border-emerald-500/25 p-3 font-mono text-[11px] text-emerald-200 overflow-x-auto space-y-1">
+              <div className="flex items-center justify-between pb-1 border-b border-emerald-500/15 text-[9.5px] text-emerald-300/70">
+                <span>LỜI GIẢI TỐI ƯU ({item.language || 'ngôn ngữ được nhận diện'})</span>
+              </div>
+              <pre className="whitespace-pre-wrap">{item.solutionCode}</pre>
+            </div>
+          )}
+
           {/* Step-by-step Solution */}
           {item.stepByStepSolution && (
             <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 space-y-1">
@@ -228,6 +242,12 @@ export function VisualQuestionCard({
               <p className="text-[11.5px] text-white/80 whitespace-pre-wrap leading-relaxed">
                 {item.stepByStepSolution}
               </p>
+              {(item.timeComplexity || item.spaceComplexity) && (
+                <div className="border-t border-white/5 pt-1 text-[11px] text-cyan-200/80">
+                  {item.timeComplexity && <div>Time: {item.timeComplexity}</div>}
+                  {item.spaceComplexity && <div>Space: {item.spaceComplexity}</div>}
+                </div>
+              )}
             </div>
           )}
 
@@ -248,9 +268,20 @@ export function VisualQuestionCard({
               </button>
             </div>
 
+            {showTranslate && (
+              <button
+                type="button"
+                onClick={() => void toggleTranslation('visual-answer', item.recommendedAnswer)}
+                disabled={answerTranslation?.busy}
+                className="text-[10px] text-violet-300 hover:text-violet-200"
+              >
+                {answerTranslation?.busy ? 'Đang dịch...' : answerTranslation?.showing ? 'Hiện bản gốc' : 'Dịch sang tiếng Việt'}
+              </button>
+            )}
             <p className="text-[12px] text-white/95 leading-relaxed whitespace-pre-wrap font-sans">
-              {item.recommendedAnswer}
+              {answerTranslation?.showing && answerTranslation.text ? answerTranslation.text : item.recommendedAnswer}
             </p>
+            {answerTranslation?.error && <p className="text-[10px] text-rose-300">{answerTranslation.error}</p>}
           </div>
         </div>
       )}
