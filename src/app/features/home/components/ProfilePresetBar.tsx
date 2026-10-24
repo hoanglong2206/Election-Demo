@@ -82,7 +82,7 @@ export function ProfilePresetBar({
   const activeColor = (activeProfile?.color && COLOR_MAP[activeProfile.color]) || COLOR_MAP.violet
 
   return (
-    <div className="w-full flex items-center justify-between gap-2 p-1.5 px-2 rounded-lg bg-black/40 border border-white/[0.08] min-w-0">
+    <div className="w-full h-8 flex items-center justify-between gap-2 px-2 rounded-lg bg-black/40 border border-white/[0.08] min-w-0">
       {/* Left: Active Preset Selector Dropdown */}
       <div className="relative min-w-0 flex-1 max-w-[160px] sm:max-w-[200px]" ref={dropdownRef}>
         <button
@@ -90,7 +90,7 @@ export function ProfilePresetBar({
           id="btn-profile-preset-dropdown"
           onClick={() => setDropdownOpen(!dropdownOpen)}
           className={cn(
-            'w-full flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border shadow-sm min-w-0',
+            'w-full h-6 flex items-center justify-between gap-1.5 px-2 rounded-md text-[11px] font-medium transition-all border shadow-sm min-w-0',
             activeProfile ? cn(activeColor.bg, activeColor.border) : 'bg-white/5 border-white/10 text-white/60',
             'hover:bg-white/10'
           )}
