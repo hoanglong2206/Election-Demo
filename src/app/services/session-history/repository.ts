@@ -101,6 +101,7 @@ export function normalizeSession(raw: any): MeetingSession {
     timestamp: s.timestamp,
     timestampMs: typeof s.timestampMs === 'number' ? s.timestampMs : undefined,
     triggeredByTranscriptId: s.triggeredByTranscriptId,
+    grounding: s.grounding,
     tokenUsage: s.tokenUsage
       ? {
           ...s.tokenUsage,

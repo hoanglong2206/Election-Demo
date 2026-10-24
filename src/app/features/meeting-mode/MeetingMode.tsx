@@ -625,6 +625,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           confidence: res.confidence,
           contextUsage: res.contextUsage,
           strategy: res.strategy,
+          grounding: res.grounding,
         })
 
         // Accumulate in session history
@@ -635,6 +636,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           label: res.label,
           content: res.content,
           confidence: res.confidence,
+          grounding: res.grounding,
           timestamp: lastLine?.timestamp || '00:00',
           timestampMs: Date.now(),
           triggeredByTranscriptId: lastLine?.id,

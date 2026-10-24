@@ -238,6 +238,14 @@ export function CopilotSuggestionPane({
               ? 'Suggested Answers'
               : 'Suggested Questions'}
           </span>
+          {mode === 'interview' && interviewAnswer?.grounding?.overallRisk !== 'low' && (
+            <span
+              className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] text-amber-200"
+              title={interviewAnswer?.grounding?.warning || 'Một số thông tin cần được xác minh'}
+            >
+              Verify claims
+            </span>
+          )}
           {mode === 'interview' && onAnswerStrategyChange && (
             <select
               value={answerStrategyId || ''}

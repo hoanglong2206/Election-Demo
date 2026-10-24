@@ -1,4 +1,5 @@
 import type { ProfilePresetSnapshot } from '../profile-preset/types'
+import type { GroundingResult } from '../ai-model/copilot'
 
 export interface HistoryTranscriptLine {
   id: number | string
@@ -28,6 +29,7 @@ export interface HistorySuggestion {
   timestampMs?: number
   triggeredByTranscriptId?: number | string
   tokenUsage?: HistorySuggestionTokenUsage
+  grounding?: GroundingResult
 }
 
 export interface HistoryScreenshotQuestion {

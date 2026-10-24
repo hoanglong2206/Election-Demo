@@ -13,6 +13,7 @@ import {
   type AnswerStrategyId,
 } from './answerStrategyRouter'
 import type { IntentDetectionResult } from './questionDetector'
+import { validateAnswerGrounding, type GroundingMode } from './answerGrounding'
 
 /**
  * Generates an interview answer personalized to the candidate CV and question.
@@ -28,6 +29,7 @@ export async function generateInterviewAnswer(params: {
   sessionId?: string
   intent?: IntentDetectionResult | null
   strategyOverride?: AnswerStrategyId
+  groundingMode?: GroundingMode
 }): Promise<CopilotInterviewResult | null> {
   const { question, cvSummary, backgroundAnalysis, transcriptLines, sessionId } = params
   const lang = normalizeResponseLanguage(params.language)
@@ -102,6 +104,13 @@ Trả về chính xác theo định dạng sau:
     reasoningTags: selection.reasoningTags,
     outputSections,
   }
+  const groundingBase = {
+    cv: cvSummary,
+    profile: cvSummary,
+    transcript: transcriptLines?.map((line) => `${line.speaker}: ${line.original}`).join('\n'),
+    session: backgroundAnalysis,
+    mode: params.groundingMode || 'balanced',
+  } as const
 
   // Model ignored the [FULL_ANSWER]/[SHORT_ANSWER] contract — still surface its
   // real output rather than dropping it, unless it is a raw JSON blob (which is
@@ -111,6 +120,7 @@ Trả về chính xác theo định dạng sau:
       console.warn('[interview] LLM returned unparseable JSON — refusing to render it raw')
       return null
     }
+    const grounding = validateAnswerGrounding({ answer: text, ...groundingBase })
     const contextUsage = {
       totalTokens: assembled.estimatedTokens.total,
       maxBudget: assembled.tokenBudget.totalMax,
@@ -120,8 +130,8 @@ Trả về chính xác theo định dạng sau:
 
     return {
       label,
-      content: text,
-      shortContent: text
+      content: grounding.correctedAnswer,
+      shortContent: grounding.correctedAnswer
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean)
@@ -132,17 +142,19 @@ Trả về chính xác theo định dạng sau:
       isRealLLM: true,
       contextUsage,
       strategy: strategyMetadata,
+      grounding,
     }
   }
 
   const parts = text.split('[SHORT_ANSWER]')
   const full = parts[0].replace('[FULL_ANSWER]', '').trim()
   const short = parts[1] ? parts[1].trim() : full.split('\n').slice(0, 3).join('\n')
+  const grounding = validateAnswerGrounding({ answer: full, ...groundingBase })
 
   return {
     label,
-    content: full,
-    shortContent: short,
+    content: grounding.correctedAnswer,
+    shortContent: grounding.correctedAnswer || short,
     confidence: 97,
     modelName: rawRes.modelName,
     isRealLLM: true,
@@ -153,5 +165,6 @@ Trả về chính xác theo định dạng sau:
       breakdown: assembled.estimatedTokens,
     },
     strategy: strategyMetadata,
+    grounding,
   }
 }
