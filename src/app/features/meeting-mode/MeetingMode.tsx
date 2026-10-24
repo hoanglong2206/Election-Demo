@@ -265,6 +265,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const sequenceIdRef = useRef(1)
   const [initialSessionId] = useState(() => `session_${Date.now()}`)
   const sessionIdRef = useRef<string>(initialSessionId)
+  const [unfinishedRecovery, setUnfinishedRecovery] = useState<any | null>(null)
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(true)
   const lastProcessedSampleRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -273,6 +275,23 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     const saved = localStorage.getItem(STORAGE_KEYS.STT_LANGUAGE)
     return saved === 'en' || saved === 'auto' ? saved : 'vi'
   })
+
+  const handleRestoreRecovery = () => {
+    const recovered = unfinishedRecovery?.snapshot
+    if (!recovered) return
+    const recoveredLines = Array.isArray(recovered.transcripts) ? recovered.transcripts : []
+    setTranscriptLines(recoveredLines)
+    if (typeof recovered.id === 'string') sessionIdRef.current = recovered.id
+    setUnfinishedRecovery(null)
+    setIsRecoveryOpen(false)
+  }
+
+  const handleCompleteRecovery = async (lifecycle: 'completed' | 'discarded') => {
+    const sessionId = unfinishedRecovery?.sessionId
+    if (sessionId) await window.api.sessions?.recovery?.complete(sessionId, lifecycle)
+    setUnfinishedRecovery(null)
+    setIsRecoveryOpen(false)
+  }
 
   const handleSttLangChange = (lang: 'auto' | 'vi' | 'en') => {
     setSttLang(lang)
@@ -627,6 +646,20 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           strategy: res.strategy,
           grounding: res.grounding,
         })
+        void window.api.sessions?.recovery?.append({
+          eventId: `suggestion:${sessionIdRef.current}:${answerId}`,
+          sessionId: sessionIdRef.current,
+          type: 'suggestion',
+          timestamp: Date.now(),
+          payload: {
+            id: answerId,
+            type: 'answer',
+            label: res.label,
+            content: res.content,
+            confidence: res.confidence,
+            grounding: res.grounding,
+          },
+        })
 
         // Accumulate in session history
         const lastLine = lines[lines.length - 1]
@@ -750,6 +783,19 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       })
       const intentRes = heuristicIntent ? await classifyIntent(heuristicIntent) : null
       setLatestIntent(intentRes)
+      if (intentRes?.isQuestion) {
+        void window.api.sessions?.recovery?.append({
+          eventId: `question:${sessionIdRef.current}:${intentRes.detectionTimestamp || intentRes.normalizedText}`,
+          sessionId: sessionIdRef.current,
+          type: 'question:detected',
+          timestamp: Date.now(),
+          payload: {
+            id: intentRes.detectionTimestamp || intentRes.normalizedText,
+            text: intentRes.questionText || intentRes.normalizedText,
+            intent: intentRes.normalizedIntent,
+          },
+        })
+      }
 
       // 2. Synchronize latest exchange UI with coherent normalized text
       let targetExchange: ScannedExchangeResult | null = null
@@ -1148,6 +1194,13 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       tieredContextManager.addVisualQuestion(visualItem)
       setActiveVisualQuestion(visualItem)
       setVisualQuestionsHistory((prev) => [...prev, visualItem])
+      void window.api.sessions?.recovery?.append({
+        eventId: `visual:${sessionIdRef.current}:${visualItem.id}`,
+        sessionId: sessionIdRef.current,
+        type: 'visual:question',
+        timestamp: Date.now(),
+        payload: visualItem as unknown as Record<string, unknown>,
+      })
       setScreenCaptureState('completed')
     } catch (err: unknown) {
       console.error('[MeetingMode] Multimodal question analysis error:', err)
@@ -1218,6 +1271,42 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
 
   const [customSessionTitle, setCustomSessionTitle] = useState<string>('')
   const currentSessionTitle = customSessionTitle || defaultSessionTitle
+
+  useEffect(() => {
+    let cancelled = false
+    void window.api.sessions?.recovery?.list().then((records) => {
+      if (!cancelled && records.length > 0) setUnfinishedRecovery(records[0])
+    }).catch((error) => console.warn('[MeetingMode] Recovery scan failed:', error))
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    const latest = validLines[validLines.length - 1]
+    if (!latest || !window.api.sessions?.recovery) return
+    void window.api.sessions.recovery.append({
+      eventId: `transcript:${sessionIdRef.current}:${latest.id}`,
+      sessionId: sessionIdRef.current,
+      type: 'transcript:segment',
+      timestamp: Date.now(),
+      payload: latest,
+    }).catch((error) => console.warn('[MeetingMode] Recovery journal append failed:', error))
+  }, [validLines])
+
+  useEffect(() => {
+    if (!window.api.sessions?.recovery) return
+    const timer = window.setInterval(() => {
+      void window.api.sessions?.recovery?.checkpoint(sessionIdRef.current, {
+        id: sessionIdRef.current,
+        title: currentSessionTitle,
+        mode,
+        transcripts: validLines,
+        screenshotQuestions: visualQuestionsHistory,
+        usageRecords: [usageTrackerService.getSessionUsageSummary(sessionIdRef.current)],
+        lifecycle: 'active',
+      }).catch((error) => console.warn('[MeetingMode] Recovery checkpoint failed:', error))
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [currentSessionTitle, mode, validLines, visualQuestionsHistory])
 
   const handleSaveToHistory = () => {
     const endedAt = Date.now()
@@ -1337,6 +1426,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     }
 
     saveSessionToHistory(session)
+    void window.api.sessions?.recovery?.complete(session.id, 'completed')
     setIsSavedToHistory(true)
     if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current)
     saveHistoryTimerRef.current = setTimeout(() => {
@@ -1376,6 +1466,17 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         responseLang={responseLang}
         onResponseLangChange={handleResponseLangChange}
       />
+
+      {unfinishedRecovery && isRecoveryOpen && (
+        <div className="mx-3 mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+          <span>Recovered unfinished session</span>
+          <div className="flex gap-2">
+            <button className="rounded bg-amber-300 px-2 py-1 text-black" onClick={handleRestoreRecovery}>Restore</button>
+            <button className="rounded border border-white/20 px-2 py-1" onClick={() => void handleCompleteRecovery('completed')}>Finalize</button>
+            <button className="rounded border border-red-300/30 px-2 py-1 text-red-200" onClick={() => void handleCompleteRecovery('discarded')}>Discard</button>
+          </div>
+        </div>
+      )}
 
       {/* Main Split: Transcript & AI Response */}
       <div className="flex flex-row flex-1 min-h-0 overflow-hidden">

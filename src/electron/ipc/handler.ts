@@ -1,7 +1,9 @@
-import { ipcMain, BrowserWindow, desktopCapturer, screen } from 'electron'
+import { app, ipcMain, BrowserWindow, desktopCapturer, screen } from 'electron'
+import path from 'path'
 import { getWhisperProcessManager } from '../services/whisperProcessManager.js'
 import { ElectronSessionStorage } from '../services/sessionStorage.js'
 import { getElectronCredentialStore } from '../services/credentialStore.js'
+import { SessionRecoveryService } from '../services/sessionRecovery.js'
 
 export function registerIpcHandlers(win: BrowserWindow): void {
   // ── Window controls ────────────────────────────────────────────────────────
@@ -214,6 +216,9 @@ export function registerIpcHandlers(win: BrowserWindow): void {
 
     // ── Session Storage (Local JSON files in userData/sessions/) ─────────────
     const sessionStorage = new ElectronSessionStorage()
+    const sessionRecoveryService = new SessionRecoveryService(
+      path.join(app.getPath('userData'), 'sessions', 'recovery')
+    )
 
     ipcMain.handle('sessions:getAll', () => {
       return sessionStorage.getAll()
@@ -238,6 +243,16 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     ipcMain.handle('sessions:rename', (_event, sessionId: string, newTitle: string) => {
       return sessionStorage.rename(sessionId, newTitle)
     })
+
+    ipcMain.handle('sessions:recovery:list', () => sessionRecoveryService.listUnfinished())
+    ipcMain.handle('sessions:recovery:append', (_event, event) => sessionRecoveryService.append(event))
+    ipcMain.handle('sessions:recovery:checkpoint', (_event, sessionId: string, snapshot: Record<string, unknown>) =>
+      sessionRecoveryService.checkpoint(sessionId, snapshot)
+    )
+    ipcMain.handle('sessions:recovery:recover', (_event, sessionId: string) => sessionRecoveryService.recover(sessionId))
+    ipcMain.handle('sessions:recovery:complete', (_event, sessionId: string, lifecycle: 'completed' | 'discarded') =>
+      sessionRecoveryService.complete(sessionId, lifecycle)
+    )
 
     // ── Secure OS Credential Store Handlers ──────────────────────────────────
     const credentialStore = getElectronCredentialStore()

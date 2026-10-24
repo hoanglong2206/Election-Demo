@@ -94,6 +94,13 @@ export interface ElectronAPI {
     deleteMany: (sessionIds: string[]) => Promise<boolean>
     deleteAll: () => Promise<boolean>
     rename: (sessionId: string, newTitle: string) => Promise<boolean>
+    recovery?: {
+      list: () => Promise<any[]>
+      append: (event: any) => Promise<boolean>
+      checkpoint: (sessionId: string, snapshot: Record<string, unknown>) => Promise<boolean>
+      recover: (sessionId: string) => Promise<any | null>
+      complete: (sessionId: string, lifecycle: 'completed' | 'discarded') => Promise<boolean>
+    }
   }
   credentials?: {
     isAvailable: () => Promise<boolean>

@@ -110,6 +110,16 @@ const api = {
     deleteAll: (): Promise<boolean> => ipcRenderer.invoke('sessions:deleteAll'),
     rename: (sessionId: string, newTitle: string): Promise<boolean> =>
       ipcRenderer.invoke('sessions:rename', sessionId, newTitle),
+    recovery: {
+      list: (): Promise<any[]> => ipcRenderer.invoke('sessions:recovery:list'),
+      append: (event: any): Promise<boolean> => ipcRenderer.invoke('sessions:recovery:append', event),
+      checkpoint: (sessionId: string, snapshot: Record<string, unknown>): Promise<boolean> =>
+        ipcRenderer.invoke('sessions:recovery:checkpoint', sessionId, snapshot),
+      recover: (sessionId: string): Promise<any | null> =>
+        ipcRenderer.invoke('sessions:recovery:recover', sessionId),
+      complete: (sessionId: string, lifecycle: 'completed' | 'discarded'): Promise<boolean> =>
+        ipcRenderer.invoke('sessions:recovery:complete', sessionId, lifecycle),
+    },
   },
 
   /**
