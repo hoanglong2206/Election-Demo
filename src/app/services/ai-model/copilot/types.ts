@@ -1,4 +1,5 @@
 import type { LLMProvider } from '../types'
+import type { AnswerStrategyId } from './answerStrategyRouter'
 
 export interface ContextUsageInfo {
   totalTokens: number
@@ -20,6 +21,12 @@ export interface CopilotInterviewResult {
   modelName?: string
   isRealLLM?: boolean
   contextUsage?: ContextUsageInfo
+  strategy?: {
+    strategyId: AnswerStrategyId
+    confidence: number
+    reasoningTags: string[]
+    outputSections: string[]
+  }
 }
 
 export interface CopilotDiscussionOption {

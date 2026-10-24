@@ -71,6 +71,7 @@ import {
   type TriggerMode,
   tieredContextManager,
   type ContextUsageInfo,
+  type AnswerStrategyId,
 } from '../../services/ai-model/copilot'
 import { settingsManager } from '../../services/settings/settingsManager'
 import { usageTrackerService } from '../../services/usage-tracker'
@@ -86,6 +87,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const [responseLang, setResponseLang] = useState<ResponseLanguage>(() =>
     normalizeResponseLanguage(getSavedResponseLanguage())
   )
+  const [answerStrategyOverride, setAnswerStrategyOverride] = useState<AnswerStrategyId | undefined>()
   const [copiedAnswer, setCopiedAnswer] = useState(false)
   const [copiedOptionId, setCopiedOptionId] = useState<number | null>(null)
 
@@ -597,6 +599,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           transcriptLines: lines,
           language: responseLang,
           sessionId: sessionIdRef.current,
+          intent: latestIntent,
+          strategyOverride: answerStrategyOverride,
         })
 
         if (!res) {
@@ -620,6 +624,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           shortContent: res.shortContent,
           confidence: res.confidence,
           contextUsage: res.contextUsage,
+          strategy: res.strategy,
         })
 
         // Accumulate in session history
@@ -707,6 +712,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     activeCV,
     activeJD,
     responseLang,
+    latestIntent,
+    answerStrategyOverride,
     meetingSummary,
     discussionAnalysis,
     contextData.discussionTopic,
@@ -1421,6 +1428,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           latestIntent={latestIntent}
           semiAutoPendingQuestion={semiAutoPendingQuestion}
           onTriggerSemiAuto={() => handleGenerateCopilotResponse(validLines, null, latestExchange)}
+          answerStrategyId={answerStrategyOverride}
+          onAnswerStrategyChange={setAnswerStrategyOverride}
           contextUsage={contextUsage}
           visualQuestion={activeVisualQuestion}
           isAnalyzingVisual={screenCaptureState === 'processing'}

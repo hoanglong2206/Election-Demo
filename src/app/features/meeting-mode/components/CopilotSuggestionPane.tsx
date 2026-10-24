@@ -30,8 +30,9 @@ import type {
   ContextUsageInfo,
   IntentDetectionResult,
   TriggerMode,
+  AnswerStrategyId,
 } from '../../../services/ai-model/copilot'
-import { triggerLogManager } from '../../../services/ai-model/copilot'
+import { answerStrategyRouter, triggerLogManager } from '../../../services/ai-model/copilot'
 import { useVietnameseTranslation } from '@/hooks/useVietnameseTranslation'
 import { VisualQuestionCard } from './VisualQuestionCard'
 import type { ScreenCaptureState, VisualQuestionItem } from '../../../services/screen-capture/types'
@@ -64,6 +65,8 @@ interface CopilotSuggestionPaneProps {
   latestIntent?: IntentDetectionResult | null
   semiAutoPendingQuestion?: string | null
   onTriggerSemiAuto?: () => void
+  answerStrategyId?: AnswerStrategyId
+  onAnswerStrategyChange?: (strategyId: AnswerStrategyId | undefined) => void
   contextUsage?: ContextUsageInfo | null
   visualQuestion?: VisualQuestionItem | null
   onDismissVisualQuestion?: () => void
@@ -166,6 +169,8 @@ export function CopilotSuggestionPane({
   latestIntent,
   semiAutoPendingQuestion,
   onTriggerSemiAuto,
+  answerStrategyId,
+  onAnswerStrategyChange,
   contextUsage,
   visualQuestion,
   onDismissVisualQuestion,
@@ -233,6 +238,26 @@ export function CopilotSuggestionPane({
               ? 'Suggested Answers'
               : 'Suggested Questions'}
           </span>
+          {mode === 'interview' && onAnswerStrategyChange && (
+            <select
+              value={answerStrategyId || ''}
+              onChange={(event) =>
+                onAnswerStrategyChange(
+                  (event.target.value || undefined) as AnswerStrategyId | undefined
+                )
+              }
+              className="max-w-[170px] rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/70 outline-none"
+              title="Chọn framework trả lời; Auto để router tự chọn"
+              aria-label="Answer strategy"
+            >
+              <option value="">Auto strategy</option>
+              {answerStrategyRouter.list().map((strategy) => (
+                <option key={strategy.id} value={strategy.id}>
+                  {strategy.label}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Dynamic status badge when generating: Placed neatly next to title on Row 1 */}
           {isGeneratingAIResponse && (

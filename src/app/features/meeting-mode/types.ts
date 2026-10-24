@@ -1,6 +1,7 @@
 import type { AppMode } from '@/types/electron.d'
 import type { ViewState } from '../../components/layout/Layout'
 import type { ContextUsageInfo } from '../../services/ai-model/copilot'
+import type { AnswerStrategyId } from '../../services/ai-model/copilot'
 
 export interface TranscriptLine {
   id: number
@@ -27,6 +28,12 @@ export interface InterviewVariation {
   shortContent: string
   confidence: number
   contextUsage?: ContextUsageInfo
+  strategy?: {
+    strategyId: AnswerStrategyId
+    confidence: number
+    reasoningTags: string[]
+    outputSections: string[]
+  }
 }
 
 export interface MeetingModeProps {

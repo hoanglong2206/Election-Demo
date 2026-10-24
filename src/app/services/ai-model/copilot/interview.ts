@@ -7,6 +7,12 @@ import {
   type ResponseLanguage,
 } from '../language'
 import { tieredContextManager, TieredContextManager } from './contextManager'
+import {
+  answerStrategyRouter,
+  selectAnswerStrategy,
+  type AnswerStrategyId,
+} from './answerStrategyRouter'
+import type { IntentDetectionResult } from './questionDetector'
 
 /**
  * Generates an interview answer personalized to the candidate CV and question.
@@ -20,6 +26,8 @@ export async function generateInterviewAnswer(params: {
   language?: ResponseLanguage
   contextManager?: TieredContextManager
   sessionId?: string
+  intent?: IntentDetectionResult | null
+  strategyOverride?: AnswerStrategyId
 }): Promise<CopilotInterviewResult | null> {
   const { question, cvSummary, backgroundAnalysis, transcriptLines, sessionId } = params
   const lang = normalizeResponseLanguage(params.language)
@@ -37,6 +45,11 @@ export async function generateInterviewAnswer(params: {
 
   // Assemble 4-tier bounded context
   const assembled = cm.assembleContext(question, 'interview')
+  const selection = selectAnswerStrategy(
+    { question, intent: params.intent },
+    params.strategyOverride,
+  )
+  const strategy = answerStrategyRouter.get(selection.strategyId)
 
   const prompt = `Bạn là AI Cố vấn phỏng vấn xuất sắc (Interview Copilot).
 Ứng viên đang tham gia phỏng vấn tuyển dụng.
@@ -48,8 +61,11 @@ ${languageInstruction(lang)}
 Yêu cầu phản hồi:
 1. Đưa ra câu trả lời phỏng vấn xuất sắc, tự tin, TRẢ LỜI ĐÚNG trọng tâm câu hỏi vừa nêu ở TẦNG 4.
 2. Phải nối tiếp mạch hội thoại trong TẦNG 2 & TẦNG 3 ở trên — nếu người phỏng vấn đang hỏi tiếp về một chủ đề đã trao đổi, hãy trả lời nhất quán với những gì đã nói trước đó.
-3. Nếu câu hỏi liên quan đến kiến thức/kinh nghiệm có trong CV (TẦNG 1), hãy lồng ghép tự nhiên các dự án thực tế, số liệu cụ thể và kinh nghiệm thực chiến theo phương pháp STAR (Situation, Task, Action, Result).
-4. Không bịa ra công nghệ, dự án hay số liệu không có trong CV/transcript.
+3. Framework được chọn: ${strategy.label}.
+   ${strategy.buildPrompt({ question, intent: params.intent })}
+4. Nếu câu hỏi liên quan đến kiến thức/kinh nghiệm có trong CV (TẦNG 1), chỉ lồng ghép dự án, số liệu và kinh nghiệm thực tế có trong CV/transcript.
+5. Không bịa ra công nghệ, dự án hay số liệu không có trong CV/transcript.
+6. Mặc định giữ câu trả lời ngắn cho teleprompter; ưu tiên 3-6 ý chính và mở rộng chỉ khi cần.
 
 Trả về chính xác theo định dạng sau:
 [FULL_ANSWER]
@@ -70,7 +86,22 @@ Trả về chính xác theo định dạng sau:
 
   // Label intentionally carries no provider/model annotation — that is already
   // surfaced by the pane header badge and the footer.
-  const label = '✨ Trả lời chuẩn STAR'
+  const label = `✨ ${strategy.label}`
+  const outputSections = selection.strategyId === 'coding'
+    ? ['clarification', 'approach', 'optimal_solution', 'complexity', 'edge_cases', 'code']
+    : selection.strategyId === 'system_design'
+      ? ['requirements', 'assumptions', 'api', 'data_model', 'architecture', 'scalability', 'bottlenecks', 'tradeoffs']
+      : selection.strategyId === 'database'
+        ? ['alternatives', 'consistency', 'indexing', 'transactions', 'scalability', 'tradeoffs']
+        : selection.strategyId === 'behavioral' || selection.strategyId === 'leadership'
+          ? ['situation', 'task_or_context', 'action', 'result', 'learning']
+          : ['answer', 'example_or_tradeoffs']
+  const strategyMetadata = {
+    strategyId: selection.strategyId,
+    confidence: selection.confidence,
+    reasoningTags: selection.reasoningTags,
+    outputSections,
+  }
 
   // Model ignored the [FULL_ANSWER]/[SHORT_ANSWER] contract — still surface its
   // real output rather than dropping it, unless it is a raw JSON blob (which is
@@ -100,6 +131,7 @@ Trả về chính xác theo định dạng sau:
       modelName: rawRes.modelName,
       isRealLLM: true,
       contextUsage,
+      strategy: strategyMetadata,
     }
   }
 
@@ -120,5 +152,6 @@ Trả về chính xác theo định dạng sau:
       usagePercent: assembled.usagePercent,
       breakdown: assembled.estimatedTokens,
     },
+    strategy: strategyMetadata,
   }
 }
