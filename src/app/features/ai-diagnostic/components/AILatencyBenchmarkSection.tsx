@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Zap,
   RotateCcw,
@@ -42,6 +42,26 @@ export function AILatencyBenchmarkSection({
   const [customPrompt, setCustomPrompt] = useState<string>(BENCHMARK_PROMPT_PRESETS[0].prompt)
   const [copied, setCopied] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   const handleSelectPreset = (preset: (typeof BENCHMARK_PROMPT_PRESETS)[0]) => {
     setSelectedPromptId(preset.id)
@@ -123,7 +143,7 @@ export function AILatencyBenchmarkSection({
         </div>
 
         {/* Model Selector Dropdown */}
-        <div className="relative">
+        <div className="relative" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -133,11 +153,16 @@ export function AILatencyBenchmarkSection({
             <span className="max-w-[140px] truncate font-mono text-[10.5px]">
               {currentModel.name || currentModel.id}
             </span>
-            <ChevronDown className="w-3 h-3 text-white/40" />
+            <ChevronDown
+              className={cn(
+                'w-3 h-3 text-white/40 transition-transform duration-200',
+                isDropdownOpen && 'rotate-180 text-white'
+              )}
+            />
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute right-0 top-full mt-1 w-64 max-h-60 overflow-y-auto rounded-xl bg-slate-900 border border-white/15 p-1 z-30 shadow-2xl custom-scrollbar animate-fade-in">
+            <div className="absolute right-0 top-full mt-1.5 w-64 max-h-60 overflow-y-auto rounded-xl bg-[#0d111c]/95 backdrop-blur-2xl border border-white/15 p-1 z-50 shadow-[0_16px_40px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.08)] custom-scrollbar animate-fade-in">
               <div className="px-2 py-1 text-[10px] font-semibold text-white/40 uppercase tracking-wider">
                 Chọn mô hình cần đo tốc độ
               </div>

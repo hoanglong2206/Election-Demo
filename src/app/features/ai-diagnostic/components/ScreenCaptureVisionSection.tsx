@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
 	Camera,
 	Crop,
@@ -70,10 +70,44 @@ export function ScreenCaptureVisionSection({
 	const [copiedAnswer, setCopiedAnswer] = useState(false);
 	const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 	const [isSampleDropdownOpen, setIsSampleDropdownOpen] = useState(false);
+	const modelDropdownRef = useRef<HTMLDivElement>(null);
+	const sampleDropdownRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const { entries: translations, toggle: toggleTranslation } =
 		useVietnameseTranslation();
 	const answerTranslation = translations["vision-answer"];
+
+	// Close dropdowns on click outside or Escape
+	useEffect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			if (
+				modelDropdownRef.current &&
+				!modelDropdownRef.current.contains(e.target as Node)
+			) {
+				setIsModelDropdownOpen(false);
+			}
+			if (
+				sampleDropdownRef.current &&
+				!sampleDropdownRef.current.contains(e.target as Node)
+			) {
+				setIsSampleDropdownOpen(false);
+			}
+		};
+
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				setIsModelDropdownOpen(false);
+				setIsSampleDropdownOpen(false);
+			}
+		};
+
+		document.addEventListener("mousedown", handleClickOutside);
+		document.addEventListener("keydown", handleKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", handleClickOutside);
+			document.removeEventListener("keydown", handleKeyDown);
+		};
+	}, []);
 
 	const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
@@ -132,7 +166,12 @@ export function ScreenCaptureVisionSection({
 	return (
 		<div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 space-y-3.5 shadow-sm flex flex-col h-full">
 			{/* Section Header */}
-			<div className="flex items-center justify-between pb-2.5 border-b border-white/[0.06] gap-2 flex-wrap">
+			<div
+				className={cn(
+					"flex items-center justify-between pb-2.5 border-b border-white/[0.06] gap-2 flex-wrap relative",
+					isModelDropdownOpen ? "z-40" : "z-20",
+				)}
+			>
 				<div className="flex items-center gap-2.5">
 					<div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
 						<Eye className="w-4 h-4 text-emerald-400" />
@@ -157,10 +196,15 @@ export function ScreenCaptureVisionSection({
 				</div>
 
 				{/* Vision Model Selector Dropdown */}
-				<div className="relative">
+				<div className="relative" ref={modelDropdownRef}>
 					<button
 						type="button"
-						onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+						onClick={() => {
+							setIsModelDropdownOpen((prev) => {
+								if (!prev) setIsSampleDropdownOpen(false);
+								return !prev;
+							});
+						}}
 						className="h-7 px-2.5 rounded-lg bg-black/40 border border-white/10 hover:border-white/20 text-[11px] text-white/80 hover:text-white flex items-center gap-1.5 transition-colors"
 					>
 						<Sparkles className="w-3.5 h-3.5 text-emerald-400" />
@@ -169,11 +213,16 @@ export function ScreenCaptureVisionSection({
 								currentVisionModel?.name ||
 								"Chọn Vision Model"}
 						</span>
-						<ChevronDown className="w-3 h-3 text-white/40" />
+						<ChevronDown
+							className={cn(
+								"w-3 h-3 text-white/40 transition-transform duration-200",
+								isModelDropdownOpen && "rotate-180 text-white",
+							)}
+						/>
 					</button>
 
 					{isModelDropdownOpen && (
-						<div className="absolute right-0 top-full mt-1 w-64 max-h-60 overflow-y-auto rounded-xl bg-slate-900 border border-white/15 p-1 z-30 shadow-2xl custom-scrollbar animate-fade-in">
+						<div className="absolute right-0 top-full mt-1.5 w-64 max-h-60 overflow-y-auto rounded-xl bg-[#0d111c]/95 backdrop-blur-2xl border border-white/15 p-1 z-50 shadow-[0_16px_40px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.08)] custom-scrollbar animate-fade-in">
 							<div className="px-2 py-1 text-[10px] font-semibold text-white/40 uppercase tracking-wider">
 								Mô hình Multimodal Vision
 							</div>
@@ -214,7 +263,12 @@ export function ScreenCaptureVisionSection({
 			</div>
 
 			{/* Capture Action Buttons */}
-			<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+			<div
+				className={cn(
+					"grid grid-cols-2 sm:grid-cols-4 gap-2 relative",
+					isSampleDropdownOpen ? "z-30" : "z-10",
+				)}
+			>
 				{/* Fullscreen Capture */}
 				<Button
 					variant="outline"
@@ -262,40 +316,52 @@ export function ScreenCaptureVisionSection({
 				/>
 
 				{/* Sample Problem Generator Dropdown */}
-				<div className="relative">
+				<div className="relative" ref={sampleDropdownRef}>
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={() => setIsSampleDropdownOpen(!isSampleDropdownOpen)}
+						onClick={() => {
+							setIsSampleDropdownOpen((prev) => {
+								if (!prev) setIsModelDropdownOpen(false);
+								return !prev;
+							});
+						}}
 						disabled={isCapturing || isAnalyzing}
 						className="w-full h-8 px-2 text-[11px] bg-white/[0.03] border-white/10 hover:bg-white/10 text-white flex items-center justify-center gap-1.5"
 						title="Dùng ảnh bài toán kỹ thuật mẫu để test nhanh mà không cần chụp"
 					>
 						<Sparkles className="w-3.5 h-3.5 text-violet-400" />
 						<span>Đề Bài Mẫu</span>
-						<ChevronDown className="w-3 h-3 text-white/40" />
+						<ChevronDown
+							className={cn(
+								"w-3 h-3 text-white/40 transition-transform duration-200",
+								isSampleDropdownOpen && "rotate-180 text-white",
+							)}
+						/>
 					</Button>
 
 					{isSampleDropdownOpen && (
-						<div className="absolute right-0 top-full mt-1 w-64 rounded-xl bg-slate-900 border border-white/15 p-1 z-30 shadow-2xl animate-fade-in">
-							<div className="px-2 py-1 text-[10px] font-semibold text-white/40 uppercase tracking-wider">
+						<div className="absolute right-0 top-full mt-1.5 w-72 rounded-xl bg-[#0d111c]/95 backdrop-blur-2xl border border-white/15 p-1.5 z-50 shadow-[0_16px_40px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.08)] animate-fade-in">
+							<div className="px-2 py-1 text-[10px] font-semibold text-white/40 uppercase tracking-wider border-b border-white/[0.06] mb-1">
 								Chọn ảnh đề bài mẫu
 							</div>
-							{VISION_SAMPLE_PRESETS.map((sample) => (
-								<button
-									key={sample.id}
-									type="button"
-									onClick={() => handleLoadSample(sample)}
-									className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-white/10 transition-colors block"
-								>
-									<div className="font-medium text-white/90 truncate">
-										{sample.title}
-									</div>
-									<div className="text-[10px] text-white/40 truncate">
-										{sample.description}
-									</div>
-								</button>
-							))}
+							<div className="space-y-0.5 max-h-64 overflow-y-auto custom-scrollbar">
+								{VISION_SAMPLE_PRESETS.map((sample) => (
+									<button
+										key={sample.id}
+										type="button"
+										onClick={() => handleLoadSample(sample)}
+										className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-white/[0.08] transition-colors block group"
+									>
+										<div className="font-medium text-white/90 group-hover:text-cyan-300 transition-colors truncate">
+											{sample.title}
+										</div>
+										<div className="text-[10px] text-white/40 group-hover:text-white/60 transition-colors truncate">
+											{sample.description}
+										</div>
+									</button>
+								))}
+							</div>
 						</div>
 					)}
 				</div>
