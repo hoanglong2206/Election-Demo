@@ -60,9 +60,9 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   })
 
   // ── Desktop sources for audio capture ─────────────────────────────────────
-  ipcMain.handle('desktop:getSources', async () => {
+  ipcMain.handle('desktop:getSources', async (_event, types?: ('screen' | 'window')[]) => {
     try {
-      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
+      const sources = await desktopCapturer.getSources({ types: types || ['screen', 'window'] })
       return sources.map((s) => ({ id: s.id, name: s.name }))
     } catch (err) {
       console.error('[Electron] Error getting desktop sources:', err)
@@ -71,46 +71,48 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   })
 
   // ── Native Screen Capture via Electron desktopCapturer (Pure & No External Files) ──
-  ipcMain.handle('desktop:captureScreen', async () => {
-    try {
-      const primaryDisplay = screen.getPrimaryDisplay()
-      const scale = primaryDisplay?.scaleFactor || 1
-      const bounds = primaryDisplay?.bounds || { width: 1920, height: 1080 }
-      const targetWidth = Math.min(Math.round((bounds.width || 1920) * scale), 1920)
-      const targetHeight = Math.min(Math.round((bounds.height || 1080) * scale), 1080)
-
-      let selected: Electron.DesktopCapturerSource | null = null
-
-      // Step 1: Capture open application windows (fastest & highly reliable, ~100-150ms, immune to error 170)
+  ipcMain.handle(
+    'desktop:captureScreen',
+    async (_event, options?: { sourceType?: 'screen' | 'window'; sourceId?: string }) => {
       try {
-        const windowSources = await desktopCapturer.getSources({
-          types: ['window'],
-          thumbnailSize: { width: targetWidth, height: targetHeight },
-          fetchWindowIcons: false,
-        })
+        const primaryDisplay = screen.getPrimaryDisplay()
+        const scale = primaryDisplay?.scaleFactor || 1
+        const bounds = primaryDisplay?.bounds || { width: 1920, height: 1080 }
+        const targetWidth = Math.min(Math.round((bounds.width || 1920) * scale), 1920)
+        const targetHeight = Math.min(Math.round((bounds.height || 1080) * scale), 1080)
 
-        // Prioritize active non-Copilot application window (e.g. Chrome, Zoom, IDE, Docs)
-        const nonSelfWindow = windowSources.find(
-          (s) =>
-            !s.thumbnail.isEmpty() &&
-            !s.name.toLowerCase().includes('copilot') &&
-            !s.name.toLowerCase().includes('electron') &&
-            !s.name.toLowerCase().includes('antigravity')
-        )
+        let selected: Electron.DesktopCapturerSource | null = null
 
-        if (nonSelfWindow) {
-          selected = nonSelfWindow
+        const sourceType = options?.sourceType || 'window'
+
+      // Select the requested source when the picker supplied a source id.
+        try {
+          const sources = await desktopCapturer.getSources({
+            types: [sourceType],
+            thumbnailSize: { width: targetWidth, height: targetHeight },
+            fetchWindowIcons: false,
+          })
+
+        if (options?.sourceId) {
+          selected = sources.find((s) => s.id === options.sourceId && !s.thumbnail.isEmpty()) || null
+        } else if (sourceType === 'screen') {
+          selected = sources.find((s) => !s.thumbnail.isEmpty()) || null
         } else {
-          // If all are self-windows, find any non-empty window
-          selected = windowSources.find((s) => !s.thumbnail.isEmpty()) || null
+          selected = sources.find(
+            (s) =>
+              !s.thumbnail.isEmpty() &&
+              !s.name.toLowerCase().includes('copilot') &&
+              !s.name.toLowerCase().includes('electron') &&
+              !s.name.toLowerCase().includes('antigravity')
+          ) || sources.find((s) => !s.thumbnail.isEmpty()) || null
         }
-      } catch {
-        // Fall through to screen capture
-      }
+        } catch {
+          // Fall through to screen capture
+        }
 
       // Step 2: Fall back to entire screen capture if no valid window source found
-      if (!selected) {
-        try {
+        if (!selected) {
+          try {
           const screenSources = await Promise.race([
             desktopCapturer.getSources({
               types: ['screen'],
@@ -122,34 +124,35 @@ export function registerIpcHandlers(win: BrowserWindow): void {
             ),
           ])
           selected = screenSources.find((s) => !s.thumbnail.isEmpty()) || null
-        } catch {
-          // Fall through
+          } catch {
+            // Fall through
+          }
+        }
+
+        if (!selected || selected.thumbnail.isEmpty()) {
+          throw new Error('Không thể thu thập hình ảnh màn hình từ desktopCapturer.')
+        }
+
+        const jpegBuffer = selected.thumbnail.toJPEG(85)
+        const dataUrl = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`
+        const size = selected.thumbnail.getSize()
+
+        return {
+          success: true,
+          dataUrl,
+          width: size.width || targetWidth,
+          height: size.height || targetHeight,
+          sourceName: selected.name,
+        }
+      } catch (err: unknown) {
+        console.error('[ScreenCapture:Main] desktop:captureScreen error:', err)
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
         }
       }
-
-      if (!selected || selected.thumbnail.isEmpty()) {
-        throw new Error('Không thể thu thập hình ảnh màn hình từ desktopCapturer.')
-      }
-
-      const jpegBuffer = selected.thumbnail.toJPEG(85)
-      const dataUrl = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`
-      const size = selected.thumbnail.getSize()
-
-      return {
-        success: true,
-        dataUrl,
-        width: size.width || targetWidth,
-        height: size.height || targetHeight,
-        sourceName: selected.name,
-      }
-    } catch (err: unknown) {
-      console.error('[ScreenCapture:Main] desktop:captureScreen error:', err)
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : String(err),
-      }
-    }
-  })
+    },
+  )
 
   // ── Always-on-top toggle ───────────────────────────────────────────────────
   ipcMain.handle('window:toggleAlwaysOnTop', () => {

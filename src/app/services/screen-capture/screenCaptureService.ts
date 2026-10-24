@@ -15,7 +15,9 @@ export class ScreenCaptureService {
    * Captures screen using native Electron API when available,
    * falling back to Web standard getDisplayMedia when running in browser.
    */
-  public async captureScreen(): Promise<CapturedImageInfo> {
+  public async captureScreen(
+    options: { sourceType?: 'screen' | 'window'; sourceId?: string } = {},
+  ): Promise<CapturedImageInfo> {
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(
         () => reject(new Error('Quá thời gian chụp màn hình (timeout 8s). Vui lòng thử lại.')),
@@ -23,17 +25,17 @@ export class ScreenCaptureService {
       )
     )
 
-    return await Promise.race([this._executeCapture(), timeoutPromise])
+    return await Promise.race([this._executeCapture(options), timeoutPromise])
   }
 
-  private async _executeCapture(): Promise<CapturedImageInfo> {
+  private async _executeCapture(options: { sourceType?: 'screen' | 'window'; sourceId?: string }): Promise<CapturedImageInfo> {
     // 1. Native Electron Desktop Capture (No user prompts, instant high-res)
     if (this.isNativeAvailable()) {
       try {
         const nativeTimeout = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Native capture timeout sau 4.5s')), 4500)
         )
-        const res = await Promise.race([window.api.captureScreen!(), nativeTimeout])
+        const res = await Promise.race([window.api.captureScreen!(options), nativeTimeout])
         if (
           res &&
           res.success &&

@@ -49,6 +49,7 @@ import { LiveTranscriptPane } from './components/LiveTranscriptPane'
 import { CopilotSuggestionPane } from './components/CopilotSuggestionPane'
 import { MeetingFooter } from './components/MeetingFooter'
 import { ScreenshotCropOverlay } from './components/ScreenshotCropOverlay'
+import { ScreenCaptureSourcePicker } from './components/ScreenCaptureSourcePicker'
 import {
   screenCaptureService,
   visualQuestionAnalyzer,
@@ -220,6 +221,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
 
   // ── Screenshot Capture & Multimodal Visual Analysis ──────────────────────
   const [screenCaptureState, setScreenCaptureState] = useState<ScreenCaptureState>('idle')
+  const [isScreenSourcePickerOpen, setIsScreenSourcePickerOpen] = useState(false)
   const [capturedImageInfo, setCapturedImageInfo] = useState<CapturedImageInfo | null>(null)
   const [activeVisualQuestion, setActiveVisualQuestion] = useState<VisualQuestionItem | null>(null)
   const [visualQuestionsHistory, setVisualQuestionsHistory] = useState<VisualQuestionItem[]>([])
@@ -230,6 +232,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const capturedImageInfoRef = useRef<CapturedImageInfo | null>(null)
   const activeVisualQuestionRef = useRef<VisualQuestionItem | null>(null)
   const visualQuestionsHistoryRef = useRef<VisualQuestionItem[]>([])
+  const lastScreenSourceRef = useRef<{ sourceType: 'screen' | 'window'; sourceId?: string }>({
+    sourceType: 'screen',
+  })
 
   useEffect(() => {
     capturedImageInfoRef.current = capturedImageInfo
@@ -1014,7 +1019,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   }
 
   // ── SCREEN CAPTURE & MULTIMODAL QUESTION LOGIC ─────────────────────────────
-  const handleTriggerScreenCapture = useCallback(async () => {
+  const handleStartScreenCapture = useCallback(async (
+    source: { sourceType: 'screen' | 'window'; sourceId?: string },
+  ) => {
     if (
       isCapturingScreenRef.current ||
       screenCaptureState === 'capturing' ||
@@ -1023,6 +1030,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     ) {
       return
     }
+    setIsScreenSourcePickerOpen(false)
+    lastScreenSourceRef.current = source
     isCapturingScreenRef.current = true
     setScreenCaptureState('capturing')
 
@@ -1043,7 +1052,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         screenCaptureService.releaseMemory(capturedImageInfoRef.current.dataUrl)
         setCapturedImageInfo(null)
       }
-      const imgInfo = await screenCaptureService.captureScreen()
+      const imgInfo = await screenCaptureService.captureScreen(source)
       clearTimeout(watchdogTimer)
       if (isMountedRef.current) {
         setCapturedImageInfo(imgInfo)
@@ -1066,6 +1075,18 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       clearTimeout(watchdogTimer)
       isCapturingScreenRef.current = false
     }
+  }, [screenCaptureState])
+
+  const handleTriggerScreenCapture = useCallback(() => {
+    if (
+      isCapturingScreenRef.current ||
+      screenCaptureState === 'capturing' ||
+      screenCaptureState === 'processing' ||
+      screenCaptureState === 'cropping'
+    ) {
+      return
+    }
+    setIsScreenSourcePickerOpen(true)
   }, [screenCaptureState])
 
   const handleConfirmCrop = async (cropRect: CropRect) => {
@@ -1139,7 +1160,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     }
     retakeTimerRef.current = setTimeout(() => {
       if (isMountedRef.current) {
-        handleTriggerScreenCapture()
+        handleStartScreenCapture(lastScreenSourceRef.current)
       }
     }, 150)
   }
@@ -1412,6 +1433,13 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       />
 
       {/* Interactive Screenshot Crop Overlay */}
+      {isScreenSourcePickerOpen && (
+        <ScreenCaptureSourcePicker
+          onSelect={handleStartScreenCapture}
+          onCancel={() => setIsScreenSourcePickerOpen(false)}
+        />
+      )}
+
       {screenCaptureState === 'cropping' && capturedImageInfo && (
         <ScreenshotCropOverlay
           imageInfo={capturedImageInfo}

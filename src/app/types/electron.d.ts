@@ -61,8 +61,8 @@ export interface ElectronAPI {
   toggleMode: (mode: AppMode) => void
   toggleAlwaysOnTop: () => Promise<boolean>
   getVersion: () => Promise<string>
-  getDesktopSources?: () => Promise<{ id: string; name: string }[]>
-  captureScreen?: () => Promise<{
+  getDesktopSources?: (types?: ('screen' | 'window')[]) => Promise<{ id: string; name: string }[]>
+  captureScreen?: (options?: { sourceType?: 'screen' | 'window'; sourceId?: string }) => Promise<{
     success: boolean
     dataUrl?: string
     width?: number

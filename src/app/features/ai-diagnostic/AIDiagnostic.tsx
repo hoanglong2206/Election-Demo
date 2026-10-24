@@ -19,6 +19,7 @@ import {
 } from '../../services/screen-capture'
 import { settingsManager } from '../../services/settings'
 import { ScreenshotCropOverlay } from '../meeting-mode/components/ScreenshotCropOverlay'
+import { ScreenCaptureSourcePicker } from '../meeting-mode/components/ScreenCaptureSourcePicker'
 import { AIDiagnosticHeader } from './components/AIDiagnosticHeader'
 import { AILatencyBenchmarkSection } from './components/AILatencyBenchmarkSection'
 import { ScreenCaptureVisionSection } from './components/ScreenCaptureVisionSection'
@@ -86,6 +87,8 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
 
   const [capturedImage, setCapturedImage] = useState<CapturedImageInfo | null>(null)
   const [isCapturing, setIsCapturing] = useState(false)
+  const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false)
+  const [cropAfterCapture, setCropAfterCapture] = useState(false)
   const [isCropping, setIsCropping] = useState(false)
   const [isAnalyzingVision, setIsAnalyzingVision] = useState(false)
   const [visionAnalysisResult, setVisionAnalysisResult] = useState<VisualAnalysisResult | null>(null)
@@ -105,13 +108,14 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
     return () => window.removeEventListener('storage', refreshVision)
   }, [selectedVisionId])
 
-  const handleTriggerScreenCapture = async (cropImmediately: boolean) => {
+  const handleStartScreenCapture = async (source: { sourceType: 'screen' | 'window'; sourceId?: string }) => {
+    setIsSourcePickerOpen(false)
     setIsCapturing(true)
     setGeneralError(null)
     try {
-      const imgInfo = await screenCaptureService.captureScreen()
+      const imgInfo = await screenCaptureService.captureScreen(source)
       setCapturedImage(imgInfo)
-      if (cropImmediately) {
+      if (cropAfterCapture) {
         setIsCropping(true)
       }
     } catch (err: any) {
@@ -120,6 +124,11 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
     } finally {
       setIsCapturing(false)
     }
+  }
+
+  const handleTriggerScreenCapture = (cropImmediately: boolean) => {
+    setCropAfterCapture(cropImmediately)
+    setIsSourcePickerOpen(true)
   }
 
   const handleConfirmCrop = async (cropRect: CropRect) => {
@@ -235,6 +244,13 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
       )}
 
       {/* Interactive Screenshot Crop Overlay */}
+      {isSourcePickerOpen && (
+        <ScreenCaptureSourcePicker
+          onSelect={handleStartScreenCapture}
+          onCancel={() => setIsSourcePickerOpen(false)}
+        />
+      )}
+
       {isCropping && capturedImage && (
         <ScreenshotCropOverlay
           imageInfo={capturedImage}

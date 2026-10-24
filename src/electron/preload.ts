@@ -49,20 +49,20 @@ const api = {
   /**
    * Get desktop sources for screen and audio capturing.
    */
-  getDesktopSources: (): Promise<{ id: string; name: string }[]> =>
-    ipcRenderer.invoke('desktop:getSources'),
+  getDesktopSources: (types?: ('screen' | 'window')[]): Promise<{ id: string; name: string }[]> =>
+    ipcRenderer.invoke('desktop:getSources', types),
 
   /**
    * Native high-resolution screen capture for visual technical question analysis.
    */
-  captureScreen: (): Promise<{
+  captureScreen: (options?: { sourceType?: 'screen' | 'window'; sourceId?: string }): Promise<{
     success: boolean
     dataUrl?: string
     width?: number
     height?: number
     sourceName?: string
     error?: string
-  }> => ipcRenderer.invoke('desktop:captureScreen'),
+  }> => ipcRenderer.invoke('desktop:captureScreen', options),
 
   /**
    * Native Whisper C++ Engine API
