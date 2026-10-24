@@ -64,7 +64,9 @@ import {
   getVADCalibration,
 } from '../../services/vad-calibration'
 import {
+  classifyIntent,
   detectIntentFromRecentLines,
+  getAdaptiveDebounceMs,
   type IntentDetectionResult,
   type TriggerMode,
   tieredContextManager,
@@ -712,7 +714,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
 
   // ── Intelligent QuestionDetector, Multi-chunk Stitching & Debounced Copilot Trigger ──
   useEffect(() => {
-    const syncTimer = setTimeout(() => {
+    const syncTimer = setTimeout(async () => {
       if (!isMountedRef.current) return
 
       if (validLines.length === 0) {
@@ -732,10 +734,12 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       }
 
       // 1. Detect Intent with 0ms latency heuristic + multi-chunk Whisper stitching
-      const intentRes = detectIntentFromRecentLines(validLines, {
+      const heuristicIntent = detectIntentFromRecentLines(validLines, {
         mode,
         triggerMode,
+        dedupeKey: `${mode}:${validLines[validLines.length - 1]?.speaker || 'Speaker'}`,
       })
+      const intentRes = heuristicIntent ? await classifyIntent(heuristicIntent) : null
       setLatestIntent(intentRes)
 
       // 2. Synchronize latest exchange UI with coherent normalized text
@@ -777,12 +781,13 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       // Auto Mode: Only trigger if shouldTriggerCopilot is true (Question/Command/Discussion in discussion mode)
       // Small talk ("Okay", "I see", "Right", "Thank you") sets shouldTriggerCopilot = false -> LLM call skipped!
       if (intentRes?.shouldTriggerCopilot && targetExchange) {
-        // Debounce 500ms (300-700ms range) to wait for speaker to finish talking
+        // Keep the original debounce behavior, extending it for incomplete STT fragments.
         if (copilotDebounceTimerRef.current) clearTimeout(copilotDebounceTimerRef.current)
+        const debounceMs = getAdaptiveDebounceMs(targetExchange.original)
         copilotDebounceTimerRef.current = setTimeout(async () => {
           if (!isMountedRef.current || isGeneratingAIResponse) return
           await handleGenerateCopilotResponse(validLinesRef.current, null, targetExchange)
-        }, 500)
+        }, debounceMs)
       }
     }, 0)
 

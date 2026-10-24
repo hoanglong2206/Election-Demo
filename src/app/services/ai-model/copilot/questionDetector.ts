@@ -13,8 +13,38 @@ export type CopilotIntent =
   | 'SMALL_TALK'
   | 'UNKNOWN'
 
+export type NormalizedIntent =
+  | 'direct_question'
+  | 'implicit_question'
+  | 'coding_problem'
+  | 'system_design_problem'
+  | 'behavioral_question'
+  | 'clarification_request'
+  | 'follow_up_question'
+  | 'challenge_or_objection'
+  | 'normal_conversation'
+
+export interface IntentClassifier {
+  classify(input: {
+    text: string
+    language: 'en' | 'vi' | 'mixed'
+    heuristicIntent: NormalizedIntent
+  }): Promise<{
+    intent: NormalizedIntent
+    confidence: number
+    topic?: string
+    questionText?: string
+    triggerReason?: string
+  }>
+}
+
 export interface IntentDetectionResult {
   intent: CopilotIntent
+  normalizedIntent?: NormalizedIntent
+  questionText?: string
+  triggerReason?: string
+  topic?: string
+  detectionTimestamp?: number
   confidence: number // 0.0 - 1.0
   normalizedText: string
   rawText: string
@@ -34,7 +64,54 @@ export interface QuestionDetectorConfig {
   confidenceThreshold?: number
   debounceMs?: number
   maxLookbackLines?: number
+  classifier?: IntentClassifier
+  dedupeKey?: string
 }
+
+export function getAdaptiveDebounceMs(
+  text: string,
+  configuredMs = 500,
+): number {
+  if (isIncompleteSpeechFragment(text)) return Math.max(700, configuredMs + 200)
+  if (text.trim().split(/\s+/).length <= 4) return Math.min(700, configuredMs + 100)
+  return Math.max(300, Math.min(700, configuredMs))
+}
+
+export interface IntentMetrics {
+  detectedQuestions: number
+  falseTriggers: number
+  classifierCalls: number
+  averageDetectionLatency: number
+}
+
+const intentMetrics: IntentMetrics = {
+  detectedQuestions: 0,
+  falseTriggers: 0,
+  classifierCalls: 0,
+  averageDetectionLatency: 0,
+}
+
+export function getIntentMetrics(): IntentMetrics {
+  return { ...intentMetrics }
+}
+
+export function resetIntentMetrics(): void {
+  intentMetrics.detectedQuestions = 0
+  intentMetrics.falseTriggers = 0
+  intentMetrics.classifierCalls = 0
+  intentMetrics.averageDetectionLatency = 0
+}
+
+export function recordFalseTrigger(): void {
+  intentMetrics.falseTriggers += 1
+}
+
+let configuredIntentClassifier: IntentClassifier | undefined
+export function configureIntentClassifier(classifier?: IntentClassifier): void {
+  configuredIntentClassifier = classifier
+}
+
+const lastIntentByKey = new Map<string, string>()
 
 export interface TriggerLogEntry {
   id: string
@@ -310,7 +387,7 @@ export const triggerLogManager = new TriggerLogManager()
 /**
  * Fast, 0-latency heuristic classifier to detect Intent and Copilot Trigger Decision.
  */
-export function detectIntent(
+function detectHeuristicIntent(
   rawText: string,
   options?: {
     speaker?: string
@@ -319,6 +396,7 @@ export function detectIntent(
     confidenceThreshold?: number
   }
 ): IntentDetectionResult {
+
   const mode = options?.mode || 'interview'
   const triggerMode = options?.triggerMode || 'auto'
   const threshold = options?.confidenceThreshold ?? 0.65
@@ -454,22 +532,18 @@ export function detectIntent(
 
   if (maxQuestionScore > 0) {
     const isCandidate = mode === 'interview' && isCandidateSpeaker(speaker)
-    let shouldTrigger = false
-    let reason = ''
-
-    if (triggerMode === 'manual') {
-      shouldTrigger = false
-      reason = 'Manual Mode: Copilot auto-trigger disabled by user'
-    } else if (isCandidate) {
-      shouldTrigger = false
-      reason = 'Skipped: Candidate speech in Interview Mode'
-    } else if (maxQuestionScore >= threshold) {
-      shouldTrigger = true
-      reason = `Triggered: Question detected with confidence ${(maxQuestionScore * 100).toFixed(0)}%`
-    } else {
-      shouldTrigger = false
-      reason = `Skipped: Question confidence (${(maxQuestionScore * 100).toFixed(0)}%) below threshold (${(threshold * 100).toFixed(0)}%)`
-    }
+    const shouldTrigger =
+      triggerMode !== 'manual' &&
+      !isCandidate &&
+      maxQuestionScore >= threshold
+    const reason =
+      triggerMode === 'manual'
+        ? 'Manual Mode: Copilot auto-trigger disabled by user'
+        : isCandidate
+          ? 'Skipped: Candidate speech in Interview Mode'
+          : shouldTrigger
+            ? `Triggered: Question detected with confidence ${(maxQuestionScore * 100).toFixed(0)}%`
+            : `Skipped: Question confidence (${(maxQuestionScore * 100).toFixed(0)}%) below threshold (${(threshold * 100).toFixed(0)}%)`
 
     const result: IntentDetectionResult = {
       intent: 'QUESTION',
@@ -508,22 +582,18 @@ export function detectIntent(
   }
 
   if (maxDiscussionScore > 0) {
-    let shouldTrigger = false
-    let reason = ''
-
-    if (triggerMode === 'manual') {
-      shouldTrigger = false
-      reason = 'Manual Mode: Copilot auto-trigger disabled by user'
-    } else if (mode === 'discussion') {
-      shouldTrigger = maxDiscussionScore >= threshold
-      reason = shouldTrigger
-        ? `Triggered: Discussion point detected in Discussion Mode (${(maxDiscussionScore * 100).toFixed(0)}%)`
-        : `Skipped: Discussion point confidence below threshold`
-    } else {
-      // In interview mode, discussion points don't trigger answer suggestions
-      shouldTrigger = false
-      reason = 'Skipped: Discussion point not actionable in Interview Mode'
-    }
+    const shouldTrigger =
+      triggerMode !== 'manual' &&
+      mode === 'discussion' &&
+      maxDiscussionScore >= threshold
+    const reason =
+      triggerMode === 'manual'
+        ? 'Manual Mode: Copilot auto-trigger disabled by user'
+        : mode === 'discussion'
+          ? shouldTrigger
+            ? `Triggered: Discussion point detected in Discussion Mode (${(maxDiscussionScore * 100).toFixed(0)}%)`
+            : 'Skipped: Discussion point confidence below threshold'
+          : 'Skipped: Discussion point not actionable in Interview Mode'
 
     const result: IntentDetectionResult = {
       intent: 'DISCUSSION_POINT',
@@ -578,13 +648,99 @@ export function detectIntent(
   return result
 }
 
+const CODING_TERMS = /\b(?:algorithm|complexity|leetcode|function|code|coding|bug|debug|array|string|tree|graph|dp|dynamic programming|binary search|implementation|thuật toán|độ phức tạp|hàm|mảng|chuỗi|cây|đồ thị)\b/i
+const SYSTEM_DESIGN_TERMS = /\b(?:system design|architecture|scalab|distributed|microservice|kafka|redis|database|load balancer|kiến trúc|hệ thống phân tán|mở rộng|cơ sở dữ liệu)\b/i
+const BEHAVIORAL_TERMS = /\b(?:tell me about a time|describe a time|conflict|strength|weakness|leadership|teamwork|hãy kể|một lần|xung đột|điểm mạnh|điểm yếu|làm việc nhóm)\b/i
+const CLARIFICATION_TERMS = /(?:what do you mean|could you clarify|can you clarify|ý bạn là|ý bạn là gì|giải thích rõ|nói rõ hơn|chưa hiểu)/i
+const CHALLENGE_TERMS = /\b(?:but|however|disagree|are you sure|why not|concern|rủi ro|không đồng ý|nhưng|tại sao không|lo ngại)\b/i
+const FOLLOW_UP_TERMS = /\b(?:and what about|how about|what if|also|then|còn|thế còn|vậy còn|nếu vậy|tiếp theo)\b/i
+
+function detectNormalizedIntent(text: string, legacy: CopilotIntent): NormalizedIntent {
+  if (legacy === 'SMALL_TALK') return 'normal_conversation'
+  if (CLARIFICATION_TERMS.test(text)) return 'clarification_request'
+  if (CHALLENGE_TERMS.test(text)) return 'challenge_or_objection'
+  if (FOLLOW_UP_TERMS.test(text)) return 'follow_up_question'
+  if (CODING_TERMS.test(text)) return 'coding_problem'
+  if (SYSTEM_DESIGN_TERMS.test(text)) return 'system_design_problem'
+  if (BEHAVIORAL_TERMS.test(text)) return 'behavioral_question'
+  if (legacy === 'UNKNOWN' && /\b(?:would be useful|need to understand|it would help|cần biết|muốn hiểu|sẽ hữu ích)\b/i.test(text)) {
+    return SYSTEM_DESIGN_TERMS.test(text) ? 'system_design_problem' : 'implicit_question'
+  }
+  if (legacy === 'UNKNOWN') return 'normal_conversation'
+  if (legacy === 'QUESTION') {
+    return /[?？]/.test(text) || /^(?:what|why|how|when|where|who|which|is|are|do|does|can|could|should|có|tại sao|làm sao|vì sao|bạn|anh|chị|em)\b/i.test(text)
+      ? 'direct_question'
+      : 'implicit_question'
+  }
+  return 'normal_conversation'
+}
+
+function inferTopic(text: string): string | undefined {
+  if (CODING_TERMS.test(text)) return 'coding'
+  if (SYSTEM_DESIGN_TERMS.test(text)) return 'system_design'
+  if (BEHAVIORAL_TERMS.test(text)) return 'behavioral'
+  return undefined
+}
+
+function detectLanguage(text: string): 'en' | 'vi' | 'mixed' {
+  const vi = /(?:\b(?:và|có|không|là|bạn|anh|chị|em|hệ thống|giải thích|tại sao)\b|[ăâđêôơư])/i.test(text)
+  const en = /\b(?:the|is|are|what|why|how|can|could|system|explain|please)\b/i.test(text)
+  return vi && en ? 'mixed' : vi ? 'vi' : 'en'
+}
+
+export function detectIntent(
+  rawText: string,
+  options?: Parameters<typeof detectHeuristicIntent>[1] & { dedupeKey?: string },
+): IntentDetectionResult {
+  const startedAt = performance.now()
+  const result = detectHeuristicIntent(rawText, options)
+  const enriched: IntentDetectionResult = {
+    ...result,
+    normalizedIntent: detectNormalizedIntent(`${result.rawText} ${result.normalizedText}`, result.intent),
+    questionText: result.isQuestion ? result.normalizedText : '',
+    triggerReason: result.triggerDecisionReason,
+    topic: inferTopic(result.normalizedText),
+    detectionTimestamp: Date.now(),
+  }
+  if (enriched.isQuestion || enriched.shouldTriggerCopilot) intentMetrics.detectedQuestions += 1
+  const count = Math.max(1, intentMetrics.detectedQuestions)
+  intentMetrics.averageDetectionLatency =
+    ((intentMetrics.averageDetectionLatency * (count - 1)) + (performance.now() - startedAt)) / count
+  return enriched
+}
+
+export async function classifyIntent(
+  result: IntentDetectionResult,
+  classifier?: IntentClassifier,
+): Promise<IntentDetectionResult> {
+  const activeClassifier = classifier || configuredIntentClassifier
+  const threshold = 0.65
+  if (!activeClassifier || result.confidence >= threshold) return result
+  intentMetrics.classifierCalls += 1
+  const classified = await activeClassifier.classify({
+    text: result.normalizedText,
+    language: detectLanguage(result.normalizedText),
+    heuristicIntent: result.normalizedIntent || 'normal_conversation',
+  })
+  return {
+    ...result,
+    normalizedIntent: classified.intent,
+    questionText: classified.questionText ?? result.questionText,
+    triggerReason: classified.triggerReason ?? result.triggerReason,
+    topic: classified.topic ?? result.topic,
+    confidence: Math.max(0, Math.min(1, classified.confidence)),
+    isQuestion: classified.intent !== 'normal_conversation',
+    shouldTriggerCopilot: result.shouldTriggerCopilot || classified.confidence >= threshold,
+  }
+}
+
 /**
  * Analyzes recent transcript lines, automatically stitches fragmented split chunks
  * (e.g. Whisper chunk 1: "Can you explain..." + chunk 2: "...how Redis handles expiration?"),
  * and returns the coherent IntentDetectionResult.
  */
 export function detectIntentFromRecentLines(
-  lines: { speaker: string; original: string; translated?: string; timestamp?: string }[],
+  lines: { id?: number; speaker: string; original: string; translated?: string; timestamp?: string }[],
   config?: QuestionDetectorConfig
 ): IntentDetectionResult | null {
   if (!lines || lines.length === 0) return null
@@ -647,6 +803,18 @@ export function detectIntentFromRecentLines(
     triggerMode,
     confidenceThreshold: threshold,
   })
+
+  const dedupeKey = config?.dedupeKey || `${mode}:${targetSpeaker}`
+  const signature = `${targetLine.id ?? targetLine.timestamp ?? lines.length}:${cleanUtterance(mergedText)}`
+  if (lastIntentByKey.get(dedupeKey) === signature) {
+    return {
+      ...detection,
+      shouldTriggerCopilot: false,
+      triggerDecisionReason: 'Skipped: duplicate STT chunks belong to the same utterance',
+      triggerReason: 'Skipped: duplicate STT chunks belong to the same utterance',
+    }
+  }
+  lastIntentByKey.set(dedupeKey, signature)
 
   return {
     ...detection,
