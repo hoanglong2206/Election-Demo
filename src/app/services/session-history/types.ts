@@ -1,5 +1,10 @@
 import type { ProfilePresetSnapshot } from '../profile-preset/types'
-import type { GroundingResult } from '../ai-model/copilot'
+import type {
+  GroundingResult,
+  RetrievalCitation,
+  RetrievalDiagnostics,
+} from '../ai-model/copilot'
+import type { RoutingDecision } from '../ai-model/model-router'
 
 export interface HistoryTranscriptLine {
   id: number | string
@@ -30,6 +35,17 @@ export interface HistorySuggestion {
   triggeredByTranscriptId?: number | string
   tokenUsage?: HistorySuggestionTokenUsage
   grounding?: GroundingResult
+  retrieval?: {
+    citations: RetrievalCitation[]
+    diagnostics: RetrievalDiagnostics
+  }
+  routing?: RoutingDecision
+  failover?: {
+    switched: boolean
+    fromProvider?: string
+    toProvider?: string
+    reason?: string
+  }
 }
 
 export interface HistoryScreenshotQuestion {

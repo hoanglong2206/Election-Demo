@@ -12,7 +12,6 @@ import {
   saveVADThreshold,
   getSavedResponseLanguage,
   saveResponseLanguage,
-  saveAutoPersonalize,
   syncActiveAIModels,
   measureRealAIPing,
   EMPTY_PLACEHOLDER_MODEL,
@@ -91,13 +90,13 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
   const [selectedMultimodal, setSelectedMultimodal] = useState<string>(
     () => (settingsManager.get('selectedMultimodal') as string) || ''
   )
+  const [modelRouterPolicy, setModelRouterPolicy] = useState(currentSettings.modelRouter.policy)
   const [modelsList, setModelsList] = useState<AIModelConfig[]>(() => getAllAIModels())
 
   // ── 4. Audio & Meeting Advanced State ──────────────────────────────────────
   const [selectedDevice, setSelectedDevice] = useState(getSavedAudioDeviceId)
   const [vadThreshold, setVadThreshold] = useState(getSavedVADThreshold)
   const [responseLang, setResponseLang] = useState(getSavedResponseLanguage)
-  const [autoPersonalize, setAutoPersonalize] = useState(currentSettings.audio.autoPersonalize)
 
   // ── Sync & Feedback State ──────────────────────────────────────────────────
   const [syncMeta, setSyncMeta] = useState(() => modelRegistryService.getSyncState())
@@ -191,8 +190,11 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
   useEffect(() => {
     if (selectedLLM && !modelsList.some((model) => model.id === selectedLLM)) {
       const nextModelId = modelsList[0]?.id || ''
-      setSelectedLLM(nextModelId)
-      saveAIModelId(nextModelId)
+      const timer = setTimeout(() => {
+        setSelectedLLM(nextModelId)
+        saveAIModelId(nextModelId)
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [modelsList, selectedLLM])
 
@@ -516,16 +518,25 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
   // ── Auto-measure real ping on mount and when selected engines change ────────
   useEffect(() => {
     if (selectedLLM) {
-      handleTestLLMPing(selectedLLM)
+      const timer = setTimeout(() => {
+        void handleTestLLMPing(selectedLLM)
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [selectedLLM])
 
   useEffect(() => {
     const active = sttEnginesList.find((e) => e.id === selectedSTT)
     if (active && active.provider !== 'Local') {
-      handleTestGroqSTTPing(selectedSTT)
+      const timer = setTimeout(() => {
+        void handleTestGroqSTTPing(selectedSTT)
+      }, 0)
+      return () => clearTimeout(timer)
     } else {
-      setGroqSTTTestResult(null)
+      const timer = setTimeout(() => {
+        setGroqSTTTestResult(null)
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [selectedSTT, sttEnginesList])
 
@@ -602,7 +613,6 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
         audioDeviceId: selectedDevice,
         vadThreshold: parseFloat(vadThreshold) || 0.8,
         responseLang: normalizeResponseLanguage(responseLang),
-        autoPersonalize,
       },
     })
 
@@ -612,7 +622,6 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
     saveAudioDeviceId(selectedDevice)
     saveVADThreshold(vadThreshold)
     saveResponseLanguage(responseLang)
-    saveAutoPersonalize(autoPersonalize)
 
     showToast('Đã lưu và đồng bộ toàn bộ cấu hình AI thành công!', 'success')
   }
@@ -728,8 +737,11 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
           selectedDevice={selectedDevice}
           onSelectDevice={setSelectedDevice}
           currentDevice={currentDevice}
-          autoPersonalize={autoPersonalize}
-          onAutoPersonalizeChange={setAutoPersonalize}
+          modelRouterPolicy={modelRouterPolicy}
+          onModelRouterPolicyChange={(policy) => {
+            setModelRouterPolicy(policy)
+            settingsManager.updateSettings({ modelRouter: { enabled: true, policy } })
+          }}
         />
 
         {/* 5. API Cost & Token Usage Tracker Navigation Card */}

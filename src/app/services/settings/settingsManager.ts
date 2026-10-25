@@ -67,6 +67,9 @@ function migrateFromLegacyLocalStorage(): AppSettingsSchema {
       copilot: {
         ...DEFAULT_SETTINGS.copilot,
       },
+      modelRouter: {
+        ...DEFAULT_SETTINGS.modelRouter,
+      },
     }
 
     const validated = validateSettings(legacyMerged)
@@ -144,6 +147,7 @@ export class SettingsManager {
     engines?: Partial<AppSettingsSchema['engines']>
     audio?: Partial<AppSettingsSchema['audio']>
     copilot?: Partial<AppSettingsSchema['copilot']>
+    modelRouter?: Partial<AppSettingsSchema['modelRouter']>
   }): AppSettingsSchema {
     const current = this.getSettings()
 
@@ -164,6 +168,10 @@ export class SettingsManager {
       copilot: {
         ...current.copilot,
         ...(partial.copilot || {}),
+      },
+      modelRouter: {
+        ...current.modelRouter,
+        ...(partial.modelRouter || {}),
       },
     }
 
@@ -214,6 +222,10 @@ export class SettingsManager {
         return s.copilot.confidenceThreshold
       case 'debounceMs':
         return s.copilot.debounceMs
+      case 'modelRouterEnabled':
+        return s.modelRouter.enabled
+      case 'modelRouterPolicy':
+        return s.modelRouter.policy
     }
   }
 
@@ -237,6 +249,10 @@ export class SettingsManager {
       case 'confidenceThreshold':
       case 'debounceMs':
         return this.updateSettings({ copilot: { [key]: value } as any })
+      case 'modelRouterEnabled':
+        return this.updateSettings({ modelRouter: { enabled: value } })
+      case 'modelRouterPolicy':
+        return this.updateSettings({ modelRouter: { policy: value } })
     }
     return this.getSettings()
   }
@@ -380,4 +396,3 @@ export function exportSanitizedSettings(): Record<string, any> {
 
   return copy
 }
-

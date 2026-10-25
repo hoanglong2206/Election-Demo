@@ -29,12 +29,20 @@ export interface CopilotSettings {
   debounceMs: number
 }
 
+export type ModelRouterPolicy = 'fastest' | 'cheapest' | 'balanced' | 'highest-quality' | 'local-only'
+
+export interface ModelRouterSettings {
+  enabled: boolean
+  policy: ModelRouterPolicy
+}
+
 export interface AppSettingsSchema {
   version: number
   apiKeys: APIKeySettings
   engines: EngineSettings
   audio: AudioSettings
   copilot: CopilotSettings
+  modelRouter: ModelRouterSettings
 }
 
 export const DEFAULT_SETTINGS: AppSettingsSchema = {
@@ -61,6 +69,10 @@ export const DEFAULT_SETTINGS: AppSettingsSchema = {
     confidenceThreshold: 0.65,
     debounceMs: 500,
   },
+  modelRouter: {
+    enabled: true,
+    policy: 'balanced',
+  },
 }
 
 export type FlatSettingsKey =
@@ -78,6 +90,8 @@ export type FlatSettingsKey =
   | 'triggerMode'
   | 'confidenceThreshold'
   | 'debounceMs'
+  | 'modelRouterEnabled'
+  | 'modelRouterPolicy'
 
 /**
  * Validates, sanitizes and enforces strict types on a raw settings object.
@@ -134,6 +148,14 @@ export function validateSettings(raw: unknown): AppSettingsSchema {
     debounceMs = 500
   }
 
+  const validRouterPolicies: ModelRouterPolicy[] = ['fastest', 'cheapest', 'balanced', 'highest-quality', 'local-only']
+  const rawRouterPolicy = obj.modelRouter?.policy ?? obj.modelRouterPolicy
+  const modelRouterPolicy: ModelRouterPolicy = validRouterPolicies.includes(rawRouterPolicy)
+    ? rawRouterPolicy
+    : DEFAULT_SETTINGS.modelRouter.policy
+  const rawRouterEnabled = obj.modelRouter?.enabled ?? obj.modelRouterEnabled
+  const modelRouterEnabled = typeof rawRouterEnabled === 'boolean' ? rawRouterEnabled : DEFAULT_SETTINGS.modelRouter.enabled
+
   return {
     version: 1,
     apiKeys: {
@@ -181,6 +203,10 @@ export function validateSettings(raw: unknown): AppSettingsSchema {
       triggerMode,
       confidenceThreshold,
       debounceMs,
+    },
+    modelRouter: {
+      enabled: modelRouterEnabled,
+      policy: modelRouterPolicy,
     },
   }
 }

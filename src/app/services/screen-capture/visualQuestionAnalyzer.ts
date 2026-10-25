@@ -1,6 +1,7 @@
 import type { VisualAnalysisResult, VisualContentType } from './types'
 import { settingsManager } from '../settings'
 import { modelRegistryService } from '../ai-model/model-registry'
+import { smartModelRouter } from '../ai-model/model-router'
 import { usageTrackerService } from '../usage-tracker'
 import { languageInstruction, type ResponseLanguage } from '../ai-model/language'
 
@@ -74,7 +75,13 @@ Nếu không có mã nguồn trong ảnh, extractedCode phải là null. solutio
 
     // Determine target provider & model
     const savedMultimodalId = (settingsManager.get('selectedMultimodal') as string) || ''
-    let candidateModelId = customModelId || savedMultimodalId
+    const routing = smartModelRouter.decide({
+      feature: 'visual_question',
+      requiredModality: 'vision',
+      manualModelId: customModelId || savedMultimodalId || undefined,
+      policy: settingsManager.get('modelRouterPolicy'),
+    })
+    let candidateModelId = routing.selectedModelId || customModelId || savedMultimodalId
 
     if (!candidateModelId) {
       const visionModels = modelRegistryService.getMultimodalModels()

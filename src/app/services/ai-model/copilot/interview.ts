@@ -175,6 +175,8 @@ Trả về chính xác theo định dạng sau:
       strategy: strategyMetadata,
       grounding,
       retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
+      routing: rawRes.routing,
+      failover: rawRes.failover,
     }
   }
 
@@ -203,5 +205,7 @@ Trả về chính xác theo định dạng sau:
     strategy: strategyMetadata,
     grounding,
     retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
+    routing: rawRes.routing,
+    failover: rawRes.failover,
   }
 }

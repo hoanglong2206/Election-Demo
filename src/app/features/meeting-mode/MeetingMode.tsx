@@ -645,6 +645,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           contextUsage: res.contextUsage,
           strategy: res.strategy,
           grounding: res.grounding,
+          retrieval: res.retrieval,
+          routing: res.routing,
+          failover: res.failover,
         })
         void window.api.sessions?.recovery?.append({
           eventId: `suggestion:${sessionIdRef.current}:${answerId}`,
@@ -658,6 +661,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
             content: res.content,
             confidence: res.confidence,
             grounding: res.grounding,
+            retrieval: res.retrieval,
+            routing: res.routing,
+            failover: res.failover,
           },
         })
 
@@ -670,6 +676,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           content: res.content,
           confidence: res.confidence,
           grounding: res.grounding,
+          retrieval: res.retrieval,
+          routing: res.routing,
+          failover: res.failover,
           timestamp: lastLine?.timestamp || '00:00',
           timestampMs: Date.now(),
           triggeredByTranscriptId: lastLine?.id,

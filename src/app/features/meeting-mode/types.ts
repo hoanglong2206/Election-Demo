@@ -4,6 +4,7 @@ import type { ContextUsageInfo } from '../../services/ai-model/copilot'
 import type { AnswerStrategyId } from '../../services/ai-model/copilot'
 import type { GroundingResult } from '../../services/ai-model/copilot'
 import type { RetrievalCitation, RetrievalDiagnostics } from '../../services/ai-model/copilot'
+import type { RoutingDecision } from '../../services/ai-model/model-router'
 
 export interface TranscriptLine {
   id: number
@@ -40,6 +41,13 @@ export interface InterviewVariation {
   retrieval?: {
     citations: RetrievalCitation[]
     diagnostics: RetrievalDiagnostics
+  }
+  routing?: RoutingDecision
+  failover?: {
+    switched: boolean
+    fromProvider?: string
+    toProvider?: string
+    reason?: string
   }
 }
 

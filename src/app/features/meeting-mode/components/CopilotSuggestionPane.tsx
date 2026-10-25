@@ -246,6 +246,14 @@ export function CopilotSuggestionPane({
               Verify claims
             </span>
           )}
+          {mode === 'interview' && interviewAnswer?.failover?.switched && (
+            <span
+              className="rounded border border-sky-400/30 bg-sky-400/10 px-1.5 py-0.5 text-[10px] text-sky-200"
+              title="Provider chính không khả dụng; hệ thống đã tự chuyển sang provider dự phòng."
+            >
+              Provider switched
+            </span>
+          )}
           {mode === 'interview' && onAnswerStrategyChange && (
             <select
               value={answerStrategyId || ''}

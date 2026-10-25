@@ -2,6 +2,7 @@ import type { LLMProvider } from '../types'
 import type { AnswerStrategyId } from './answerStrategyRouter'
 import type { GroundingResult } from './answerGrounding'
 import type { RetrievalDiagnostics, RetrievalCitation } from './localRag'
+import type { RoutingDecision } from '../model-router'
 
 export interface ContextUsageInfo {
   totalTokens: number
@@ -34,6 +35,13 @@ export interface CopilotInterviewResult {
     citations: RetrievalCitation[]
     diagnostics: RetrievalDiagnostics
   }
+  routing?: RoutingDecision
+  failover?: {
+    switched: boolean
+    fromProvider?: string
+    toProvider?: string
+    reason?: string
+  }
 }
 
 export interface CopilotDiscussionOption {
@@ -57,5 +65,12 @@ export interface UniversalLLMResult {
     outputTokens: number
     cachedTokens?: number
     estimatedCostUsd?: number | null
+  }
+  routing?: RoutingDecision
+  failover?: {
+    switched: boolean
+    fromProvider?: string
+    toProvider?: string
+    reason?: string
   }
 }
