@@ -3,6 +3,7 @@ import type { ViewState } from '../../components/layout/Layout'
 import type { ContextUsageInfo } from '../../services/ai-model/copilot'
 import type { AnswerStrategyId } from '../../services/ai-model/copilot'
 import type { GroundingResult } from '../../services/ai-model/copilot'
+import type { RetrievalCitation, RetrievalDiagnostics } from '../../services/ai-model/copilot'
 
 export interface TranscriptLine {
   id: number
@@ -36,6 +37,10 @@ export interface InterviewVariation {
     outputSections: string[]
   }
   grounding?: GroundingResult
+  retrieval?: {
+    citations: RetrievalCitation[]
+    diagnostics: RetrievalDiagnostics
+  }
 }
 
 export interface MeetingModeProps {

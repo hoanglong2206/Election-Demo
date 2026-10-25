@@ -1,6 +1,7 @@
 import type { LLMProvider } from '../types'
 import type { AnswerStrategyId } from './answerStrategyRouter'
 import type { GroundingResult } from './answerGrounding'
+import type { RetrievalDiagnostics, RetrievalCitation } from './localRag'
 
 export interface ContextUsageInfo {
   totalTokens: number
@@ -29,6 +30,10 @@ export interface CopilotInterviewResult {
     outputSections: string[]
   }
   grounding?: GroundingResult
+  retrieval?: {
+    citations: RetrievalCitation[]
+    diagnostics: RetrievalDiagnostics
+  }
 }
 
 export interface CopilotDiscussionOption {

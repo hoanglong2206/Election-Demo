@@ -14,6 +14,11 @@ import {
 } from './answerStrategyRouter'
 import type { IntentDetectionResult } from './questionDetector'
 import { validateAnswerGrounding, type GroundingMode } from './answerGrounding'
+import {
+  createInterviewDocuments,
+  localRagIndex,
+  type LocalRagOptions,
+} from './localRag'
 
 /**
  * Generates an interview answer personalized to the candidate CV and question.
@@ -30,6 +35,12 @@ export async function generateInterviewAnswer(params: {
   intent?: IntentDetectionResult | null
   strategyOverride?: AnswerStrategyId
   groundingMode?: GroundingMode
+  rag?: LocalRagOptions & {
+    projects?: string[]
+    portfolioNotes?: string
+    companyResearch?: string
+    interviewNotes?: string
+  }
 }): Promise<CopilotInterviewResult | null> {
   const { question, cvSummary, backgroundAnalysis, transcriptLines, sessionId } = params
   const lang = normalizeResponseLanguage(params.language)
@@ -45,8 +56,22 @@ export async function generateInterviewAnswer(params: {
     cm.setTranscriptLines(transcriptLines)
   }
 
-  // Assemble 4-tier bounded context
-  const assembled = cm.assembleContext(question, 'interview')
+  const ragDocuments = createInterviewDocuments({
+    cv: cvSummary,
+    jobDescription: cm.getPermanentContext().jobDescription,
+    backgroundAnalysis,
+    projects: params.rag?.projects,
+    portfolioNotes: params.rag?.portfolioNotes,
+    companyResearch: params.rag?.companyResearch,
+    interviewNotes: params.rag?.interviewNotes,
+  })
+  await localRagIndex.indexDocuments(ragDocuments)
+  const retrieval = await localRagIndex.query(question, params.rag)
+  const assembled = cm.assembleContext(question, 'interview', {
+    permanentOverride: retrieval.context
+      ? `RETRIEVED EVIDENCE (use citations internally; do not invent facts):\n${retrieval.context}`
+      : undefined,
+  })
   const selection = selectAnswerStrategy(
     { question, intent: params.intent },
     params.strategyOverride,
@@ -57,6 +82,8 @@ export async function generateInterviewAnswer(params: {
 Ứng viên đang tham gia phỏng vấn tuyển dụng.
 
 ${assembled.fullPromptContext}
+
+${retrieval.context ? `Evidence citations available for grounding:\n${retrieval.context}` : ''}
 
 ${languageInstruction(lang)}
 
@@ -120,7 +147,11 @@ Trả về chính xác theo định dạng sau:
       console.warn('[interview] LLM returned unparseable JSON — refusing to render it raw')
       return null
     }
-    const grounding = validateAnswerGrounding({ answer: text, ...groundingBase })
+    const grounding = validateAnswerGrounding({
+      answer: text,
+      ...groundingBase,
+      session: [groundingBase.session, retrieval.context].filter(Boolean).join('\n\n'),
+    })
     const contextUsage = {
       totalTokens: assembled.estimatedTokens.total,
       maxBudget: assembled.tokenBudget.totalMax,
@@ -143,13 +174,18 @@ Trả về chính xác theo định dạng sau:
       contextUsage,
       strategy: strategyMetadata,
       grounding,
+      retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
     }
   }
 
   const parts = text.split('[SHORT_ANSWER]')
   const full = parts[0].replace('[FULL_ANSWER]', '').trim()
   const short = parts[1] ? parts[1].trim() : full.split('\n').slice(0, 3).join('\n')
-  const grounding = validateAnswerGrounding({ answer: full, ...groundingBase })
+  const grounding = validateAnswerGrounding({
+    answer: full,
+    ...groundingBase,
+    session: [groundingBase.session, retrieval.context].filter(Boolean).join('\n\n'),
+  })
 
   return {
     label,
@@ -166,5 +202,6 @@ Trả về chính xác theo định dạng sau:
     },
     strategy: strategyMetadata,
     grounding,
+    retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
   }
 }

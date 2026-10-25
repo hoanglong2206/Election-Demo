@@ -61,6 +61,10 @@ export interface TranscriptUtterance {
   timestamp?: string
 }
 
+export interface ContextAssemblyOptions {
+  permanentOverride?: string
+}
+
 export interface AssembledContext {
   permanentBlock: string
   sessionMemoryBlock: string
@@ -74,6 +78,7 @@ export interface AssembledContext {
     currentInput: number
     total: number
   }
+
   tokenBudget: LayerTokenBudget
   usagePercent: number
   isTruncated: boolean
@@ -390,7 +395,11 @@ Trả về kết quả duy nhất ở định dạng JSON hợp lệ:
   /**
    * Assembles the 4-tier context with strict token budgeting and priority truncation.
    */
-  public assembleContext(currentQuestion: string, mode: AppMode = 'interview'): AssembledContext {
+  public assembleContext(
+    currentQuestion: string,
+    mode: AppMode = 'interview',
+    options?: ContextAssemblyOptions,
+  ): AssembledContext {
     let isTruncated = false
 
     // Tier 4: Current Input (Highest Priority)
@@ -464,7 +473,7 @@ Trả về kết quả duy nhất ở định dạng JSON hợp lệ:
       permParts.push(`TÙY CHỌN NGƯỜI DÙNG: ${this.permanent.userPreferences}`)
     }
 
-    const rawPermanent = permParts.join('\n\n')
+    const rawPermanent = options?.permanentOverride ?? permParts.join('\n\n')
     let { text: permanentBlock, truncated: permanentTruncated } = truncateToTokenLimit(
       rawPermanent || '(không có)',
       this.budget.permanent
@@ -662,4 +671,3 @@ ${currentInputBlock}`
 
 // Global shared singleton
 export const tieredContextManager = new TieredContextManager()
-
