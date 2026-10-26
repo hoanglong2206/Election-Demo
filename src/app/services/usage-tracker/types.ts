@@ -7,6 +7,7 @@ export type AIUsageFeature =
   | 'exchange_scanner'
   | 'translate'
   | 'summary'
+  | 'grounding'
   | 'general'
 
 export type CostCalculationStatus = 'calculated' | 'unknown' | 'free'

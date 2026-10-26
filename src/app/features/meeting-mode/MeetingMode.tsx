@@ -72,6 +72,7 @@ import {
   type ContextUsageInfo,
   type AnswerStrategyId,
   validateAnswerGrounding,
+  validateAnswerGroundingAsync,
 } from '../../services/ai-model/copilot'
 import { settingsManager } from '../../services/settings/settingsManager'
 import { usageTrackerService } from '../../services/usage-tracker'
@@ -709,7 +710,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
               // Grounding validation runs ASYNCHRONOUSLY after done, never replacing active reading text
               void (async () => {
                 try {
-                  const grounding = validateAnswerGrounding({
+                  const groundingInput = {
                     answer: res.content,
                     cv: activeCV,
                     profile: activeCV,
@@ -720,11 +721,22 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
                     ]
                       .filter(Boolean)
                       .join('\n\n'),
-                    mode: 'balanced',
-                  })
+                    mode: 'balanced' as const,
+                  }
+
+                  // 1. Immediate Tier 1 sync grounding for fast badge rendering
+                  const syncGrounding = validateAnswerGrounding(groundingInput)
                   if (isMountedRef.current) {
                     setCustomInterviewAnswer((prev) =>
-                      prev && prev.id === answerId ? { ...prev, grounding } : prev
+                      prev && prev.id === answerId ? { ...prev, grounding: syncGrounding } : prev
+                    )
+                  }
+
+                  // 2. Tier 2 LLM Judge async evaluation in background
+                  const asyncGrounding = await validateAnswerGroundingAsync(groundingInput)
+                  if (isMountedRef.current) {
+                    setCustomInterviewAnswer((prev) =>
+                      prev && prev.id === answerId ? { ...prev, grounding: asyncGrounding } : prev
                     )
                   }
                 } catch (gErr) {

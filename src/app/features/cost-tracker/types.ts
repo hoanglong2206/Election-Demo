@@ -19,5 +19,6 @@ export const FEATURE_NAMES: Record<AIUsageFeature, string> = {
   exchange_scanner: 'Quét Trao đổi Gần nhất',
   translate: 'Dịch thuật Song ngữ',
   summary: 'Tóm tắt & Biên bản Họp',
+  grounding: 'Kiểm chứng Thông tin (Grounding Judge)',
   general: 'Yêu cầu Tổng quát',
 }
