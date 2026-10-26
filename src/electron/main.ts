@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, desktopCapturer } from 'electron'
+import { app, BrowserWindow, session, desktopCapturer, globalShortcut } from 'electron'
 import { createOverlayWindow } from './window/overlay-window.js'
 import { registerIpcHandlers } from './ipc/handler.js'
 import { getWhisperProcessManager } from './services/whisperProcessManager.js'
@@ -52,6 +52,22 @@ app.whenReady().then(() => {
     mainWindow = createOverlayWindow()
     registerIpcHandlers(mainWindow)
 
+    // Đăng ký phím tắt toàn cục Ctrl+Shift+H (Cmd+Shift+H trên macOS)
+    // Cho phép ẩn / hiện overlay tức thì mà KHÔNG cướp focus của trình duyệt toàn màn hình
+    try {
+      globalShortcut.register('CommandOrControl+Shift+H', () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return
+        if (mainWindow.isVisible()) {
+          mainWindow.hide()
+        } else {
+          mainWindow.showInactive()
+        }
+      })
+      console.log('[Electron] Global shortcut registered: Ctrl+Shift+H (Toggle show/hide)')
+    } catch (shortcutErr) {
+      console.error('[Electron] Failed to register global shortcut:', shortcutErr)
+    }
+
     // macOS: re-create window when dock icon is clicked and no windows exist
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -76,6 +92,11 @@ app.on('window-all-closed', () => {
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
 app.on('before-quit', () => {
+  // Unregister all global shortcuts
+  try {
+    globalShortcut.unregisterAll()
+  } catch {}
+
   // Clean up native whisper processes
   try {
     getWhisperProcessManager().destroy()

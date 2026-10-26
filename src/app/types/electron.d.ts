@@ -57,7 +57,13 @@ export interface ElectronAPI {
   onRestore: (callback: () => void) => () => void
   resize: (width: number, height: number) => void
   hide: () => void
-  show: () => void
+  show: (inactive?: boolean) => void
+  showInactive: () => void
+  setContentProtection: (enable: boolean) => Promise<boolean>
+  isContentProtected: () => Promise<boolean>
+  setFocusable: (focusable: boolean) => Promise<boolean>
+  setIgnoreMouseEvents: (ignore: boolean, forward?: boolean) => Promise<boolean>
+  setStealthMode: (enabled: boolean) => Promise<boolean>
   toggleMode: (mode: AppMode) => void
   toggleAlwaysOnTop: () => Promise<boolean>
   getVersion: () => Promise<string>

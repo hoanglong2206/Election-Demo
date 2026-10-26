@@ -26,8 +26,31 @@ const api = {
   /** Hide the overlay window (keeps it in memory). */
   hide: () => ipcRenderer.send('window:hide'),
 
-  /** Show the overlay window. */
-  show: () => ipcRenderer.send('window:show'),
+  /** Show the overlay window. If inactive=true, does not steal focus. */
+  show: (inactive?: boolean) => ipcRenderer.send('window:show', inactive),
+
+  /** Show the overlay window without stealing focus. */
+  showInactive: () => ipcRenderer.send('window:showInactive'),
+
+  /** Enable/disable screen capture protection (WDA_EXCLUDEFROMCAPTURE / NSWindowSharingNone) */
+  setContentProtection: (enable: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('window:setContentProtection', enable),
+
+  /** Check if content protection is active */
+  isContentProtected: (): Promise<boolean> =>
+    ipcRenderer.invoke('window:isContentProtected'),
+
+  /** Set whether the window can receive focus */
+  setFocusable: (focusable: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('window:setFocusable', focusable),
+
+  /** Enable/disable mouse pass-through (click-through) */
+  setIgnoreMouseEvents: (ignore: boolean, forward?: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('window:setIgnoreMouseEvents', ignore, forward),
+
+  /** Set stealth mode (content protection on, focusable off) */
+  setStealthMode: (enabled: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('window:setStealthMode', enabled),
 
   /**
    * Notify the main process of a mode change.

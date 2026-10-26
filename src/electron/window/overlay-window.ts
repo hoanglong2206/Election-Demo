@@ -28,8 +28,9 @@ export function createOverlayWindow(): BrowserWindow {
     transparent: true,
     alwaysOnTop: true,
     resizable: false,
-    skipTaskbar: false,
+    skipTaskbar: true,
     hasShadow: true,
+    show: false, // Don't show immediately to prevent stealing focus on startup
 
     // ── Always-on-top level (above most apps, including meeting clients) ───
     // 'screen-saver' is the highest stable level for Windows
@@ -46,16 +47,33 @@ export function createOverlayWindow(): BrowserWindow {
     },
   })
 
+  // ── Screen Protection & Always-on-top ────────────────────────────────────
+  // Ẩn hoàn toàn khỏi screen capture / screen share / WebRTC (kể cả Entire Screen)
+  // Trên Windows 10 (2004+) & Windows 11: Electron tự gọi SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+  // Trên macOS: NSWindowSharingNone
+  try {
+    win.setContentProtection(true)
+    console.log('[Electron] Content protection enabled (WDA_EXCLUDEFROMCAPTURE):', win.isContentProtected())
+  } catch (err) {
+    console.error('[Electron] Failed to enable content protection:', err)
+  }
+
   // Set a high always-on-top level after window creation
   const level = (process.env.ALWAYS_ON_TOP_LEVEL || 'screen-saver') as any
   win.setAlwaysOnTop(true, level)
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
+  // ── Show without stealing focus ───────────────────────────────────────────
+  // Tránh kích hoạt window.onblur trên các trang web toàn màn hình
+  win.once('ready-to-show', () => {
+    win.showInactive()
+  })
+
   // ── Load the UI ────────────────────────────────────────────────────────────
   if (isDev) {
     const devUrl = process.env.DEV_SERVER_URL || 'http://localhost:5173'
     void win.loadURL(devUrl)
-    win.webContents.openDevTools({ mode: 'detach' })
+    win.webContents.openDevTools({ mode: 'detach', activate: false })
   } else {
     void win.loadFile(path.join(__dirname, '../dist/index.html'))
   }

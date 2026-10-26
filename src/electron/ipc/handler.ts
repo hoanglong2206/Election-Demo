@@ -50,8 +50,57 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     if (!win.isDestroyed()) win.hide()
   })
 
-  ipcMain.on('window:show', () => {
-    if (!win.isDestroyed()) win.show()
+  ipcMain.on('window:show', (_event, inactive?: boolean) => {
+    if (!win.isDestroyed()) {
+      if (inactive) win.showInactive()
+      else win.show()
+    }
+  })
+
+  ipcMain.on('window:showInactive', () => {
+    if (!win.isDestroyed()) win.showInactive()
+  })
+
+  // ── Screen Protection & Stealth Mode Controls ──────────────────────────────
+  ipcMain.handle('window:setContentProtection', (_event, enable: boolean) => {
+    if (!win.isDestroyed()) {
+      win.setContentProtection(enable)
+      return win.isContentProtected()
+    }
+    return false
+  })
+
+  ipcMain.handle('window:isContentProtected', () => {
+    return !win.isDestroyed() && win.isContentProtected()
+  })
+
+  ipcMain.handle('window:setFocusable', (_event, focusable: boolean) => {
+    if (!win.isDestroyed()) {
+      win.setFocusable(focusable)
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('window:setIgnoreMouseEvents', (_event, ignore: boolean, forward = true) => {
+    if (!win.isDestroyed()) {
+      win.setIgnoreMouseEvents(ignore, { forward })
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('window:setStealthMode', (_event, enabled: boolean) => {
+    if (win.isDestroyed()) return false
+    try {
+      win.setContentProtection(true)
+      win.setFocusable(!enabled)
+      win.setSkipTaskbar(true)
+      return true
+    } catch (err) {
+      console.error('[Electron] setStealthMode error:', err)
+      return false
+    }
   })
 
   // ── Mode toggle ────────────────────────────────────────────────────────────
