@@ -290,6 +290,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const [unfinishedRecovery, setUnfinishedRecovery] = useState<any | null>(null)
   const [isRecoveryOpen, setIsRecoveryOpen] = useState(true)
   const lastProcessedSampleRef = useRef(0)
+  const lastTranscriptTextRef = useRef<string>('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // STT Input Audio Language (Default to 'vi' for Vietnamese speech accuracy)
@@ -434,6 +435,13 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
 
   // ── 2. Subscribe to STTJobQueue metrics and TranscriptAssembler monotonic commits ─
   useEffect(() => {
+    // Pre-warm the persistent whisper-server with 1s silence on Meeting Mode mount
+    if (window.api?.nativeWhisper?.prewarm) {
+      window.api.nativeWhisper.prewarm().catch((err) => {
+        console.warn('[MeetingMode] STT Prewarm warning:', err)
+      })
+    }
+
     const unsubMetrics = sttJobQueue.subscribe((m) => {
       setQueueMetrics(m)
       setIsTranscribing(m.processingJobs > 0 || m.queueDepth > 0)
@@ -442,6 +450,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     const unsubCommit = sttJobQueue.assembler.onCommit((commit) => {
       const { result, speakerLabel, timestampStr } = commit
       if (result.success && result.text.trim()) {
+        lastTranscriptTextRef.current = result.text.trim()
+
         const newLine: TranscriptLine = {
           id: Date.now() + Math.random(),
           timestamp: timestampStr || '00:00',
@@ -498,6 +508,12 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           ? 'Cuộc họp'
           : 'You'
 
+      const dynamicPrompt =
+        whisperPromptBuilder.buildPrompt(activeKeywords || [], {
+          contextType: mode,
+          previousTranscript: lastTranscriptTextRef.current,
+        }) || whisperPrompt || undefined
+
       const job: STTJob = {
         jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
         sessionId: sessionIdRef.current,
@@ -511,7 +527,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         sourceType,
         speakerLabel,
         timestampStr: timeStr,
-        prompt: whisperPrompt || undefined,
+        prompt: dynamicPrompt,
       }
 
       sttJobQueue.enqueue(job)
@@ -521,7 +537,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       clearInterval(intervalTimer)
       sttJobQueue.pause()
     }
-  }, [isCapturing, isListening, getAudioSegmentSince, mode, sourceType, sttLang, whisperPrompt])
+  }, [isCapturing, isListening, getAudioSegmentSince, mode, sourceType, sttLang, whisperPrompt, activeKeywords])
 
   // ── Meeting Lifecycle & Component Unmount Cleanup (Streams, Workers, Timers, Buffers) ──
   useEffect(() => {

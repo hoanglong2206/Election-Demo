@@ -8,14 +8,23 @@ import { usageTrackerService } from '../../usage-tracker'
 /**
  * Estimate audio duration in seconds based on 16kHz 16-bit mono PCM bytes.
  */
-function estimateAudioDurationSeconds(audioData: string | Blob): number {
+/**
+ * Estimate audio duration in seconds based on 16kHz 16-bit mono PCM bytes.
+ */
+function estimateAudioDurationSeconds(
+  audioData: string | Blob | ArrayBuffer | ArrayBufferView
+): number {
   try {
     let byteLength = 0
     if (typeof audioData === 'string') {
       const clean = audioData.replace(/^data:[^;]+;base64,/, '').trim()
       byteLength = Math.floor((clean.length * 3) / 4)
-    } else {
+    } else if (audioData instanceof Blob) {
       byteLength = audioData.size
+    } else if (audioData instanceof ArrayBuffer) {
+      byteLength = audioData.byteLength
+    } else if (ArrayBuffer.isView(audioData)) {
+      byteLength = audioData.byteLength
     }
     // 16kHz, 16-bit mono = 32000 bytes/sec
     const pcmBytes = Math.max(0, byteLength - 44)
@@ -28,11 +37,11 @@ function estimateAudioDurationSeconds(audioData: string | Blob): number {
 
 /**
  * Transcribe audio using the chosen STT Engine:
- * - Local Whisper (ggml-base.bin, ggml-tiny.bin) via C++ whisper-cli
+ * - Local Whisper (ggml-base.bin, ggml-tiny.bin) via persistent whisper-server / whisper-cli fallback
  * - Groq Whisper (whisper-large-v3-turbo, whisper-large-v3) via Groq Cloud LPU
  */
 export async function transcribeAudio(
-  audioData: string | Blob,
+  audioData: string | Blob | ArrayBuffer | Uint8Array | Float32Array | Int16Array,
   customEngineId?: string,
   language = 'auto',
   prompt?: string,
@@ -47,14 +56,13 @@ export async function transcribeAudio(
   // ── 1. LOCAL WHISPER C++ ENGINE ──────────────────────────────────────────
   if (engine?.provider === 'Local') {
     if (window.api?.nativeWhisper) {
-      let base64 = ''
-      if (typeof audioData === 'string') {
-        base64 = audioData
-      } else {
-        base64 = await blobToBase64(audioData)
+      // Pass ArrayBuffer directly across IPC to avoid base64 serialization overhead and disk I/O
+      let rawData: any = audioData
+      if (audioData instanceof Blob) {
+        rawData = await audioData.arrayBuffer()
       }
 
-      const res = await window.api.nativeWhisper.transcribe(base64, {
+      const res = await window.api.nativeWhisper.transcribe(rawData, {
         modelId: engineId,
         language: language || 'auto',
         prompt,
@@ -86,6 +94,10 @@ export async function transcribeAudio(
         text: cleanText,
         translatedVi,
         latencyMs: res.latencyMs || elapsed,
+        inferenceMs: res.inferenceMs || res.latencyMs || elapsed,
+        queueWaitMs: res.queueWaitMs,
+        totalMs: res.totalMs,
+        mode: res.mode,
         engineId,
         engineName: engine.name,
         provider: 'Local',
@@ -114,7 +126,15 @@ export async function transcribeAudio(
     // High security path: Transcribe via Electron Main Process (no plaintext key in renderer!)
     if (typeof window !== 'undefined' && window.api?.credentials?.transcribeGroq) {
       try {
-        const audioBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(audioData)
+        let blob: Blob
+        if (audioData instanceof Blob) {
+          blob = audioData
+        } else if (typeof audioData === 'string') {
+          blob = base64ToBlob(audioData)
+        } else {
+          blob = new Blob([audioData as any], { type: 'audio/wav' })
+        }
+        const audioBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(blob)
         const res = await window.api.credentials.transcribeGroq(audioBase64, engineId, language, prompt)
         if (res && res.text) {
           try {
@@ -173,10 +193,12 @@ export async function transcribeAudio(
 
     try {
       let blob: Blob
-      if (typeof audioData === 'string') {
+      if (audioData instanceof Blob) {
+        blob = audioData
+      } else if (typeof audioData === 'string') {
         blob = base64ToBlob(audioData)
       } else {
-        blob = audioData
+        blob = new Blob([audioData as any], { type: 'audio/wav' })
       }
 
       const formData = new FormData()

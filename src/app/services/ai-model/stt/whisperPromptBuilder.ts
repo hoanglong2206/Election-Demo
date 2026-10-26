@@ -15,41 +15,34 @@ export interface WhisperPromptOptions {
   maxKeywords?: number
   contextType?: 'interview' | 'discussion'
   template?: string
+  previousTranscript?: string
   debugMode?: boolean
 }
 
-const DEFAULT_MAX_CHARS = 220
+const DEFAULT_MAX_CHARS = 240
 const DEFAULT_MAX_KEYWORDS = 20
 
 export class WhisperPromptBuilder {
   /**
-   * Builds an initial_prompt string from a list of technical keywords.
+   * Builds an initial_prompt string from technical keywords and optional previous transcript sentence.
    *
    * Example output:
-   * "Technical interview about React, TypeScript, Kubernetes, AWS, PostgreSQL, Docker."
+   * "Technical interview about React, TypeScript, Kubernetes, AWS. Previous sentence transcript..."
    */
   public buildPrompt(
     keywords: string[],
     options?: WhisperPromptOptions
   ): string {
-    if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
-      return ''
-    }
-
     try {
       const maxChars = options?.maxChars ?? DEFAULT_MAX_CHARS
       const maxKeywords = options?.maxKeywords ?? DEFAULT_MAX_KEYWORDS
       const contextType = options?.contextType ?? 'interview'
 
       // Filter and sanitize keywords (remove punctuation, trim, ensure valid length)
-      const validKeywords = keywords
+      const validKeywords = (keywords || [])
         .map((k) => (typeof k === 'string' ? k.trim() : ''))
         .filter((k) => k.length > 0 && k.length <= 40)
         .slice(0, maxKeywords)
-
-      if (validKeywords.length === 0) {
-        return ''
-      }
 
       // Base prefix
       const prefix =
@@ -58,14 +51,14 @@ export class WhisperPromptBuilder {
           ? 'Technical meeting discussing '
           : 'Technical interview about ')
 
-      let assembled = prefix
+      let assembled = validKeywords.length > 0 ? prefix : ''
       const includedKeywords: string[] = []
 
       for (const kw of validKeywords) {
         const separator = includedKeywords.length === 0 ? '' : ', '
         const candidate = `${assembled}${separator}${kw}`
 
-        // Ensure candidate + closing period does not exceed maxChars
+        // Leave buffer for possible previous transcript and closing punctuation
         if (candidate.length + 1 <= maxChars) {
           assembled = candidate
           includedKeywords.push(kw)
@@ -74,11 +67,25 @@ export class WhisperPromptBuilder {
         }
       }
 
-      if (includedKeywords.length === 0) {
-        return ''
-      }
+      let finalPrompt = assembled ? `${assembled}.` : ''
 
-      const finalPrompt = `${assembled}.`
+      // Append ~1 previous transcript sentence if provided and space permits
+      if (options?.previousTranscript && typeof options.previousTranscript === 'string') {
+        const rawPrev = options.previousTranscript.trim()
+        if (rawPrev) {
+          const sentences = rawPrev.split(/[.?!;\n]+/).map((s) => s.trim()).filter(Boolean)
+          const lastSentence = sentences[sentences.length - 1] || rawPrev
+          const cleanPrev = lastSentence.replace(/\s+/g, ' ').slice(0, 90).trim()
+
+          if (cleanPrev) {
+            const separator = finalPrompt.length > 0 ? ' ' : ''
+            const candidateWithContext = `${finalPrompt}${separator}${cleanPrev}.`
+            if (candidateWithContext.length <= maxChars) {
+              finalPrompt = candidateWithContext
+            }
+          }
+        }
+      }
 
       if (options?.debugMode || process.env.NODE_ENV === 'development') {
         console.debug(

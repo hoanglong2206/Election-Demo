@@ -99,9 +99,18 @@ const api = {
     downloadModel: (modelId: string): Promise<any> =>
       ipcRenderer.invoke('nativeWhisper:downloadModel', modelId),
     transcribe: (
-      audioData: string,
-      options?: { modelId?: string; language?: string; timeoutMs?: number; maxRetries?: number }
+      audioData: string | ArrayBuffer | Uint8Array | Float32Array | Int16Array,
+      options?: {
+        modelId?: string
+        language?: string
+        prompt?: string
+        temperature?: number
+        timeoutMs?: number
+        maxRetries?: number
+        sequenceId?: number
+      }
     ): Promise<any> => ipcRenderer.invoke('nativeWhisper:transcribe', audioData, options),
+    prewarm: (): Promise<boolean> => ipcRenderer.invoke('nativeWhisper:prewarm'),
     onDownloadProgress: (
       callback: (data: { modelId: string; percent: number; loadedMb: number; totalMb: number }) => void
     ) => {

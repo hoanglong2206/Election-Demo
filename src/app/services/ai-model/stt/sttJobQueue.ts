@@ -35,6 +35,11 @@ export class STTJobQueue {
   private releasedJobsCount = 0
   private totalWaitTimeMs = 0
   private processedWithWaitCount = 0
+  private lastQueueWaitMs = 0
+  private lastInferenceMs = 0
+  private lastTotalMs = 0
+  private totalInferenceMs = 0
+  private totalJobLatencyMs = 0
 
   // Native worker supervision telemetry
   private workerState: 'STOPPED' | 'STARTING' | 'READY' | 'BUSY' | 'FAILED' | 'RESTARTING' = 'READY'
@@ -255,23 +260,38 @@ export class STTJobQueue {
     job.retryCount = job.retryCount ?? 0
     job.maxRetries = job.maxRetries ?? 2
 
+    const waitTime = Math.max(0, Date.now() - job.createdAt)
+    const execStartTime = performance.now()
+
     try {
       if (!job.audioBuffer) {
         throw new Error('AudioBuffer has already been released or is missing')
       }
 
-      // Normalize audio buffer to WAV Blob
-      let audioBlob: Blob
-      if (job.audioBuffer instanceof Blob) {
-        audioBlob = job.audioBuffer
-      } else {
-        audioBlob = encodeWavBlob(job.audioBuffer, 16000)
-      }
-
       const engineId = job.engineId || getSavedSTTEngineId()
       const lang = job.language || 'auto'
 
-      const result = await transcribeAudio(audioBlob, engineId, lang, job.prompt, job.sessionId)
+      // For Local Whisper, pass Int16Array/Blob directly across IPC (no wav encode needed)
+      // For Cloud Groq, normalize to WAV Blob if Int16Array
+      let audioPayload: any = job.audioBuffer
+      if (this.provider !== 'Local' && !(job.audioBuffer instanceof Blob)) {
+        audioPayload = encodeWavBlob(job.audioBuffer as any, 16000)
+      }
+
+      const result = await transcribeAudio(audioPayload, engineId, lang, job.prompt, job.sessionId)
+
+      const inferenceTime = result.inferenceMs || result.latencyMs || Math.round(performance.now() - execStartTime)
+      const totalTime = waitTime + inferenceTime
+
+      result.queueWaitMs = waitTime
+      result.inferenceMs = inferenceTime
+      result.totalMs = totalTime
+
+      this.lastQueueWaitMs = waitTime
+      this.lastInferenceMs = inferenceTime
+      this.lastTotalMs = totalTime
+      this.totalInferenceMs += inferenceTime
+      this.totalJobLatencyMs += totalTime
 
       if (result.success) {
         this.assembler.receiveResult(job.sequenceId, result, job)
@@ -381,6 +401,11 @@ export class STTJobQueue {
     this.releasedJobsCount = 0
     this.totalWaitTimeMs = 0
     this.processedWithWaitCount = 0
+    this.lastQueueWaitMs = 0
+    this.lastInferenceMs = 0
+    this.lastTotalMs = 0
+    this.totalInferenceMs = 0
+    this.totalJobLatencyMs = 0
     this.emitMetrics()
   }
 
@@ -388,6 +413,14 @@ export class STTJobQueue {
     const avgWait =
       this.processedWithWaitCount > 0
         ? Math.round(this.totalWaitTimeMs / this.processedWithWaitCount)
+        : 0
+    const avgInference =
+      this.completedJobsCount > 0
+        ? Math.round(this.totalInferenceMs / this.completedJobsCount)
+        : 0
+    const avgTotal =
+      this.completedJobsCount > 0
+        ? Math.round(this.totalJobLatencyMs / this.completedJobsCount)
         : 0
 
     return {
@@ -410,6 +443,11 @@ export class STTJobQueue {
       releasedChunks: this.releasedJobsCount,
       bufferedSeconds: Math.round(this.queue.length * 1.0 * 10) / 10,
       estimatedMemoryMb: Math.round(((this.queue.length * 32 * 1024) / (1024 * 1024)) * 100) / 100,
+      lastQueueWaitMs: this.lastQueueWaitMs,
+      lastInferenceMs: this.lastInferenceMs,
+      lastTotalMs: this.lastTotalMs,
+      avgInferenceMs: avgInference,
+      avgTotalMs: avgTotal,
     }
   }
 

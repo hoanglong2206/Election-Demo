@@ -1203,7 +1203,7 @@ export class ElectronCredentialStore {
 
     const startTime = Date.now()
     const buffer = Buffer.from(audioBase64, 'base64')
-    const blob = new Blob([buffer], { type: 'audio/wav' })
+    const blob = new Blob([new Uint8Array(buffer)], { type: 'audio/wav' })
 
     const formData = new FormData()
     formData.append('file', blob, 'audio.wav')

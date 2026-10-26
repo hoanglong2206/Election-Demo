@@ -11,6 +11,10 @@ export interface TranscribeResult {
   isNative?: boolean
   confidence: number
   error?: string
+  queueWaitMs?: number
+  inferenceMs?: number
+  totalMs?: number
+  mode?: 'server' | 'cli'
 }
 
 export type STTJobPriority = 'low' | 'normal' | 'high'
@@ -22,7 +26,7 @@ export interface STTJob {
   jobId: string
   sessionId: string
   sequenceId: number
-  audioBuffer: Blob | Int16Array | null
+  audioBuffer: Blob | Int16Array | ArrayBuffer | null
   createdAt: number
   priority: number // Higher number = higher processing priority (e.g., normal: 0, high: 10)
   status?: AudioChunkLifecycleState
@@ -70,6 +74,12 @@ export interface STTQueueMetrics {
   releasedChunks?: number
   bufferedSeconds?: number
   estimatedMemoryMb?: number
+  // Fine-grained chunk timing telemetry
+  lastQueueWaitMs?: number
+  lastInferenceMs?: number
+  lastTotalMs?: number
+  avgInferenceMs?: number
+  avgTotalMs?: number
 }
 
 export interface STTQueueConfig {

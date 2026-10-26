@@ -258,10 +258,14 @@ export function registerIpcHandlers(win: BrowserWindow): void {
 
   ipcMain.handle(
     'nativeWhisper:transcribe',
-    async (_event, audioData: string, options?: any) => {
+    async (_event, audioData: any, options?: any) => {
       return whisperManager.transcribe(audioData, options)
     }
   )
+
+  ipcMain.handle('nativeWhisper:prewarm', async () => {
+    return whisperManager.prewarm()
+  })
 
     // ── Session Storage (Local JSON files in userData/sessions/) ─────────────
     const sessionStorage = new ElectronSessionStorage()

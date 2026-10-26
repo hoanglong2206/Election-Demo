@@ -48,6 +48,10 @@ export interface NativeTranscribeResult {
   isNative: boolean
   error?: string
   retriesUsed?: number
+  queueWaitMs?: number
+  inferenceMs?: number
+  totalMs?: number
+  mode?: 'server' | 'cli'
 }
 
 export interface ElectronAPI {
@@ -81,10 +85,19 @@ export interface ElectronAPI {
     getProcessState?: () => Promise<{ state: WhisperProcessState; telemetry: WhisperTelemetry; logs: string[] }>
     healthCheck?: (modelId?: string) => Promise<WhisperHealthCheckResult>
     restartProcess?: () => Promise<boolean>
+    prewarm?: () => Promise<boolean>
     downloadModel: (modelId: string) => Promise<{ success: boolean; filePath: string; error?: string }>
     transcribe: (
-      audioData: string,
-      options?: { modelId?: string; language?: string; prompt?: string; timeoutMs?: number; maxRetries?: number }
+      audioData: string | ArrayBuffer | Uint8Array | Float32Array | Int16Array,
+      options?: {
+        modelId?: string
+        language?: string
+        prompt?: string
+        temperature?: number
+        timeoutMs?: number
+        maxRetries?: number
+        sequenceId?: number
+      }
     ) => Promise<NativeTranscribeResult>
     onDownloadProgress: (
       callback: (data: { modelId: string; percent: number; loadedMb: number; totalMb: number }) => void
