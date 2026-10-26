@@ -3,7 +3,6 @@ import { AlertTriangle, X } from 'lucide-react'
 import { useAudioPipeline } from '../../hooks/useAudioPipeline'
 import {
   getSavedSTTEngineId,
-  saveSTTEngineId,
   getAvailableSTTEngines,
   LOCAL_WHISPER_BASE_ENGINE,
 } from '../../services/ai-model/aiModels'
@@ -135,16 +134,10 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
     availableSTTEngines[0] ||
     LOCAL_WHISPER_BASE_ENGINE
 
-  // Keep selectedSTT updated if user changes it in settings or tab focus
+  // Revert sttJobQueue provider & concurrency back to settings configuration when leaving AudioTest
   useEffect(() => {
-    const handleSync = () => {
-      setSelectedSTT(getSavedSTTEngineId())
-    }
-    window.addEventListener('storage', handleSync)
-    window.addEventListener('focus', handleSync)
     return () => {
-      window.removeEventListener('storage', handleSync)
-      window.removeEventListener('focus', handleSync)
+      sttJobQueue.handleProviderSwitch(getSavedSTTEngineId())
     }
   }, [])
 
@@ -393,7 +386,6 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
             selectedSTT={selectedSTT}
             onSelectSTTEngine={(engineId) => {
               setSelectedSTT(engineId)
-              saveSTTEngineId(engineId)
               sttJobQueue.handleProviderSwitch(engineId)
             }}
             sttLang={sttLang}
