@@ -23,6 +23,8 @@ export interface GroundingResult {
   confidence: number
   overallRisk: GroundingRisk
   correctedAnswer: string
+  originalAnswer?: string
+  hasDiscrepancies?: boolean
   warning?: string
 }
 
@@ -137,12 +139,15 @@ export function validateAnswerGrounding(input: GroundingInput): GroundingResult 
   const risky = claims.filter((claim) => claim.classification === 'UNSUPPORTED' || claim.classification === 'CONTRADICTED')
   const overallRisk: GroundingRisk = risky.length === 0 ? 'low' : risky.some((claim) => claim.priority === 'high') ? 'high' : 'medium'
   const correctedAnswer = rewriteAnswer(sentences, claims, mode)
+  const hasDiscrepancies = overallRisk !== 'low' || risky.length > 0
   return {
     claims,
     evidence,
     confidence: claims.length === 0 ? 1 : claims.reduce((sum, claim) => sum + claim.confidence, 0) / claims.length,
     overallRisk,
     correctedAnswer,
+    originalAnswer: input.answer,
+    hasDiscrepancies,
     warning: risky.length > 0 ? `${risky.length} claim(s) need verification before presenting as personal experience.` : undefined,
   }
 }

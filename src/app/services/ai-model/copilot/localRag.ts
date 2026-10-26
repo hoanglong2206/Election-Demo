@@ -45,6 +45,7 @@ export interface RetrievalCitation {
   documentId: string
   sourceType: DocumentSourceType
   section?: string
+  source?: string
   text: string
   score: number
 }
@@ -272,6 +273,7 @@ export class LocalRagIndex {
         documentId: item.chunk.documentId,
         sourceType: item.chunk.sourceType,
         section: item.chunk.section,
+        source: item.chunk.section ? `${item.chunk.sourceType} (${item.chunk.section})` : item.chunk.sourceType,
         text: item.chunk.text,
         score: Number(item.score.toFixed(4)),
       })

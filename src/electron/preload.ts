@@ -201,6 +201,66 @@ const api = {
       benchmark?: { ttftMs: number; generationMs: number; outputTokens?: number }
     } | null> =>
       ipcRenderer.invoke('credentials:callLLM', params),
+    streamLLM: (
+      params: { requestId: string; input: any },
+      callbacks: {
+        onFirstToken?: (data: { requestId: string; ttftMs: number }) => void
+        onDelta: (data: { requestId: string; delta: string }) => void
+        onDone: (data: {
+          requestId: string
+          text: string
+          modelName: string
+          provider: string
+          usage?: {
+            inputTokens?: number
+            outputTokens?: number
+            cachedTokens?: number
+          }
+          benchmark: { ttftMs: number; generationMs: number; outputTokens?: number }
+        }) => void
+        onError: (data: { requestId: string; error: string; partialText: string }) => void
+      }
+    ): (() => void) => {
+      const handleFirstToken = (_e: any, d: any) => {
+        if (d?.requestId === params.requestId) callbacks.onFirstToken?.(d)
+      }
+      const handleDelta = (_e: any, d: any) => {
+        if (d?.requestId === params.requestId) callbacks.onDelta(d)
+      }
+      const handleDone = (_e: any, d: any) => {
+        if (d?.requestId === params.requestId) {
+          cleanup()
+          callbacks.onDone(d)
+        }
+      }
+      const handleError = (_e: any, d: any) => {
+        if (d?.requestId === params.requestId) {
+          cleanup()
+          callbacks.onError(d)
+        }
+      }
+      const cleanup = () => {
+        ipcRenderer.removeListener('credentials:streamLLM:first-token', handleFirstToken)
+        ipcRenderer.removeListener('credentials:streamLLM:delta', handleDelta)
+        ipcRenderer.removeListener('credentials:streamLLM:done', handleDone)
+        ipcRenderer.removeListener('credentials:streamLLM:error', handleError)
+      }
+
+      ipcRenderer.on('credentials:streamLLM:first-token', handleFirstToken)
+      ipcRenderer.on('credentials:streamLLM:delta', handleDelta)
+      ipcRenderer.on('credentials:streamLLM:done', handleDone)
+      ipcRenderer.on('credentials:streamLLM:error', handleError)
+
+      ipcRenderer.send('credentials:streamLLM:start', params)
+
+      return () => {
+        cleanup()
+        ipcRenderer.send('credentials:streamLLM:cancel', { requestId: params.requestId })
+      }
+    },
+    cancelStreamLLM: (requestId: string): void => {
+      ipcRenderer.send('credentials:streamLLM:cancel', { requestId })
+    },
     callMultimodalLLM: (
       params: any
     ): Promise<{

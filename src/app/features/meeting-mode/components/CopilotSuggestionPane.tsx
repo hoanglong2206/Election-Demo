@@ -18,6 +18,8 @@ import {
   Activity,
   Layers,
   Camera,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -73,6 +75,7 @@ interface CopilotSuggestionPaneProps {
   isAnalyzingVisual?: boolean
   onTriggerScreenCapture?: () => void
   screenCaptureState?: ScreenCaptureState
+  onToggleCorrectedAnswer?: () => void
 }
 
 /**
@@ -177,12 +180,25 @@ export function CopilotSuggestionPane({
   isAnalyzingVisual,
   onTriggerScreenCapture,
   screenCaptureState = 'idle',
+  onToggleCorrectedAnswer,
 }: CopilotSuggestionPaneProps) {
   const [isLogOpen, setIsLogOpen] = useState(false)
   const [logs, setLogs] = useState(() => triggerLogManager.getLogs())
 
+  const isStreamingInterview =
+    mode === 'interview' &&
+    Boolean(
+      customInterviewAnswer &&
+        (customInterviewAnswer.isStreaming ||
+          customInterviewAnswer.streamingState === 'connecting' ||
+          customInterviewAnswer.streamingState === 'streaming')
+    )
+
   const interviewAnswer =
-    customInterviewAnswer && customInterviewAnswer.content.trim() ? customInterviewAnswer : null
+    customInterviewAnswer && (customInterviewAnswer.content.trim() || isStreamingInterview)
+      ? customInterviewAnswer
+      : null
+
   const discussionOptions = useMemo(
     () => sanitizeDiscussionOptions(customDiscussionSuggestions ?? []),
     [customDiscussionSuggestions]
@@ -637,8 +653,8 @@ export function CopilotSuggestionPane({
             </div>
           )}
 
-          {/* ── 1. ĐANG GỌI LLM ─────────────────────────────────────────── */}
-          {isGeneratingAIResponse ? (
+          {/* ── 1. ĐANG GỌI LLM (CHỈ KHI KHÔNG PHẢI STREAMING INTERVIEW) ───────────────── */}
+          {isGeneratingAIResponse && !isStreamingInterview ? (
             <div className="rounded-xl p-4 border border-amber-500/25 bg-amber-500/[0.04] animate-fade-in">
               <div className="flex items-center gap-2 text-[11.5px] text-amber-200 font-medium">
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
@@ -742,7 +758,7 @@ export function CopilotSuggestionPane({
               </Button>
             </div>
           ) : mode === 'interview' ? (
-            /* ── 4. INTERVIEW: câu trả lời thật từ LLM ─────────────────── */
+            /* ── 4. INTERVIEW: câu trả lời thật từ LLM (STREAMING SUPPORT) ─────────────────── */
             <div
               className={cn(
                 'rounded-xl p-3.5 border animate-fade-in transition-all',
@@ -755,24 +771,57 @@ export function CopilotSuggestionPane({
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/70 to-transparent" />
 
               {/* Tag & Action Toolbar */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
                   <span
                     className="text-[10px] font-semibold text-violet-300 bg-violet-500/20 px-2 py-0.5 rounded border border-violet-500/30 truncate whitespace-nowrap"
                     title={isShortened ? 'Phiên bản rút gọn (Short)' : interviewAnswer!.label}
                   >
                     {isShortened ? '⚡ Phiên bản rút gọn (Short)' : interviewAnswer!.label}
                   </span>
-                  <span className="text-[10px] text-emerald-300/70 font-mono shrink-0 whitespace-nowrap">
-                    ✨ LLM Real-time
-                  </span>
+                  {interviewAnswer?.isStreaming ? (
+                    <span className="text-[10px] text-amber-300 font-mono shrink-0 whitespace-nowrap flex items-center gap-1 bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.5 rounded">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                      ⚡ Đang stream chữ...
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-300/70 font-mono shrink-0 whitespace-nowrap">
+                      ✨ LLM Real-time
+                    </span>
+                  )}
                 </div>
-
               </div>
 
-              <p className="text-[12.5px] leading-relaxed text-white/95 font-normal whitespace-pre-line">
-                {interviewDisplay}
-              </p>
+              {/* RAG Citations badges */}
+              {interviewAnswer?.retrieval?.citations && interviewAnswer.retrieval.citations.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap mb-2.5">
+                  <span className="text-[9px] text-white/40">Dẫn chứng:</span>
+                  {interviewAnswer.retrieval.citations.slice(0, 3).map((cit, idx) => (
+                    <span
+                      key={idx}
+                      className="text-[9px] px-1.5 py-0.2 rounded bg-violet-500/10 border border-violet-500/20 text-violet-300 font-mono"
+                      title={cit.text}
+                    >
+                      📎 {cit.section || cit.sourceType || cit.documentId || `Trích dẫn ${idx + 1}`}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Answer Content / Streaming state */}
+              {interviewAnswer?.streamingState === 'connecting' && !interviewDisplay ? (
+                <div className="flex items-center gap-2 py-3 text-[11.5px] text-violet-300">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400 shrink-0" />
+                  <span className="font-medium animate-pulse">Đang kết nối AI (chữ đầu xuất hiện &lt; 1s)...</span>
+                </div>
+              ) : (
+                <p className="text-[12.5px] leading-relaxed text-white/95 font-normal whitespace-pre-line">
+                  {interviewDisplay}
+                  {interviewAnswer?.isStreaming && (
+                    <span className="inline-block w-1.5 h-3.5 bg-violet-400 ml-1 animate-pulse align-middle" />
+                  )}
+                </p>
+              )}
 
               {showTranslate && interviewTr?.error && (
                 <p className="text-[9.5px] text-rose-300/85 mt-1.5 flex items-center gap-1">
@@ -781,90 +830,120 @@ export function CopilotSuggestionPane({
                 </p>
               )}
 
-              {/* ACTION TOOLBAR: TRANSLATE / COPY / SHORTEN / REGENERATE */}
-                <div className="border-t border-white/[0.06] py-2 flex items-center justify-end gap-1.5 shrink-0">
-                  {showTranslate && (
-                    <Button
-                      id="btn-translate-answer"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleTranslation('interview', interviewAnswer!.content)}
-                      disabled={interviewTr?.busy}
-                      className={cn(
-                        'h-5 text-[9.5px] px-2 gap-1 border transition-all font-medium',
-                        interviewShowingVi
-                          ? 'bg-sky-500/20 text-sky-200 border-sky-500/40'
-                          : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
-                      )}
-                      title="Dịch câu trả lời sang tiếng Việt"
-                    >
-                      {interviewTr?.busy ? (
-                        <Loader2 className="w-2.5 h-2.5 animate-spin text-sky-300" />
-                      ) : (
-                        <Languages className="w-2.5 h-2.5 text-sky-300" />
-                      )}
-                      <span>
-                        {interviewTr?.busy ? 'Đang dịch...' : interviewShowingVi ? 'Bản gốc' : 'Dịch'}
+              {/* Grounding Verification Status & Corrected Answer Action */}
+              {interviewAnswer?.grounding && (
+                <div className="mt-2.5 pt-2 border-t border-white/[0.06] flex items-center justify-between text-[10px]">
+                  {interviewAnswer.grounding.hasDiscrepancies && interviewAnswer.grounding.correctedAnswer ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-1 text-amber-300 font-medium">
+                        <ShieldAlert className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span>Có lưu ý so với CV</span>
                       </span>
-                    </Button>
+                      {onToggleCorrectedAnswer && (
+                        <button
+                          type="button"
+                          onClick={onToggleCorrectedAnswer}
+                          className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/30 hover:bg-amber-500/30 transition-all font-medium text-[9.5px]"
+                        >
+                          {interviewAnswer.appliedCorrected ? '↩ Xem câu trả lời gốc' : '🛡️ Xem bản chỉnh sửa theo CV'}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-emerald-300/80">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>Đã kiểm chứng khớp CV ({Math.round(interviewAnswer.grounding.confidence <= 1 ? interviewAnswer.grounding.confidence * 100 : interviewAnswer.grounding.confidence)}%)</span>
+                    </div>
                   )}
-
-                  <Button
-                    id="btn-copy-answer"
-                    size="sm"
-                    variant="outline"
-                    onClick={onCopyAnswer}
-                    className={cn(
-                      'h-5 text-[9.5px] px-2 gap-1 border transition-all font-medium',
-                      copiedAnswer
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
-                    )}
-                    title="1 click sao chép câu trả lời để dán vào chat phỏng vấn"
-                  >
-                    {copiedAnswer ? (
-                      <>
-                        <Check className="w-2.5 h-2.5 text-emerald-400" />
-                        <span>Đã chép!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-2.5 h-2.5 text-violet-300" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </Button>
-
-                  <Button
-                    id="btn-shorten-answer"
-                    size="sm"
-                    variant="outline"
-                    onClick={onToggleShorten}
-                    className={cn(
-                      'h-5 text-[9.5px] px-2 gap-1 border transition-all font-medium',
-                      isShortened
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-semibold'
-                        : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
-                    )}
-                    title="Làm ngắn lại thành 2-3 gạch đầu dòng súc tích"
-                  >
-                    <Zap className="w-2.5 h-2.5 text-amber-400" />
-                    <span>{isShortened ? 'Mở rộng' : 'Làm ngắn'}</span>
-                  </Button>
-
-                  <Button
-                    id="btn-regenerate-answer"
-                    size="sm"
-                    variant="outline"
-                    onClick={onRegenerate}
-                    disabled={isRegenerating}
-                    className="h-5 text-[9.5px] px-2 gap-1 bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white transition-all font-medium"
-                    title="Gọi lại LLM để tạo câu trả lời khác"
-                  >
-                    <RotateCcw className={cn('w-2.5 h-2.5 text-violet-400', isRegenerating && 'animate-spin')} />
-                    <span>{isRegenerating ? 'Đang tạo...' : 'Tạo lại'}</span>
-                  </Button>
                 </div>
+              )}
+
+              {/* ACTION TOOLBAR: TRANSLATE / COPY / SHORTEN / REGENERATE */}
+              <div className="border-t border-white/[0.06] py-2 mt-2 flex items-center justify-end gap-1.5 shrink-0">
+                {showTranslate && (
+                  <Button
+                    id="btn-translate-answer"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => toggleTranslation('interview', interviewAnswer!.content)}
+                    disabled={interviewTr?.busy || interviewAnswer?.isStreaming}
+                    className={cn(
+                      'h-5 text-[9.5px] px-2 gap-1 border transition-all font-medium',
+                      interviewShowingVi
+                        ? 'bg-sky-500/20 text-sky-200 border-sky-500/40'
+                        : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
+                    )}
+                    title="Dịch câu trả lời sang tiếng Việt"
+                  >
+                    {interviewTr?.busy ? (
+                      <Loader2 className="w-2.5 h-2.5 animate-spin text-sky-300" />
+                    ) : (
+                      <Languages className="w-2.5 h-2.5 text-sky-300" />
+                    )}
+                    <span>
+                      {interviewTr?.busy ? 'Đang dịch...' : interviewShowingVi ? 'Bản gốc' : 'Dịch'}
+                    </span>
+                  </Button>
+                )}
+
+                <Button
+                  id="btn-copy-answer"
+                  size="sm"
+                  variant="outline"
+                  onClick={onCopyAnswer}
+                  disabled={!interviewAnswer?.content?.trim()}
+                  className={cn(
+                    'h-5 text-[9.5px] px-2 gap-1 border transition-all font-medium',
+                    copiedAnswer
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
+                  )}
+                  title="1 click sao chép câu trả lời để dán vào chat phỏng vấn"
+                >
+                  {copiedAnswer ? (
+                    <>
+                      <Check className="w-2.5 h-2.5 text-emerald-400" />
+                      <span>Đã chép!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-2.5 h-2.5 text-violet-300" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  id="btn-shorten-answer"
+                  size="sm"
+                  variant="outline"
+                  onClick={onToggleShorten}
+                  disabled={interviewAnswer?.isStreaming}
+                  className={cn(
+                    'h-5 text-[9.5px] px-2 gap-1 border transition-all font-medium',
+                    isShortened
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-semibold'
+                      : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
+                  )}
+                  title="Làm ngắn lại thành 2-3 gạch đầu dòng súc tích"
+                >
+                  <Zap className="w-2.5 h-2.5 text-amber-400" />
+                  <span>{isShortened ? 'Mở rộng' : 'Làm ngắn'}</span>
+                </Button>
+
+                <Button
+                  id="btn-regenerate-answer"
+                  size="sm"
+                  variant="outline"
+                  onClick={onRegenerate}
+                  disabled={isRegenerating || interviewAnswer?.isStreaming}
+                  className="h-5 text-[9.5px] px-2 gap-1 bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white transition-all font-medium"
+                  title="Gọi lại LLM để tạo câu trả lời khác"
+                >
+                  <RotateCcw className={cn('w-2.5 h-2.5 text-violet-400', isRegenerating && 'animate-spin')} />
+                  <span>{isRegenerating ? 'Đang tạo...' : 'Tạo lại'}</span>
+                </Button>
+              </div>
 
               <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[10px]">
                 <div className="flex items-center gap-1.5 text-white/40">

@@ -155,6 +155,27 @@ export interface ElectronAPI {
       }
       benchmark?: { ttftMs: number; generationMs: number; outputTokens?: number }
     } | null>
+    streamLLM?: (
+      params: { requestId: string; input: any },
+      callbacks: {
+        onFirstToken?: (data: { requestId: string; ttftMs: number }) => void
+        onDelta: (data: { requestId: string; delta: string }) => void
+        onDone: (data: {
+          requestId: string
+          text: string
+          modelName: string
+          provider: string
+          usage?: {
+            inputTokens?: number
+            outputTokens?: number
+            cachedTokens?: number
+          }
+          benchmark: { ttftMs: number; generationMs: number; outputTokens?: number }
+        }) => void
+        onError: (data: { requestId: string; error: string; partialText: string }) => void
+      }
+    ) => () => void
+    cancelStreamLLM?: (requestId: string) => void
     callMultimodalLLM?: (
       params: any
     ) => Promise<{

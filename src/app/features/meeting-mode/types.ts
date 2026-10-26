@@ -23,6 +23,8 @@ export interface AISuggestion {
   contextUsage?: ContextUsageInfo
 }
 
+export type StreamingState = 'idle' | 'connecting' | 'streaming' | 'done' | 'interrupted' | 'error'
+
 export interface InterviewVariation {
   id: number
   type: 'answer'
@@ -49,6 +51,9 @@ export interface InterviewVariation {
     toProvider?: string
     reason?: string
   }
+  isStreaming?: boolean
+  streamingState?: StreamingState
+  appliedCorrected?: boolean
 }
 
 export interface MeetingModeProps {

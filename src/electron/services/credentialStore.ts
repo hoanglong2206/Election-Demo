@@ -628,6 +628,239 @@ export class ElectronCredentialStore {
   }
 
   /**
+   * Real-time streaming LLM call via Server-Sent Events (SSE).
+   * Decrypts API key only in Main Process.
+   * Dispatches first token immediately, then batches deltas every ~30ms for optimal IPC throughput.
+   */
+  public async streamLLM(
+    input: CallLLMInput,
+    callbacks: {
+      onFirstToken?: (data: { ttftMs: number }) => void
+      onDelta: (data: { delta: string }) => void
+      onDone: (data: {
+        text: string
+        modelName: string
+        provider: string
+        usage?: {
+          inputTokens?: number
+          outputTokens?: number
+          cachedTokens?: number
+        }
+        benchmark: {
+          ttftMs: number
+          generationMs: number
+          outputTokens?: number
+        }
+      }) => void
+      onError: (data: { error: string; partialText: string }) => void
+    },
+    signal?: AbortSignal
+  ): Promise<void> {
+    const validated = CallLLMInputSchema.parse(input)
+    const targetProvider: CredentialProvider = validated.provider || 'groq'
+    const key = this.getDecryptedKey(targetProvider)
+
+    if (!key) {
+      callbacks.onError({
+        error: `Chưa có API key được cấu hình cho ${targetProvider} trong OS Credential Store.`,
+        partialText: '',
+      })
+      return
+    }
+
+    const modelId = validated.modelId || (targetProvider === 'groq' ? 'llama-3.3-70b-versatile' : targetProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini')
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    let url = ''
+    let body: any
+
+    if (targetProvider === 'groq' || targetProvider === 'openai') {
+      url = targetProvider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
+      headers.Authorization = `Bearer ${key}`
+      const reasoningModel = targetProvider === 'openai' && /^(o[134]|gpt-5)/i.test(modelId)
+      const messages = [
+        ...(validated.systemPrompt ? [{ role: reasoningModel ? 'developer' : 'system', content: validated.systemPrompt }] : []),
+        { role: 'user', content: validated.prompt },
+      ]
+      body = {
+        model: modelId,
+        messages,
+        max_completion_tokens: validated.maxTokens ?? 600,
+        ...(!reasoningModel ? { temperature: validated.temperature ?? 0.3 } : {}),
+        stream: true,
+        stream_options: { include_usage: true },
+      }
+    } else if (targetProvider === 'gemini') {
+      let cleanModelId = modelId.replace(/^models\//, '')
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`
+      body = {
+        contents: [{ parts: [{ text: validated.prompt }] }],
+        generationConfig: {
+          maxOutputTokens: validated.maxTokens ?? 600,
+          temperature: validated.temperature ?? 0.3,
+        },
+        ...(validated.systemPrompt ? { systemInstruction: { parts: [{ text: validated.systemPrompt }] } } : {}),
+      }
+    } else {
+      callbacks.onError({
+        error: `Provider không được hỗ trợ cho streaming: ${targetProvider}`,
+        partialText: '',
+      })
+      return
+    }
+
+    let accumulatedText = ''
+    let firstTokenAt: number | undefined
+    const startedAt = performance.now()
+    let batchBuffer = ''
+    let batchTimer: ReturnType<typeof setTimeout> | null = null
+
+    const flushBatch = () => {
+      if (batchBuffer) {
+        const delta = batchBuffer
+        batchBuffer = ''
+        callbacks.onDelta({ delta })
+      }
+    }
+
+    let usage: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } = {}
+
+    const consumePayload = (payload: string) => {
+      if (!payload || payload === '[DONE]') return
+      let data: any
+      try {
+        data = JSON.parse(payload)
+      } catch {
+        return
+      }
+
+      let delta = ''
+      if (targetProvider === 'gemini') {
+        delta = data?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
+        if (data?.usageMetadata) {
+          usage.inputTokens = data.usageMetadata.promptTokenCount ?? usage.inputTokens
+          usage.outputTokens = data.usageMetadata.candidatesTokenCount ?? usage.outputTokens
+          usage.cachedTokens = data.usageMetadata.cachedContentTokenCount ?? usage.cachedTokens
+        }
+      } else {
+        delta = data?.choices?.[0]?.delta?.content || ''
+        if (data?.usage) {
+          usage.inputTokens = data.usage.prompt_tokens ?? usage.inputTokens
+          usage.outputTokens = data.usage.completion_tokens ?? usage.outputTokens
+          usage.cachedTokens = data.usage.prompt_tokens_details?.cached_tokens ?? usage.cachedTokens
+        }
+      }
+
+      if (delta) {
+        accumulatedText += delta
+        const now = performance.now()
+        if (firstTokenAt === undefined) {
+          firstTokenAt = now
+          const ttftMs = Math.round(now - startedAt)
+          callbacks.onFirstToken?.({ ttftMs })
+          // First token is flushed immediately to achieve < 1s TTFT
+          callbacks.onDelta({ delta })
+        } else {
+          // Subsequent tokens are batched every ~30ms to prevent IPC bottleneck
+          batchBuffer += delta
+          if (!batchTimer) {
+            batchTimer = setTimeout(() => {
+              batchTimer = null
+              flushBatch()
+            }, 30)
+          }
+        }
+      }
+    }
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal,
+      })
+
+      if (!res.ok) {
+        const err = await parseJsonSafe(res)
+        const message = err?.error?.message || err?.message || `Request failed with status ${res.status}`
+        const label = targetProvider === 'gemini' ? 'Google Gemini' : targetProvider[0].toUpperCase() + targetProvider.slice(1)
+        throw new Error(`${label} error (${res.status}): ${message}`)
+      }
+
+      if (!res.body) {
+        throw new Error('Provider không trả về luồng streaming.')
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let streamBuffer = ''
+
+      while (true) {
+        if (signal?.aborted) {
+          if (batchTimer) clearTimeout(batchTimer)
+          reader.cancel().catch(() => {})
+          throw new Error('Stream đã bị hủy bởi người dùng.')
+        }
+
+        const { value, done } = await reader.read()
+        if (done) break
+
+        streamBuffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
+        const events = streamBuffer.split('\n\n')
+        streamBuffer = events.pop() || ''
+
+        for (const event of events) {
+          const lines = event.split('\n')
+          const payload = lines
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).trim())
+            .join('\n')
+          consumePayload(payload)
+        }
+      }
+
+      streamBuffer += decoder.decode()
+      if (streamBuffer.trim()) {
+        const lines = streamBuffer.split('\n')
+        const payload = lines
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trim())
+          .join('\n')
+        consumePayload(payload)
+      }
+
+      if (batchTimer) {
+        clearTimeout(batchTimer)
+        batchTimer = null
+      }
+      flushBatch()
+
+      const endedAt = performance.now()
+      callbacks.onDone({
+        text: accumulatedText,
+        modelName: modelId,
+        provider: targetProvider,
+        usage,
+        benchmark: {
+          ttftMs: Math.round((firstTokenAt ?? endedAt) - startedAt),
+          generationMs: Math.max(1, Math.round(endedAt - (firstTokenAt ?? endedAt))),
+          outputTokens: usage.outputTokens,
+        },
+      })
+    } catch (err: any) {
+      if (batchTimer) {
+        clearTimeout(batchTimer)
+        batchTimer = null
+      }
+      flushBatch()
+      callbacks.onError({
+        error: sanitizeLogMessage(err?.message || err || 'Lỗi không xác định khi stream'),
+        partialText: accumulatedText,
+      })
+    }
+  }
+
+  /**
    * Executes LLM requests directly in Main Process with decrypted credential.
    */
   public async callLLM(

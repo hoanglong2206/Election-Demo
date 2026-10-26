@@ -7,10 +7,9 @@ import { usageTrackerService, type AIUsageFeature } from '../../usage-tracker'
 import { smartModelRouter, type ModelRouterRequest, type SmartModelRouter } from '../model-router'
 import {
   classifyProviderError,
-  getDefaultRetryPolicy,
   providerCircuitBreaker,
-  waitForRetry,
 } from '../model-router'
+import { createStreamingTagFilter } from './streamingTagFilter'
 
 /**
  * Format provider badge label for display
@@ -33,180 +32,181 @@ export function getProviderBadgeLabel(provider?: string, modelId?: string): stri
   return `${provider}`
 }
 
-interface ApiCallResponse {
-  text: string
-  inputTokens?: number
-  outputTokens?: number
-  cachedTokens?: number
-}
-
 function providerError(message: string, status?: number): Error & { status?: number } {
   const error = new Error(message) as Error & { status?: number }
   error.status = status
   return error
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(Object.assign(new Error('Provider request timeout'), { name: 'AbortError' })), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
+export interface UniversalLLMStreamCallbacks {
+  onFirstToken?: (ttftMs: number) => void
+  onDelta: (delta: string) => void
+  onDone: (result: UniversalLLMResult) => void
+  onError: (error: Error, partialText: string) => void
 }
 
-async function callGroqAPI(
-  prompt: string,
+export interface UniversalLLMOptions {
+  modelId?: string
+  maxTokens?: number
+  temperature?: number
+  systemPrompt?: string
+  sessionId?: string
+  feature?: AIUsageFeature
+  routing?: Partial<ModelRouterRequest> & {
+    enabled?: boolean
+    router?: SmartModelRouter
+  }
+  signal?: AbortSignal
+}
+
+async function streamDirectFetch(
+  provider: LLMProvider,
   modelId: string,
   apiKey: string,
+  prompt: string,
   maxTokens: number,
   temperature: number,
-  systemPrompt?: string
-): Promise<ApiCallResponse | null> {
-  const modelToUse = modelId
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelToUse,
+  systemPrompt: string | undefined,
+  callbacks: {
+    onFirstToken?: (ttftMs: number) => void
+    onDelta: (delta: string) => void
+    onDone: (data: { text: string; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }) => void
+    onError: (err: Error) => void
+  },
+  signal?: AbortSignal
+) {
+  let url = ''
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  let body: any
+
+  if (provider === 'Groq' || provider === 'OpenAI') {
+    url = provider === 'Groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
+    headers.Authorization = `Bearer ${apiKey}`
+    const reasoningModel = provider === 'OpenAI' && /^(o[134]|gpt-5)/i.test(modelId)
+    body = {
+      model: modelId,
       messages: [
-        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        ...(systemPrompt ? [{ role: reasoningModel ? 'developer' : 'system', content: systemPrompt }] : []),
         { role: 'user', content: prompt },
       ],
-      temperature,
-      max_tokens: maxTokens,
-    }),
+      max_completion_tokens: maxTokens,
+      ...(!reasoningModel ? { temperature } : {}),
+      stream: true,
+      ...(provider === 'OpenAI' ? { stream_options: { include_usage: true } } : {}),
+    }
+  } else if (provider === 'Google') {
+    let cleanModelId = modelId.replace(/^models\//, '')
+    url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`
+    body = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens, temperature },
+      ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+    }
+  } else {
+    throw new Error(`Direct streaming unsupported for provider: ${provider}`)
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal,
   })
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw providerError(err?.error?.message || `Groq error status: ${res.status}`, res.status)
+    throw providerError(err?.error?.message || `Provider ${provider} error status: ${res.status}`, res.status)
   }
-  const data = await res.json()
-  const text = data?.choices?.[0]?.message?.content
-  if (!text) return null
-  return {
-    text,
-    inputTokens: data?.usage?.prompt_tokens,
-    outputTokens: data?.usage?.completion_tokens,
-  }
-}
 
-async function callGoogleGeminiAPI(
-  prompt: string,
-  modelId: string,
-  apiKey: string,
-  maxTokens: number,
-  temperature: number,
-  systemPrompt?: string
-): Promise<ApiCallResponse | null> {
-  let modelToUse = modelId
-  if (modelToUse.startsWith('models/')) {
-    modelToUse = modelToUse.replace('models/', '')
+  if (!res.body) {
+    throw new Error(`No response body from ${provider}`)
   }
-  let res: Response
-  try {
-    res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        modelToUse
-      )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(systemPrompt
-            ? { system_instruction: { parts: [{ text: systemPrompt }] } }
-            : {}),
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: maxTokens, temperature },
-        }),
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let streamBuffer = ''
+  let accumulated = ''
+  let firstTokenAt: number | undefined
+  const startedAt = performance.now()
+  const usage: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } = {}
+
+  const consume = (payload: string) => {
+    if (!payload || payload === '[DONE]') return
+    let data: any
+    try { data = JSON.parse(payload) } catch { return }
+
+    let delta = ''
+    if (provider === 'Google') {
+      delta = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''
+      if (data?.usageMetadata) {
+        usage.inputTokens = data.usageMetadata.promptTokenCount ?? usage.inputTokens
+        usage.outputTokens = data.usageMetadata.candidatesTokenCount ?? usage.outputTokens
+        usage.cachedTokens = data.usageMetadata.cachedContentTokenCount ?? usage.cachedTokens
       }
-    )
-  } catch (err: any) {
-    const safeMsg = String(err?.message || err).replace(/([?&]key=)[^&]+/gi, '$1***')
-    throw new Error(`Google Gemini network error: ${safeMsg}`)
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw providerError(err?.error?.message || `Gemini error status: ${res.status}`, res.status)
-  }
-  const data = await res.json()
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!text) return null
-  return {
-    text,
-    inputTokens: data?.usageMetadata?.promptTokenCount,
-    outputTokens: data?.usageMetadata?.candidatesTokenCount,
-    cachedTokens: data?.usageMetadata?.cachedContentTokenCount,
-  }
-}
+    } else {
+      delta = data?.choices?.[0]?.delta?.content || ''
+      if (data?.usage) {
+        usage.inputTokens = data.usage.prompt_tokens ?? usage.inputTokens
+        usage.outputTokens = data.usage.completion_tokens ?? usage.outputTokens
+        usage.cachedTokens = data.usage.prompt_tokens_details?.cached_tokens ?? usage.cachedTokens
+      }
+    }
 
-async function callOpenAIAPI(
-  prompt: string,
-  modelId: string,
-  apiKey: string,
-  maxTokens: number,
-  temperature: number,
-  systemPrompt?: string
-): Promise<ApiCallResponse | null> {
-  const modelToUse = modelId
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelToUse,
-      messages: [
-        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-        { role: 'user', content: prompt },
-      ],
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw providerError(err?.error?.message || `OpenAI error status: ${res.status}`, res.status)
+    if (delta) {
+      accumulated += delta
+      if (firstTokenAt === undefined) {
+        firstTokenAt = performance.now()
+        callbacks.onFirstToken?.(Math.round(firstTokenAt - startedAt))
+      }
+      callbacks.onDelta(delta)
+    }
   }
-  const data = await res.json()
-  const text = data?.choices?.[0]?.message?.content
-  if (!text) return null
-  return {
-    text,
-    inputTokens: data?.usage?.prompt_tokens,
-    outputTokens: data?.usage?.completion_tokens,
-    cachedTokens: data?.usage?.prompt_tokens_details?.cached_tokens,
+
+  while (true) {
+    if (signal?.aborted) {
+      reader.cancel().catch(() => {})
+      throw new Error('Streaming cancelled')
+    }
+    const { value, done } = await reader.read()
+    if (done) break
+    streamBuffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
+    const events = streamBuffer.split('\n\n')
+    streamBuffer = events.pop() || ''
+    for (const event of events) {
+      const payload = event
+        .split('\n')
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).trim())
+        .join('\n')
+      consume(payload)
+    }
   }
+
+  streamBuffer += decoder.decode()
+  if (streamBuffer.trim()) {
+    const payload = streamBuffer
+      .split('\n')
+      .filter((l) => l.startsWith('data:'))
+      .map((l) => l.slice(5).trim())
+      .join('\n')
+    consume(payload)
+  }
+
+  callbacks.onDone({ text: accumulated, usage })
 }
 
 /**
- * Universal LLM caller: uses the selected API-discovered model and, when it
- * fails, tries other API-discovered text models from the same provider.
+ * Streaming Universal LLM caller with:
+ * - Routing & Fallback chain
+ * - First-token failover timeout (~1.2s). Once first token arrives, provider is locked!
+ * - Stateful streaming tag filter (<think>...</think>, <thought>, <reasoning>)
+ * - Circuit breaker & Usage tracking
  */
-export async function callUniversalLLM(
+export async function callUniversalLLMStream(
   prompt: string,
-  options?: {
-    modelId?: string
-    maxTokens?: number
-    temperature?: number
-    systemPrompt?: string
-    sessionId?: string
-    feature?: AIUsageFeature
-    routing?: Partial<ModelRouterRequest> & {
-      enabled?: boolean
-      router?: SmartModelRouter
-    }
-  }
-): Promise<UniversalLLMResult | null> {
+  callbacks: UniversalLLMStreamCallbacks,
+  options?: UniversalLLMOptions
+): Promise<() => void> {
   const maxTokens = options?.maxTokens ?? 600
   const temperature = options?.temperature ?? 0.3
   const systemPrompt = options?.systemPrompt
@@ -228,9 +228,11 @@ export async function callUniversalLLM(
   const selectedModel = getAllAIModels().find((model) => model.id === selectedModelId)
 
   if (!hasDiscoveredModels || selectedModelId === 'no-model-configured') {
-    throw new Error(
+    const err = new Error(
       'Chưa có mô hình LLM khả dụng. Vào Cài đặt, nhập API key, đồng bộ model từ API rồi chọn một model trước khi gọi AI.'
     )
+    callbacks.onError(err, '')
+    return () => {}
   }
 
   if (
@@ -239,12 +241,13 @@ export async function callUniversalLLM(
     !registryModel.isLiveFromAPI ||
     !registryModel.capabilities.includes('text')
   ) {
-    throw new Error(
+    const err = new Error(
       `Model "${selectedModelId}" không có trong danh sách model đã đồng bộ. Vào Cài đặt, đồng bộ lại danh sách và chọn một model hiện có.`
     )
+    callbacks.onError(err, '')
+    return () => {}
   }
-  const requestStartedAt = Date.now()
-  const retryPolicy = getDefaultRetryPolicy()
+
   const validModels = getAllAIModels().filter((model) =>
     model.isLiveFromAPI &&
     modelRegistryService.getModelById(model.id)?.capabilities.includes('text')
@@ -259,197 +262,336 @@ export async function callUniversalLLM(
       !routingDecision?.fallbackChain?.some((item) => item.modelId === model.id)
     ),
   ]
+
+  const FIRST_TOKEN_TIMEOUT_MS = 1200
+  const tagFilter = createStreamingTagFilter()
+  let hasEmittedFirstToken = false
+  let accumulatedCleanedText = ''
   let failoverFromProvider: string | undefined
   let failoverReason: string | undefined
+  let isStreamDone = false
+  let cancelCurrent: (() => void) | null = null
 
-  // 0. High security path: If running in Electron with OS Credential Store, call via secure IPC
-  if (typeof window !== 'undefined' && window.api?.credentials?.callLLM) {
-    for (const candidateModel of providerCandidates) {
-      const provider = candidateModel.provider
-      if (!providerCircuitBreaker.canRequest(provider)) continue
-      try {
-        let targetProvider = candidateModel.provider.toLowerCase()
-        if (targetProvider === 'google') targetProvider = 'gemini'
-        const hasKey = await window.api.credentials.hasApiKey(targetProvider)
-        if (!hasKey) continue
-
-        const attemptStartedAt = Date.now()
-        let res
-        let attempt = 0
-        while (attempt < retryPolicy.maxAttempts) {
-          attempt += 1
-          try {
-            res = await withTimeout(window.api.credentials.callLLM({
-              provider: targetProvider,
-              modelId: candidateModel.id,
-              prompt,
-              systemPrompt,
-              maxTokens,
-              temperature,
-            }), Math.max(250, retryPolicy.latencyBudgetMs - (Date.now() - requestStartedAt)))
-            break
-          } catch (error) {
-            const failure = classifyProviderError(error, provider)
-            providerCircuitBreaker.recordFailure(provider, failure, Date.now() - attemptStartedAt)
-            router.recordResult(candidateModel.id, Date.now() - attemptStartedAt, false)
-            failoverReason = failure.type
-            if (!failure.retryable || attempt >= retryPolicy.maxAttempts) break
-            await waitForRetry(attempt, retryPolicy)
-          }
-        }
-        if (res && res.text) {
-          providerCircuitBreaker.recordSuccess(provider, Date.now() - attemptStartedAt)
-          router.recordResult(candidateModel.id, Date.now() - attemptStartedAt, true)
-          const resolvedProvider = (res.provider || selectedModel.provider) as LLMProvider
-          const usageRecord = usageTrackerService.trackUsage({
-            sessionId: options?.sessionId,
-            provider: resolvedProvider,
-            model: candidateModel.id,
-            feature: options?.feature || 'copilot',
-            inputTokens: res.usage?.inputTokens,
-            outputTokens: res.usage?.outputTokens,
-            cachedTokens: res.usage?.cachedTokens,
-          })
-
-          return {
-            text: res.text,
-            modelId: candidateModel.id,
-            modelName: res.modelName,
-            provider: resolvedProvider,
-            usage: {
-              inputTokens: usageRecord.inputTokens || 0,
-              outputTokens: usageRecord.outputTokens || 0,
-              cachedTokens: usageRecord.cachedTokens,
-              estimatedCostUsd: usageRecord.estimatedCostUsd,
-            },
-            routing: routingDecision,
-            failover: {
-              switched: Boolean(failoverFromProvider),
-              fromProvider: failoverFromProvider,
-              toProvider: provider,
-              reason: failoverReason,
-            },
-          }
-        }
-      } catch (ipcErr) {
-        const failure = classifyProviderError(ipcErr, provider)
-        providerCircuitBreaker.recordFailure(provider, failure, Date.now() - requestStartedAt)
-        router.recordResult(candidateModel.id, Date.now() - requestStartedAt, false)
-        failoverReason = failure.type
-        console.warn(
-          `[universalLlm] Secure call failed for discovered model ${candidateModel.id}:`,
-          ipcErr
-        )
+  const handleFilteredDelta = (rawDelta: string, ttftMs?: number) => {
+    const cleaned = tagFilter.process(rawDelta)
+    if (cleaned) {
+      if (!hasEmittedFirstToken) {
+        hasEmittedFirstToken = true
+        callbacks.onFirstToken?.(ttftMs ?? 0)
       }
-      if (!failoverFromProvider) failoverFromProvider = provider
+      accumulatedCleanedText += cleaned
+      callbacks.onDelta(cleaned)
     }
   }
 
-  const groqKey = String(settingsManager.get('groqKey') || '').trim()
-  const llmKey = String(settingsManager.get('llmKey') || '').trim()
+  const handleStreamCompletion = (
+    candidate: (typeof providerCandidates)[0],
+    resText: string,
+    usage: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } | undefined,
+    attemptStartedAt: number
+  ) => {
+    if (isStreamDone) return
+    isStreamDone = true
 
-  const providerAttempts: Array<{
-    provider: LLMProvider
-    key: string
-    modelId: string
-    modelName: string
-  }> = []
+    const tail = tagFilter.flush()
+    if (tail) {
+      if (!hasEmittedFirstToken) {
+        hasEmittedFirstToken = true
+        callbacks.onFirstToken?.(Math.round(performance.now() - attemptStartedAt))
+      }
+      accumulatedCleanedText += tail
+      callbacks.onDelta(tail)
+    }
 
-  // Try the selected model first, then only API-discovered models from the same
-  // provider. No model ID is synthesized or substituted here.
-  for (const candidateModel of providerCandidates) {
-    const key = candidateModel.provider === 'Groq' ? groqKey : llmKey
-    if (!key) continue
+    providerCircuitBreaker.recordSuccess(candidate.provider, Date.now() - attemptStartedAt)
+    router.recordResult(candidate.id, Date.now() - attemptStartedAt, true)
 
-    providerAttempts.push({
-      provider: candidateModel.provider as LLMProvider,
-      key,
-      modelId: candidateModel.id,
-      modelName: candidateModel.name,
+    const resolvedProvider = candidate.provider as LLMProvider
+    const usageRecord = usageTrackerService.trackUsage({
+      sessionId: options?.sessionId,
+      provider: resolvedProvider,
+      model: candidate.id,
+      feature: options?.feature || 'copilot',
+      inputTokens: usage?.inputTokens,
+      outputTokens: usage?.outputTokens,
+      cachedTokens: usage?.cachedTokens,
+    })
+
+    callbacks.onDone({
+      text: accumulatedCleanedText || resText.trim(),
+      modelId: candidate.id,
+      modelName: candidate.name,
+      provider: resolvedProvider,
+      usage: {
+        inputTokens: usageRecord.inputTokens || 0,
+        outputTokens: usageRecord.outputTokens || 0,
+        cachedTokens: usageRecord.cachedTokens,
+        estimatedCostUsd: usageRecord.estimatedCostUsd,
+      },
+      routing: routingDecision,
+      failover: {
+        switched: Boolean(failoverFromProvider),
+        fromProvider: failoverFromProvider,
+        toProvider: candidate.provider,
+        reason: failoverReason,
+      },
     })
   }
 
-  // 3. Execute in sequence
-  for (const candidate of providerAttempts) {
-    if (!providerCircuitBreaker.canRequest(candidate.provider)) {
-      console.info(`[universalLlm] Circuit open; skipping provider ${candidate.provider}`)
-      continue
-    }
-    try {
-      console.log(`[universalLlm] Calling LLM API: ${candidate.provider} (${candidate.modelId})`)
-      const attemptStartedAt = Date.now()
-      let apiRes: ApiCallResponse | null = null
-      let attempt = 0
-      while (attempt < retryPolicy.maxAttempts) {
-        attempt += 1
-        try {
-          const remainingBudget = Math.max(250, retryPolicy.latencyBudgetMs - (Date.now() - requestStartedAt))
-          if (candidate.provider === 'Groq') {
-            apiRes = await withTimeout(callGroqAPI(prompt, candidate.modelId, candidate.key, maxTokens, temperature, systemPrompt), remainingBudget)
-          } else if (candidate.provider === 'Google') {
-            apiRes = await withTimeout(callGoogleGeminiAPI(prompt, candidate.modelId, candidate.key, maxTokens, temperature, systemPrompt), remainingBudget)
-          } else if (candidate.provider === 'OpenAI') {
-            apiRes = await withTimeout(callOpenAIAPI(prompt, candidate.modelId, candidate.key, maxTokens, temperature, systemPrompt), remainingBudget)
-          }
-          break
-        } catch (error) {
-          const failure = classifyProviderError(error, candidate.provider)
-          providerCircuitBreaker.recordFailure(candidate.provider, failure, Date.now() - attemptStartedAt)
-          router.recordResult(candidate.modelId, Date.now() - attemptStartedAt, false)
-          failoverReason = failure.type
-          if (!failure.retryable || attempt >= retryPolicy.maxAttempts) break
-          await waitForRetry(attempt, retryPolicy)
-        }
+  // Execute candidate sequence with failover ONLY before first token
+  const runSequence = async () => {
+    for (const candidateModel of providerCandidates) {
+      if (hasEmittedFirstToken || isStreamDone || options?.signal?.aborted) {
+        break
       }
 
-      if (apiRes && apiRes.text && apiRes.text.trim()) {
-        const cleanedText = apiRes.text
-          .replace(/<think>[\s\S]*?<\/think>/gi, '')
-          .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
-          .trim()
+      const provider = candidateModel.provider
+      if (!providerCircuitBreaker.canRequest(provider)) {
+        continue
+      }
 
-        const usageRecord = usageTrackerService.trackUsage({
-          sessionId: options?.sessionId,
-          provider: candidate.provider,
-          model: candidate.modelId,
-          feature: options?.feature || 'copilot',
-          inputTokens: apiRes.inputTokens,
-          outputTokens: apiRes.outputTokens,
-          cachedTokens: apiRes.cachedTokens,
+      let targetProvider = candidateModel.provider.toLowerCase()
+      if (targetProvider === 'google') targetProvider = 'gemini'
+
+      // Check if Electron IPC is available
+      const hasIPC = typeof window !== 'undefined' && Boolean(window.api?.credentials?.streamLLM)
+
+      if (hasIPC) {
+        const hasKey = await window.api!.credentials!.hasApiKey(targetProvider)
+        if (!hasKey) continue
+
+        const attemptStartedAt = Date.now()
+        const requestId = `stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+        let candidateFailedBeforeFirstToken = false
+        let firstTokenTimer: ReturnType<typeof setTimeout> | null = null
+
+        await new Promise<void>((resolve) => {
+          let cancelIpc: (() => void) | null = null
+
+          const cleanupAttempt = () => {
+            if (firstTokenTimer) {
+              clearTimeout(firstTokenTimer)
+              firstTokenTimer = null
+            }
+          }
+
+          firstTokenTimer = setTimeout(() => {
+            if (!hasEmittedFirstToken && !isStreamDone) {
+              console.warn(
+                `[universalLlm] First-token timeout (${FIRST_TOKEN_TIMEOUT_MS}ms) for ${candidateModel.id}. Failing over to next provider.`
+              )
+              candidateFailedBeforeFirstToken = true
+              failoverFromProvider = provider
+              failoverReason = 'first_token_timeout'
+              providerCircuitBreaker.recordFailure(
+                provider,
+                classifyProviderError(new Error('First-token timeout'), provider),
+                Date.now() - attemptStartedAt
+              )
+              router.recordResult(candidateModel.id, Date.now() - attemptStartedAt, false)
+              if (cancelIpc) cancelIpc()
+              cleanupAttempt()
+              resolve()
+            }
+          }, FIRST_TOKEN_TIMEOUT_MS)
+
+          cancelIpc = window.api!.credentials!.streamLLM!(
+            {
+              requestId,
+              input: {
+                provider: targetProvider,
+                modelId: candidateModel.id,
+                prompt,
+                systemPrompt,
+                maxTokens,
+                temperature,
+              },
+            },
+            {
+              onFirstToken: ({ ttftMs }) => {
+                cleanupAttempt()
+                // Provider is locked!
+                hasEmittedFirstToken = true
+                callbacks.onFirstToken?.(ttftMs)
+              },
+              onDelta: ({ delta }) => {
+                cleanupAttempt()
+                handleFilteredDelta(delta)
+              },
+              onDone: (data) => {
+                cleanupAttempt()
+                handleStreamCompletion(candidateModel, data.text, data.usage, attemptStartedAt)
+                resolve()
+              },
+              onError: ({ error, partialText }) => {
+                cleanupAttempt()
+                const err = new Error(error)
+                if (!hasEmittedFirstToken) {
+                  // Failover before first token
+                  candidateFailedBeforeFirstToken = true
+                  failoverFromProvider = provider
+                  failoverReason = error
+                  providerCircuitBreaker.recordFailure(
+                    provider,
+                    classifyProviderError(err, provider),
+                    Date.now() - attemptStartedAt
+                  )
+                  router.recordResult(candidateModel.id, Date.now() - attemptStartedAt, false)
+                  resolve()
+                } else {
+                  // Keep partial text, do not failover mid-stream
+                  if (!isStreamDone) {
+                    isStreamDone = true
+                    const tail = tagFilter.flush()
+                    if (tail) accumulatedCleanedText += tail
+                    callbacks.onError(err, accumulatedCleanedText || partialText)
+                  }
+                  resolve()
+                }
+              },
+            }
+          )
+
+          cancelCurrent = () => {
+            cleanupAttempt()
+            if (cancelIpc) cancelIpc()
+          }
         })
 
-        console.log(`[universalLlm] LLM responded successfully from ${candidate.provider}`)
-        providerCircuitBreaker.recordSuccess(candidate.provider, Date.now() - attemptStartedAt)
-        router.recordResult(candidate.modelId, Date.now() - requestStartedAt, true)
-        return {
-          text: cleanedText || apiRes.text.trim(),
-          provider: candidate.provider,
-          modelId: candidate.modelId,
-          modelName: candidate.modelName,
-          usage: {
-            inputTokens: usageRecord.inputTokens || 0,
-            outputTokens: usageRecord.outputTokens || 0,
-            cachedTokens: usageRecord.cachedTokens,
-            estimatedCostUsd: usageRecord.estimatedCostUsd,
-          },
-          routing: routingDecision,
-          failover: {
-            switched: Boolean(failoverFromProvider),
-            fromProvider: failoverFromProvider,
-            toProvider: candidate.provider,
-            reason: failoverReason,
-          },
+        if (!candidateFailedBeforeFirstToken && (hasEmittedFirstToken || isStreamDone)) {
+          return
+        }
+      } else {
+        // Fallback: Direct browser fetch
+        const groqKey = String(settingsManager.get('groqKey') || '').trim()
+        const llmKey = String(settingsManager.get('llmKey') || '').trim()
+        const key = candidateModel.provider === 'Groq' ? groqKey : llmKey
+        if (!key) continue
+
+        const attemptStartedAt = Date.now()
+        const directController = new AbortController()
+
+        let firstTokenTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+          if (!hasEmittedFirstToken && !isStreamDone) {
+            failoverFromProvider = provider
+            failoverReason = 'first_token_timeout'
+            directController.abort()
+          }
+        }, FIRST_TOKEN_TIMEOUT_MS)
+
+        cancelCurrent = () => directController.abort()
+
+        try {
+          await streamDirectFetch(
+            candidateModel.provider as LLMProvider,
+            candidateModel.id,
+            key,
+            prompt,
+            maxTokens,
+            temperature,
+            systemPrompt,
+            {
+              onFirstToken: (ttftMs) => {
+                if (firstTokenTimer) clearTimeout(firstTokenTimer)
+                hasEmittedFirstToken = true
+                callbacks.onFirstToken?.(ttftMs)
+              },
+              onDelta: (delta) => {
+                if (firstTokenTimer) clearTimeout(firstTokenTimer)
+                handleFilteredDelta(delta)
+              },
+              onDone: (data) => {
+                if (firstTokenTimer) clearTimeout(firstTokenTimer)
+                handleStreamCompletion(candidateModel, data.text, data.usage, attemptStartedAt)
+              },
+              onError: (err) => {
+                if (firstTokenTimer) clearTimeout(firstTokenTimer)
+                throw err
+              },
+            },
+            directController.signal
+          )
+          return
+        } catch (err: any) {
+          if (firstTokenTimer) clearTimeout(firstTokenTimer)
+          if (!hasEmittedFirstToken) {
+            failoverFromProvider = provider
+            failoverReason = err?.message || 'direct_fetch_failed'
+            providerCircuitBreaker.recordFailure(
+              provider,
+              classifyProviderError(err, provider),
+              Date.now() - attemptStartedAt
+            )
+            router.recordResult(candidateModel.id, Date.now() - attemptStartedAt, false)
+          } else {
+            if (!isStreamDone) {
+              isStreamDone = true
+              const tail = tagFilter.flush()
+              if (tail) accumulatedCleanedText += tail
+              callbacks.onError(err, accumulatedCleanedText)
+            }
+            return
+          }
         }
       }
-    } catch (err) {
-      const failure = classifyProviderError(err, candidate.provider)
-      providerCircuitBreaker.recordFailure(candidate.provider, failure, Date.now() - requestStartedAt)
-      router.recordResult(candidate.modelId, Date.now() - requestStartedAt, false)
-      failoverReason = failure.type
-      console.warn(`[universalLlm] Candidate ${candidate.provider} failed:`, err)
     }
-    if (!failoverFromProvider) failoverFromProvider = candidate.provider
+
+    if (!isStreamDone && !hasEmittedFirstToken) {
+      isStreamDone = true
+      callbacks.onError(new Error('Tất cả provider LLM đều thất bại hoặc quá thời gian phản hồi.'), '')
+    }
   }
 
-  return null
+  runSequence().catch((err) => {
+    if (!isStreamDone) {
+      isStreamDone = true
+      callbacks.onError(err, accumulatedCleanedText)
+    }
+  })
+
+  return () => {
+    if (cancelCurrent) cancelCurrent()
+  }
 }
+
+/**
+ * Universal LLM caller: Retained as a wrapper around callUniversalLLMStream
+ * to accumulate stream chunks into a complete string.
+ * Keeps Diagnostics, summaries, and discussion fully operational.
+ */
+export async function callUniversalLLM(
+  prompt: string,
+  options?: UniversalLLMOptions
+): Promise<UniversalLLMResult | null> {
+  return new Promise<UniversalLLMResult | null>((resolve, reject) => {
+    let accumulatedText = ''
+
+    callUniversalLLMStream(
+      prompt,
+      {
+        onDelta: (delta) => {
+          accumulatedText += delta
+        },
+        onDone: (result) => {
+          resolve(result)
+        },
+        onError: (error, partialText) => {
+          const fallbackText = accumulatedText || partialText
+          if (fallbackText.trim()) {
+            resolve({
+              text: fallbackText.trim(),
+              provider: (options?.modelId ? 'Groq' : 'AI') as LLMProvider,
+              modelId: options?.modelId || 'fallback',
+              modelName: 'Partial Output',
+            })
+          } else {
+            reject(error)
+          }
+        },
+      },
+      options
+    ).catch(reject)
+  })
+}
+

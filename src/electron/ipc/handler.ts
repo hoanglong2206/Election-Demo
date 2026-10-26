@@ -343,8 +343,69 @@ export function registerIpcHandlers(win: BrowserWindow): void {
         credentialStore.testModelAvailability(payload.provider, payload.rawKey, payload.modelId)
     )
 
+    const activeLLMStreams = new Map<string, AbortController>()
+
     ipcMain.handle('credentials:callLLM', async (_event, payload: any) => {
       return credentialStore.callLLM(payload)
+    })
+
+    ipcMain.on(
+      'credentials:streamLLM:start',
+      async (
+        event,
+        payload: { requestId: string; input: any }
+      ) => {
+        const { requestId, input } = payload
+        if (!requestId) return
+
+        // Cancel previous controller with same requestId if any exists
+        const existing = activeLLMStreams.get(requestId)
+        if (existing) {
+          existing.abort()
+          activeLLMStreams.delete(requestId)
+        }
+
+        const controller = new AbortController()
+        activeLLMStreams.set(requestId, controller)
+
+        credentialStore.streamLLM(
+          input,
+          {
+            onFirstToken: (data) => {
+              if (!event.sender.isDestroyed()) {
+                event.sender.send('credentials:streamLLM:first-token', { requestId, ...data })
+              }
+            },
+            onDelta: (data) => {
+              if (!event.sender.isDestroyed()) {
+                event.sender.send('credentials:streamLLM:delta', { requestId, ...data })
+              }
+            },
+            onDone: (data) => {
+              activeLLMStreams.delete(requestId)
+              if (!event.sender.isDestroyed()) {
+                event.sender.send('credentials:streamLLM:done', { requestId, ...data })
+              }
+            },
+            onError: (data) => {
+              activeLLMStreams.delete(requestId)
+              if (!event.sender.isDestroyed()) {
+                event.sender.send('credentials:streamLLM:error', { requestId, ...data })
+              }
+            },
+          },
+          controller.signal
+        )
+      }
+    )
+
+    ipcMain.on('credentials:streamLLM:cancel', (_event, payload: { requestId: string }) => {
+      if (!payload?.requestId) return
+      const controller = activeLLMStreams.get(payload.requestId)
+      if (controller) {
+        controller.abort()
+        activeLLMStreams.delete(payload.requestId)
+      }
     })
 
     ipcMain.handle('credentials:callMultimodalLLM', async (_event, payload: any) => {

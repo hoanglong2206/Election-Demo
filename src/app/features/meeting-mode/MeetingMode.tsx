@@ -30,7 +30,6 @@ import {
   analyzeDiscussionBackground,
   getCachedCvAnalysis,
   getCachedDiscussionAnalysis,
-  generateInterviewAnswer,
   generateDiscussionOptions,
   isQuestionUtterance,
   extractHeuristicLatestExchange,
@@ -72,9 +71,11 @@ import {
   tieredContextManager,
   type ContextUsageInfo,
   type AnswerStrategyId,
+  validateAnswerGrounding,
 } from '../../services/ai-model/copilot'
 import { settingsManager } from '../../services/settings/settingsManager'
 import { usageTrackerService } from '../../services/usage-tracker'
+import { useStreamingAnswer } from '@/hooks/useStreamingAnswer'
 
 export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
@@ -217,6 +218,26 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const [customDiscussionSuggestions, setCustomDiscussionSuggestions] = useState<AISuggestion[] | null>(null)
   const [isLatestAQuestion, setIsLatestAQuestion] = useState<boolean>(false)
   const [isGeneratingAIResponse, setIsGeneratingAIResponse] = useState<boolean>(false)
+  const isGeneratingAIResponseRef = useRef<boolean>(false)
+  useEffect(() => {
+    isGeneratingAIResponseRef.current = isGeneratingAIResponse
+  }, [isGeneratingAIResponse])
+
+  const streamingAnswer = useStreamingAnswer()
+
+  const handleToggleCorrectedAnswer = useCallback(() => {
+    setCustomInterviewAnswer((prev) => {
+      if (!prev || !prev.grounding?.correctedAnswer) return prev
+      const applied = !prev.appliedCorrected
+      return {
+        ...prev,
+        appliedCorrected: applied,
+        content: applied
+          ? prev.grounding.correctedAnswer
+          : prev.grounding.originalAnswer || prev.content,
+      }
+    })
+  }, [])
   const aiSuggestionsHistoryRef = useRef<HistorySuggestion[]>([])
   /** Lỗi khi gọi LLM — hiển thị thẳng cho người dùng thay vì nội dung giả. */
   const [aiError, setAiError] = useState<string | null>(null)
@@ -607,89 +628,185 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     try {
       if (mode === 'interview') {
         const questionText = exchangeOriginalText
-
-        const activeCvBg =
-          cvAnalysis || getCachedCvAnalysis(activeCV, activeJD) || ''
-
-        const res = await generateInterviewAnswer({
-          question: questionText,
-          cvSummary: activeCV,
-          backgroundAnalysis: activeCvBg,
-          transcriptLines: lines,
-          language: responseLang,
-          sessionId: sessionIdRef.current,
-          intent: latestIntent,
-          strategyOverride: answerStrategyOverride,
-        })
-
-        if (!res) {
-          setCustomInterviewAnswer(null)
-          setAiError(
-            'Không gọi được LLM. Hãy kiểm tra API Key (Groq / Gemini / OpenAI) trong tab Cài đặt rồi thử lại.'
-          )
-          return
-        }
-
-        if (res.contextUsage) {
-          setContextUsage(res.contextUsage)
-        }
-
+        const activeCvBg = cvAnalysis || getCachedCvAnalysis(activeCV, activeJD) || ''
         const answerId = Date.now()
-        setCustomInterviewAnswer({
-          id: answerId,
-          type: 'answer',
-          label: res.label,
-          content: res.content,
-          shortContent: res.shortContent,
-          confidence: res.confidence,
-          contextUsage: res.contextUsage,
-          strategy: res.strategy,
-          grounding: res.grounding,
-          retrieval: res.retrieval,
-          routing: res.routing,
-          failover: res.failover,
-        })
-        void window.api.sessions?.recovery?.append({
-          eventId: `suggestion:${sessionIdRef.current}:${answerId}`,
-          sessionId: sessionIdRef.current,
-          type: 'suggestion',
-          timestamp: Date.now(),
-          payload: {
-            id: answerId,
-            type: 'answer',
-            label: res.label,
-            content: res.content,
-            confidence: res.confidence,
-            grounding: res.grounding,
-            retrieval: res.retrieval,
-            routing: res.routing,
-            failover: res.failover,
-          },
-        })
 
-        // Accumulate in session history
-        const lastLine = lines[lines.length - 1]
-        aiSuggestionsHistoryRef.current.push({
-          id: answerId,
-          type: 'answer',
-          label: res.label,
-          content: res.content,
-          confidence: res.confidence,
-          grounding: res.grounding,
-          retrieval: res.retrieval,
-          routing: res.routing,
-          failover: res.failover,
-          timestamp: lastLine?.timestamp || '00:00',
-          timestampMs: Date.now(),
-          triggeredByTranscriptId: lastLine?.id,
-          tokenUsage: res.contextUsage
-            ? {
-                promptTokens: res.contextUsage.totalTokens,
-                totalTokens: res.contextUsage.totalTokens,
-                costStatus: 'unknown',
+        performance.mark('question_final')
+        streamingAnswer.cancelStream()
+
+        await streamingAnswer.startStream(
+          {
+            question: questionText,
+            cvSummary: activeCV,
+            backgroundAnalysis: activeCvBg,
+            transcriptLines: lines,
+            language: responseLang,
+            sessionId: sessionIdRef.current,
+            intent: latestIntent,
+            strategyOverride: answerStrategyOverride,
+          },
+          {
+            onInit: (init) => {
+              if (!isMountedRef.current) return
+              setContextUsage(init.contextUsage)
+              setCustomInterviewAnswer({
+                id: answerId,
+                type: 'answer',
+                label: init.label,
+                content: '',
+                shortContent: '',
+                confidence: 97,
+                contextUsage: init.contextUsage,
+                strategy: init.strategy,
+                retrieval: init.retrieval,
+                isStreaming: true,
+                streamingState: 'connecting',
+              })
+            },
+            onFirstToken: (ttftMs) => {
+              performance.mark('first_delta')
+              try {
+                performance.measure('question_to_first_delta', 'question_final', 'first_delta')
+                const measure = performance.getEntriesByName('question_to_first_delta').pop()
+                console.log(
+                  `[InterviewStreaming] TTFT: ${Math.round(measure?.duration ?? ttftMs)}ms (p50 target <= 1000ms)`
+                )
+              } catch {}
+            },
+            onDelta: (_delta, currentFullText) => {
+              if (!isMountedRef.current) return
+              setCustomInterviewAnswer((prev) =>
+                prev && prev.id === answerId
+                  ? {
+                      ...prev,
+                      content: currentFullText,
+                      isStreaming: true,
+                      streamingState: 'streaming',
+                    }
+                  : prev
+              )
+            },
+            onDone: (res) => {
+              if (!isMountedRef.current) return
+              performance.mark('stream_done')
+              setIsGeneratingAIResponse(false)
+
+              setCustomInterviewAnswer((prev) =>
+                prev && prev.id === answerId
+                  ? {
+                      ...prev,
+                      content: res.content,
+                      shortContent: res.shortContent,
+                      modelName: res.modelName,
+                      routing: res.routing,
+                      failover: res.failover,
+                      isStreaming: false,
+                      streamingState: 'done',
+                    }
+                  : prev
+              )
+
+              // Grounding validation runs ASYNCHRONOUSLY after done, never replacing active reading text
+              void (async () => {
+                try {
+                  const grounding = validateAnswerGrounding({
+                    answer: res.content,
+                    cv: activeCV,
+                    profile: activeCV,
+                    transcript: lines.map((l) => `${l.speaker}: ${l.original}`).join('\n'),
+                    session: [
+                      activeCvBg,
+                      res.retrieval?.citations?.map((c: any) => c.text).join('\n'),
+                    ]
+                      .filter(Boolean)
+                      .join('\n\n'),
+                    mode: 'balanced',
+                  })
+                  if (isMountedRef.current) {
+                    setCustomInterviewAnswer((prev) =>
+                      prev && prev.id === answerId ? { ...prev, grounding } : prev
+                    )
+                  }
+                } catch (gErr) {
+                  console.warn('[MeetingMode] Async grounding error:', gErr)
+                }
+              })()
+
+              // Save recovery & history only when stream completes
+              void window.api?.sessions?.recovery?.append({
+                eventId: `suggestion:${sessionIdRef.current}:${answerId}`,
+                sessionId: sessionIdRef.current,
+                type: 'suggestion',
+                timestamp: Date.now(),
+                payload: {
+                  id: answerId,
+                  type: 'answer',
+                  label: res.label,
+                  content: res.content,
+                  confidence: res.confidence,
+                  retrieval: res.retrieval,
+                  routing: res.routing,
+                  failover: res.failover,
+                },
+              })
+
+              const lastLine = lines[lines.length - 1]
+              aiSuggestionsHistoryRef.current.push({
+                id: answerId,
+                type: 'answer',
+                label: res.label,
+                content: res.content,
+                confidence: res.confidence,
+                retrieval: res.retrieval,
+                routing: res.routing,
+                failover: res.failover,
+                timestamp: lastLine?.timestamp || '00:00',
+                timestampMs: Date.now(),
+                triggeredByTranscriptId: lastLine?.id,
+                tokenUsage: res.contextUsage
+                  ? {
+                      promptTokens: res.contextUsage.totalTokens,
+                      totalTokens: res.contextUsage.totalTokens,
+                      costStatus: 'unknown',
+                    }
+                  : undefined,
+              })
+            },
+            onError: (err, partialText) => {
+              if (!isMountedRef.current) return
+              setIsGeneratingAIResponse(false)
+              if (partialText && partialText.trim()) {
+                setCustomInterviewAnswer((prev) =>
+                  prev && prev.id === answerId
+                    ? {
+                        ...prev,
+                        content: partialText,
+                        isStreaming: false,
+                        streamingState: 'interrupted',
+                      }
+                    : prev
+                )
+                const lastLine = lines[lines.length - 1]
+                aiSuggestionsHistoryRef.current.push({
+                  id: answerId,
+                  type: 'answer',
+                  label: '⚠️ Đã dừng giữa chừng',
+                  content: partialText,
+                  confidence: 80,
+                  timestamp: lastLine?.timestamp || '00:00',
+                  timestampMs: Date.now(),
+                  triggeredByTranscriptId: lastLine?.id,
+                })
+              } else {
+                setCustomInterviewAnswer(null)
+                setAiError(
+                  err?.message ||
+                    'Không gọi được LLM. Hãy kiểm tra API Key (Groq / Gemini / OpenAI) trong tab Cài đặt rồi thử lại.'
+                )
               }
-            : undefined,
-        })
+            },
+          }
+        )
       } else {
         // Ưu tiên tóm tắt vừa sinh (state React chưa kịp cập nhật ở thời điểm này).
         const summaryText = summaryOverride ?? meetingSummary ?? ''
@@ -849,7 +966,11 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         if (copilotDebounceTimerRef.current) clearTimeout(copilotDebounceTimerRef.current)
         const debounceMs = getAdaptiveDebounceMs(targetExchange.original)
         copilotDebounceTimerRef.current = setTimeout(async () => {
-          if (!isMountedRef.current || isGeneratingAIResponse) return
+          if (!isMountedRef.current) return
+          // Câu hỏi mới: hủy stream cũ nếu đang chạy và bắt đầu stream mới ngay
+          if (isGeneratingAIResponseRef.current) {
+            streamingAnswer.cancelStream()
+          }
           await handleGenerateCopilotResponse(validLinesRef.current, null, targetExchange)
         }, debounceMs)
       }
@@ -861,7 +982,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         clearTimeout(copilotDebounceTimerRef.current)
       }
     }
-  }, [validLines, mode, triggerMode, isListening, isCapturing, isGeneratingAIResponse, handleGenerateCopilotResponse])
+  }, [validLines, mode, triggerMode, isListening, isCapturing, handleGenerateCopilotResponse, streamingAnswer])
 
   const handleCopySummary = () => {
     if (!meetingSummary) return
@@ -1548,6 +1669,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           onDismissVisualQuestion={handleDismissVisualQuestion}
           onTriggerScreenCapture={handleTriggerScreenCapture}
           screenCaptureState={screenCaptureState}
+          onToggleCorrectedAnswer={handleToggleCorrectedAnswer}
         />
       </div>
 

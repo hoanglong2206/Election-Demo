@@ -1,5 +1,5 @@
 import type { CopilotInterviewResult } from './types'
-import { callUniversalLLM } from './universalLlm'
+import { callUniversalLLM, callUniversalLLMStream } from './universalLlm'
 import { looksLikeJson, stripCodeFences } from './parseOptions'
 import {
   languageInstruction,
@@ -20,11 +20,42 @@ import {
   type LocalRagOptions,
 } from './localRag'
 
-/**
- * Generates an interview answer personalized to the candidate CV and question.
- * Uses 4-Tier Context Architecture to keep prompt bounded and cost-efficient.
- */
-export async function generateInterviewAnswer(params: {
+export interface InterviewStreamInit {
+  label: string
+  strategy: {
+    strategyId: AnswerStrategyId
+    confidence: number
+    reasoningTags: string[]
+    outputSections: string[]
+  }
+  retrieval: {
+    citations: any[]
+    diagnostics: any
+  }
+  contextUsage: {
+    totalTokens: number
+    maxBudget: number
+    usagePercent: number
+    breakdown: any
+  }
+  groundingBase: {
+    cv: string
+    profile: string
+    transcript?: string
+    session?: string
+    mode: GroundingMode
+  }
+}
+
+export interface GenerateInterviewAnswerStreamCallbacks {
+  onInit?: (init: InterviewStreamInit) => void
+  onFirstToken?: (ttftMs: number) => void
+  onDelta: (delta: string) => void
+  onDone: (result: CopilotInterviewResult) => void
+  onError: (error: Error, partialText: string) => void
+}
+
+export interface GenerateInterviewAnswerParams {
   question: string
   cvSummary: string
   backgroundAnalysis?: string
@@ -41,7 +72,189 @@ export async function generateInterviewAnswer(params: {
     companyResearch?: string
     interviewNotes?: string
   }
-}): Promise<CopilotInterviewResult | null> {
+  signal?: AbortSignal
+}
+
+function buildInterviewPrompt(params: {
+  assembled: ReturnType<TieredContextManager['assembleContext']>
+  retrievalContext?: string
+  lang: ResponseLanguage
+  strategy: ReturnType<typeof answerStrategyRouter.get>
+  question: string
+  intent?: IntentDetectionResult | null
+}): string {
+  const { assembled, retrievalContext, lang, strategy, question, intent } = params
+  return `Bạn là AI Cố vấn phỏng vấn xuất sắc (Interview Copilot).
+Ứng viên đang tham gia phỏng vấn tuyển dụng trực tiếp.
+
+${assembled.fullPromptContext}
+
+${retrievalContext ? `Evidence citations available for grounding:\n${retrievalContext}` : ''}
+
+${languageInstruction(lang)}
+
+Framework câu trả lời: ${strategy.label}
+${strategy.buildPrompt({ question, intent })}
+
+QUY TẮC PHẢN HỒI (BẮT BUỘC TEXT THUẦN, KHÔNG JSON, KHÔNG THẺ TAG META):
+1. CÂU ĐẦU TIÊN (<= 20 từ): Trả lời trực diện, tự tin và rõ ràng vào trọng tâm câu hỏi để ứng viên có thể ĐỌC VÀ NÓI ĐƯỢC NGAY LẬP TỨC trong giây đầu tiên.
+2. PHẦN THÂN: Sau câu đầu tiên, xuống dòng và trình bày 3 đến 4 gạch đầu dòng ngắn gọn, súc tích mở rộng luận điểm.
+3. DỮ LIỆU: Chỉ lồng ghép dự án, số liệu và kinh nghiệm thực tế có trong CV và ngữ cảnh. Không bịa đặt thông tin.
+4. TỔNG ĐỘ DÀI: Từ 120 đến 180 từ.
+5. Tuyệt đối KHÔNG trả về JSON, KHÔNG bọc thẻ [FULL_ANSWER] hay [SHORT_ANSWER]. Viết trực tiếp câu trả lời text thuần.`
+}
+
+/**
+ * Generates interview answer in real-time streaming mode for TTFT < 1s.
+ * Initializes metadata (strategy, citations) synchronously/pre-stream.
+ */
+export async function generateInterviewAnswerStream(
+  params: GenerateInterviewAnswerParams,
+  callbacks: GenerateInterviewAnswerStreamCallbacks
+): Promise<() => void> {
+  const { question, cvSummary, backgroundAnalysis, transcriptLines, sessionId } = params
+  const lang = normalizeResponseLanguage(params.language)
+
+  if (!question || !question.trim()) {
+    callbacks.onError(new Error('Question is empty'), '')
+    return () => {}
+  }
+
+  const cm = params.contextManager || tieredContextManager
+  cm.setPermanentContext({
+    cvSummary,
+    backgroundAnalysis,
+  })
+  if (transcriptLines) {
+    cm.setTranscriptLines(transcriptLines)
+  }
+
+  const ragDocuments = createInterviewDocuments({
+    cv: cvSummary,
+    jobDescription: cm.getPermanentContext().jobDescription,
+    backgroundAnalysis,
+    projects: params.rag?.projects,
+    portfolioNotes: params.rag?.portfolioNotes,
+    companyResearch: params.rag?.companyResearch,
+    interviewNotes: params.rag?.interviewNotes,
+  })
+  await localRagIndex.indexDocuments(ragDocuments)
+  const retrieval = await localRagIndex.query(question, params.rag)
+
+  const assembled = cm.assembleContext(question, 'interview', {
+    permanentOverride: retrieval.context
+      ? `RETRIEVED EVIDENCE (use citations internally; do not invent facts):\n${retrieval.context}`
+      : undefined,
+  })
+
+  const selection = selectAnswerStrategy(
+    { question, intent: params.intent },
+    params.strategyOverride
+  )
+  const strategy = answerStrategyRouter.get(selection.strategyId)
+  const label = `✨ ${strategy.label}`
+
+  const outputSections = selection.strategyId === 'coding'
+    ? ['clarification', 'approach', 'optimal_solution', 'complexity', 'edge_cases', 'code']
+    : selection.strategyId === 'system_design'
+      ? ['requirements', 'assumptions', 'api', 'data_model', 'architecture', 'scalability', 'bottlenecks', 'tradeoffs']
+      : selection.strategyId === 'database'
+        ? ['alternatives', 'consistency', 'indexing', 'transactions', 'scalability', 'tradeoffs']
+        : selection.strategyId === 'behavioral' || selection.strategyId === 'leadership'
+          ? ['situation', 'task_or_context', 'action', 'result', 'learning']
+          : ['answer', 'example_or_tradeoffs']
+
+  const strategyMetadata = {
+    strategyId: selection.strategyId,
+    confidence: selection.confidence,
+    reasoningTags: selection.reasoningTags,
+    outputSections,
+  }
+
+  const contextUsage = {
+    totalTokens: assembled.estimatedTokens.total,
+    maxBudget: assembled.tokenBudget.totalMax,
+    usagePercent: assembled.usagePercent,
+    breakdown: assembled.estimatedTokens,
+  }
+
+  const groundingBase = {
+    cv: cvSummary,
+    profile: cvSummary,
+    transcript: transcriptLines?.map((line) => `${line.speaker}: ${line.original}`).join('\n'),
+    session: [backgroundAnalysis, retrieval.context].filter(Boolean).join('\n\n'),
+    mode: params.groundingMode || 'balanced',
+  } as const
+
+  callbacks.onInit?.({
+    label,
+    strategy: strategyMetadata,
+    retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
+    contextUsage,
+    groundingBase,
+  })
+
+  const prompt = buildInterviewPrompt({
+    assembled,
+    retrievalContext: retrieval.context,
+    lang,
+    strategy,
+    question,
+    intent: params.intent,
+  })
+
+  let accumulated = ''
+
+  return callUniversalLLMStream(
+    prompt,
+    {
+      onFirstToken: (ttftMs) => {
+        callbacks.onFirstToken?.(ttftMs)
+      },
+      onDelta: (delta) => {
+        accumulated += delta
+        callbacks.onDelta(delta)
+      },
+      onDone: (rawRes) => {
+        const text = stripCodeFences(accumulated || rawRes.text)
+        const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+        const shortContent = lines.slice(0, 3).join('\n')
+
+        callbacks.onDone({
+          label,
+          content: text,
+          shortContent: shortContent || text,
+          confidence: 97,
+          modelName: rawRes.modelName,
+          isRealLLM: true,
+          contextUsage,
+          strategy: strategyMetadata,
+          retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
+          routing: rawRes.routing,
+          failover: rawRes.failover,
+        })
+      },
+      onError: (err, partialText) => {
+        callbacks.onError(err, accumulated || partialText)
+      },
+    },
+    {
+      maxTokens: 600,
+      temperature: 0.3,
+      sessionId,
+      feature: 'copilot_interview',
+      signal: params.signal,
+    }
+  )
+}
+
+/**
+ * Generates an interview answer personalized to the candidate CV and question.
+ * Backward compatible wrapper for non-streaming callers.
+ */
+export async function generateInterviewAnswer(
+  params: GenerateInterviewAnswerParams
+): Promise<CopilotInterviewResult | null> {
   const { question, cvSummary, backgroundAnalysis, transcriptLines, sessionId } = params
   const lang = normalizeResponseLanguage(params.language)
 
@@ -74,36 +287,21 @@ export async function generateInterviewAnswer(params: {
   })
   const selection = selectAnswerStrategy(
     { question, intent: params.intent },
-    params.strategyOverride,
+    params.strategyOverride
   )
   const strategy = answerStrategyRouter.get(selection.strategyId)
 
-  const prompt = `Bạn là AI Cố vấn phỏng vấn xuất sắc (Interview Copilot).
-Ứng viên đang tham gia phỏng vấn tuyển dụng.
-
-${assembled.fullPromptContext}
-
-${retrieval.context ? `Evidence citations available for grounding:\n${retrieval.context}` : ''}
-
-${languageInstruction(lang)}
-
-Yêu cầu phản hồi:
-1. Đưa ra câu trả lời phỏng vấn xuất sắc, tự tin, TRẢ LỜI ĐÚNG trọng tâm câu hỏi vừa nêu ở TẦNG 4.
-2. Phải nối tiếp mạch hội thoại trong TẦNG 2 & TẦNG 3 ở trên — nếu người phỏng vấn đang hỏi tiếp về một chủ đề đã trao đổi, hãy trả lời nhất quán với những gì đã nói trước đó.
-3. Framework được chọn: ${strategy.label}.
-   ${strategy.buildPrompt({ question, intent: params.intent })}
-4. Nếu câu hỏi liên quan đến kiến thức/kinh nghiệm có trong CV (TẦNG 1), chỉ lồng ghép dự án, số liệu và kinh nghiệm thực tế có trong CV/transcript.
-5. Không bịa ra công nghệ, dự án hay số liệu không có trong CV/transcript.
-6. Mặc định giữ câu trả lời ngắn cho teleprompter; ưu tiên 3-6 ý chính và mở rộng chỉ khi cần.
-
-Trả về chính xác theo định dạng sau:
-[FULL_ANSWER]
-(Nội dung câu trả lời hoàn chỉnh, chi tiết, chuyên nghiệp)
-[SHORT_ANSWER]
-(Bản rút gọn súc tích 2-3 gạch đầu dòng các ý chính cần nói)`
+  const prompt = buildInterviewPrompt({
+    assembled,
+    retrievalContext: retrieval.context,
+    lang,
+    strategy,
+    question,
+    intent: params.intent,
+  })
 
   const rawRes = await callUniversalLLM(prompt, {
-    maxTokens: 750,
+    maxTokens: 600,
     temperature: 0.3,
     sessionId,
     feature: 'copilot_interview',
@@ -112,9 +310,11 @@ Trả về chính xác theo định dạng sau:
 
   const text = stripCodeFences(rawRes.text)
   if (!text) return null
+  if (looksLikeJson(text)) {
+    console.warn('[interview] LLM returned unparseable JSON — refusing to render it raw')
+    return null
+  }
 
-  // Label intentionally carries no provider/model annotation — that is already
-  // surfaced by the pane header badge and the footer.
   const label = `✨ ${strategy.label}`
   const outputSections = selection.strategyId === 'coding'
     ? ['clarification', 'approach', 'optimal_solution', 'complexity', 'edge_cases', 'code']
@@ -135,73 +335,32 @@ Trả về chính xác theo định dạng sau:
     cv: cvSummary,
     profile: cvSummary,
     transcript: transcriptLines?.map((line) => `${line.speaker}: ${line.original}`).join('\n'),
-    session: backgroundAnalysis,
+    session: [backgroundAnalysis, retrieval.context].filter(Boolean).join('\n\n'),
     mode: params.groundingMode || 'balanced',
   } as const
 
-  // Model ignored the [FULL_ANSWER]/[SHORT_ANSWER] contract — still surface its
-  // real output rather than dropping it, unless it is a raw JSON blob (which is
-  // never meant to be shown to the user).
-  if (!text.includes('[FULL_ANSWER]')) {
-    if (looksLikeJson(text)) {
-      console.warn('[interview] LLM returned unparseable JSON — refusing to render it raw')
-      return null
-    }
-    const grounding = validateAnswerGrounding({
-      answer: text,
-      ...groundingBase,
-      session: [groundingBase.session, retrieval.context].filter(Boolean).join('\n\n'),
-    })
-    const contextUsage = {
-      totalTokens: assembled.estimatedTokens.total,
-      maxBudget: assembled.tokenBudget.totalMax,
-      usagePercent: assembled.usagePercent,
-      breakdown: assembled.estimatedTokens,
-    }
-
-    return {
-      label,
-      content: grounding.correctedAnswer,
-      shortContent: grounding.correctedAnswer
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .slice(0, 3)
-        .join('\n'),
-      confidence: 95,
-      modelName: rawRes.modelName,
-      isRealLLM: true,
-      contextUsage,
-      strategy: strategyMetadata,
-      grounding,
-      retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
-      routing: rawRes.routing,
-      failover: rawRes.failover,
-    }
+  const grounding = validateAnswerGrounding({
+    answer: text,
+    ...groundingBase,
+  })
+  const contextUsage = {
+    totalTokens: assembled.estimatedTokens.total,
+    maxBudget: assembled.tokenBudget.totalMax,
+    usagePercent: assembled.usagePercent,
+    breakdown: assembled.estimatedTokens,
   }
 
-  const parts = text.split('[SHORT_ANSWER]')
-  const full = parts[0].replace('[FULL_ANSWER]', '').trim()
-  const short = parts[1] ? parts[1].trim() : full.split('\n').slice(0, 3).join('\n')
-  const grounding = validateAnswerGrounding({
-    answer: full,
-    ...groundingBase,
-    session: [groundingBase.session, retrieval.context].filter(Boolean).join('\n\n'),
-  })
+  const lines = (grounding.correctedAnswer || text).split('\n').map((l) => l.trim()).filter(Boolean)
+  const shortContent = lines.slice(0, 3).join('\n')
 
   return {
     label,
-    content: grounding.correctedAnswer,
-    shortContent: grounding.correctedAnswer || short,
+    content: grounding.correctedAnswer || text,
+    shortContent,
     confidence: 97,
     modelName: rawRes.modelName,
     isRealLLM: true,
-    contextUsage: {
-      totalTokens: assembled.estimatedTokens.total,
-      maxBudget: assembled.tokenBudget.totalMax,
-      usagePercent: assembled.usagePercent,
-      breakdown: assembled.estimatedTokens,
-    },
+    contextUsage,
     strategy: strategyMetadata,
     grounding,
     retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
@@ -209,3 +368,4 @@ Trả về chính xác theo định dạng sau:
     failover: rawRes.failover,
   }
 }
+
