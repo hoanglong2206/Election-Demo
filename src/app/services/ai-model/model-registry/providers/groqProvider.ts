@@ -1,21 +1,8 @@
 import { BaseAIProvider } from './base'
 import type { DiscoveredModel } from '../types'
-import type { STTEngineConfig } from '../../types'
-import {
-  extractVersion,
-  extractParamSize,
-  isNonChatModel,
-  isReasoningModel,
-  isCodingModel,
-  isFastTierModel,
-  isProTierModel,
-  cleanAndFormatDisplayName,
-  formatContextTokens,
-  generateDynamicRecommendation,
-  calculateDynamicModelScore,
-} from '../../modelHeuristics'
+import { cleanAndFormatDisplayName } from '../../modelHeuristics'
 
-interface GroqRawModel {
+export interface GroqRawModel {
   id: string
   object?: string
   created?: number

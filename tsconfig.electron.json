@@ -15,7 +15,7 @@
 
     /* Emit */
     "outDir": "dist-electron",
-    "rootDir": "src/electron",
+    "rootDir": "src",
     "noEmit": false,
     "sourceMap": true,
     "declaration": false,
@@ -26,6 +26,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/electron/**/*.ts"],
-  "exclude": ["src/electron/**/__tests__/**/*"]
+  "include": ["src/electron/**/*.ts", "src/common/**/*.ts"],
+  "exclude": ["src/electron/**/__tests__/**/*", "src/common/**/__tests__/**/*"]
 }

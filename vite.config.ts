@@ -13,6 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src/app'),
+      '@common': path.resolve(import.meta.dirname, './src/common'),
     },
   },
   base: './',

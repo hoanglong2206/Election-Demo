@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "predev": "node -e \"const {execSync}=require('child_process');try{execSync('npx -y kill-port 5173',{stdio:'inherit'})}catch(_){}\"",
     "dev": "bun run build:electron && concurrently -k -n VITE,ELECTRON -c cyan,magenta \"bun run dev:vite\" \"bun run dev:electron\"",

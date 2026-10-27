@@ -714,7 +714,20 @@ export class UsageTrackerService {
    * Seed demo data for local charts preview.
    */
   public seedDemoData(): void {
-    const sampleModels = [
+    interface SampleModelItem {
+      provider: string
+      model: string
+      feature: UsageRecord['feature']
+      inMin?: number
+      inMax?: number
+      outMin?: number
+      outMax?: number
+      cacheMin?: number
+      cacheMax?: number
+      audioSec?: number
+    }
+
+    const sampleModels: SampleModelItem[] = [
       { provider: 'Google', model: 'gemini-2.5-flash', feature: 'copilot_interview' as const, inMin: 900, inMax: 2400, outMin: 300, outMax: 800, cacheMin: 200, cacheMax: 600 },
       { provider: 'OpenAI', model: 'gpt-4o', feature: 'copilot_discussion' as const, inMin: 1200, inMax: 3100, outMin: 450, outMax: 950, cacheMin: 400, cacheMax: 1200 },
       { provider: 'OpenAI', model: 'gpt-4o-mini', feature: 'exchange_scanner' as const, inMin: 600, inMax: 1500, outMin: 150, outMax: 400, cacheMin: 0, cacheMax: 0 },
@@ -735,10 +748,10 @@ export class UsageTrackerService {
         const item = sampleModels[Math.floor(Math.random() * sampleModels.length)]
         const timestamp = dayBase + (req * 3 + Math.floor(Math.random() * 2)) * 3600 * 1000
 
-        const inputTokens = 'inMin' in item ? Math.floor(Math.random() * (item.inMax - item.inMin)) + item.inMin : undefined
-        const outputTokens = 'outMin' in item ? Math.floor(Math.random() * (item.outMax - item.outMin)) + item.outMin : undefined
-        const cachedTokens = 'cacheMin' in item && item.cacheMax > 0 ? Math.floor(Math.random() * (item.cacheMax - item.cacheMin)) + item.cacheMin : undefined
-        const audioDurationSeconds = 'audioSec' in item ? item.audioSec + Math.floor(Math.random() * 30) : undefined
+        const inputTokens = item.inMin !== undefined && item.inMax !== undefined ? Math.floor(Math.random() * (item.inMax - item.inMin)) + item.inMin : undefined
+        const outputTokens = item.outMin !== undefined && item.outMax !== undefined ? Math.floor(Math.random() * (item.outMax - item.outMin)) + item.outMin : undefined
+        const cachedTokens = item.cacheMin !== undefined && item.cacheMax !== undefined && item.cacheMax > 0 ? Math.floor(Math.random() * (item.cacheMax - item.cacheMin)) + item.cacheMin : undefined
+        const audioDurationSeconds = item.audioSec !== undefined ? item.audioSec + Math.floor(Math.random() * 30) : undefined
 
         const costCalc = pricingRegistry.calculateCost(item.provider, item.model, {
           inputTokens,

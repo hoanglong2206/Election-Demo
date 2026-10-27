@@ -19,7 +19,8 @@
 
     /* Path aliases */
     "paths": {
-      "@/*": ["./src/app/*"]
+      "@/*": ["./src/app/*"],
+      "@common/*": ["./src/common/*"]
     },
 
     /* Linting */

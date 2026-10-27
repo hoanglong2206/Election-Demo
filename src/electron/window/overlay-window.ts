@@ -1,4 +1,4 @@
-import { BrowserWindow, screen } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -80,7 +80,7 @@ export function createOverlayWindow(): BrowserWindow {
     void win.loadURL(devUrl)
     win.webContents.openDevTools({ mode: 'detach', activate: false })
   } else {
-    void win.loadFile(path.join(__dirname, '../dist/index.html'))
+    void win.loadFile(path.join(app.getAppPath(), 'dist/index.html'))
   }
 
   // ── Window event handlers ──────────────────────────────────────────────────

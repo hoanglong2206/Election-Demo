@@ -1,20 +1,8 @@
 import { BaseAIProvider } from './base'
 import type { DiscoveredModel } from '../types'
-import {
-  extractVersion,
-  extractParamSize,
-  isNonChatModel,
-  isReasoningModel,
-  isCodingModel,
-  isFastTierModel,
-  isProTierModel,
-  cleanAndFormatDisplayName,
-  formatContextTokens,
-  generateDynamicRecommendation,
-  calculateDynamicModelScore,
-} from '../../modelHeuristics'
+import { cleanAndFormatDisplayName } from '../../modelHeuristics'
 
-interface GoogleRawModel {
+export interface GoogleRawModel {
   name: string
   version?: string
   displayName?: string

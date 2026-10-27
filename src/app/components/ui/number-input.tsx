@@ -3,7 +3,7 @@ import { ChevronUp, ChevronDown, Plus, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface NumberInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value' | 'prefix'> {
   value: string | number
   onChange?: (value: string) => void
   onValueChange?: (numValue: number) => void
