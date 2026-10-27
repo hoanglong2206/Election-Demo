@@ -92,7 +92,7 @@ async function streamDirectFetch(
       max_completion_tokens: maxTokens,
       ...(!reasoningModel ? { temperature } : {}),
       stream: true,
-      ...(provider === 'OpenAI' ? { stream_options: { include_usage: true } } : {}),
+      ...(provider === 'OpenAI' || provider === 'Groq' ? { stream_options: { include_usage: true } } : {}),
     }
   } else if (provider === 'Google') {
     let cleanModelId = modelId.replace(/^models\//, '')
@@ -217,6 +217,7 @@ export async function callUniversalLLMStream(
     ? undefined
     : router.decide({
         feature: options?.feature || 'general',
+        sessionId: options?.sessionId,
         ...options?.routing,
         policy: options?.routing?.policy || settingsManager.get('modelRouterPolicy'),
         manualModelId: options?.modelId || options?.routing?.manualModelId,
@@ -317,15 +318,22 @@ export async function callUniversalLLMStream(
       cachedTokens: usage?.cachedTokens,
     })
 
+    const inTok = usageRecord.inputTokens || 0
+    const cachedTok = usageRecord.cachedTokens || 0
+    const uncachedTok = Math.max(0, inTok - cachedTok)
+    const cacheHitRate = inTok > 0 && cachedTok > 0 ? Math.round((cachedTok / inTok) * 100) : 0
+
     callbacks.onDone({
       text: accumulatedCleanedText || resText.trim(),
       modelId: candidate.id,
       modelName: candidate.name,
       provider: resolvedProvider,
       usage: {
-        inputTokens: usageRecord.inputTokens || 0,
+        inputTokens: inTok,
         outputTokens: usageRecord.outputTokens || 0,
-        cachedTokens: usageRecord.cachedTokens,
+        cachedTokens: cachedTok,
+        uncachedTokens: uncachedTok,
+        cacheHitRate,
         estimatedCostUsd: usageRecord.estimatedCostUsd,
       },
       routing: routingDecision,

@@ -23,6 +23,7 @@ export interface ModelRouterConfig {
 
 export interface ModelRouterRequest {
   feature: AIUsageFeature | string
+  sessionId?: string
   intentType?: string
   requiredModality?: RequestModality
   contextTokens?: number
@@ -51,6 +52,7 @@ export interface RoutingDecision {
   policy: RoutingPolicy
   reason: string
   isManualOverride: boolean
+  isSessionAffinity?: boolean
   budgetRemainingUsd: number | null
   candidates: RoutingCandidateScore[]
   timestamp: number
@@ -136,6 +138,7 @@ export class SmartModelRouter {
   private readonly config: ModelRouterConfig
   private readonly metrics = loadMetrics()
   private readonly getModels: () => DiscoveredModel[]
+  private readonly sessionAffinity = new Map<string, { modelId: string; provider: string }>()
 
   constructor(
     config: Partial<ModelRouterConfig> = {},
@@ -154,6 +157,18 @@ export class SmartModelRouter {
       ...this.config,
       weights: { ...this.config.weights },
     }
+  }
+
+  public clearSessionAffinity(sessionId?: string): void {
+    if (sessionId) {
+      this.sessionAffinity.delete(`session_${sessionId}`)
+    } else {
+      this.sessionAffinity.clear()
+    }
+  }
+
+  public getSessionAffinity(sessionId: string): { modelId: string; provider: string } | null {
+    return this.sessionAffinity.get(`session_${sessionId}`) || null
   }
 
   decide(request: ModelRouterRequest): RoutingDecision {
@@ -198,12 +213,37 @@ export class SmartModelRouter {
       return score
     })
 
+    // Check session affinity if feature is copilot and sessionId is provided
+    const isCopilot = request.feature?.startsWith('copilot')
+    const stickyKey = request.sessionId && isCopilot ? `session_${request.sessionId}` : null
+    let stickyCandidate: DiscoveredModel | undefined
+    let isAffinityHit = false
+
+    if (stickyKey && !request.manualModelId && this.sessionAffinity.has(stickyKey)) {
+      const affinity = this.sessionAffinity.get(stickyKey)!
+      const found = models.find((m) => m.id === affinity.modelId)
+      if (
+        found &&
+        !this.getExclusionReason(found, request, budgetRemainingUsd) &&
+        providerCircuitBreaker.canRequest(String(found.provider))
+      ) {
+        stickyCandidate = found
+        isAffinityHit = true
+      }
+    }
+
     const override = request.manualModelId && models.find((model) => model.id === request.manualModelId)
     const selected = override && !this.getExclusionReason(override, request, budgetRemainingUsd)
       ? override
-      : models
+      : stickyCandidate || models
         .filter((model) => !this.getExclusionReason(model, request, budgetRemainingUsd))
         .sort((left, right) => this.scoreFor(right, candidates) - this.scoreFor(left, candidates))[0]
+
+    // Preserve sticky session affinity with the actively selected model
+    if (stickyKey && selected) {
+      this.sessionAffinity.set(stickyKey, { modelId: selected.id, provider: String(selected.provider) })
+    }
+
     const fallbackChain = models
       .filter((model) =>
         model.id !== selected?.id &&
@@ -213,16 +253,21 @@ export class SmartModelRouter {
       .sort((left, right) => this.scoreFor(right, candidates) - this.scoreFor(left, candidates))
       .map((model) => ({ modelId: model.id, provider: String(model.provider) }))
 
+    const reason = override
+      ? 'manual_override'
+      : isAffinityHit
+        ? 'session_affinity_cache_preserve'
+        : selected
+          ? (stickyKey && this.sessionAffinity.has(stickyKey) ? 'session_affinity_failover' : 'highest_constraint_compatible_score')
+          : 'no_model_satisfied_constraints'
+
     return {
       selectedModelId: selected?.id || null,
       selectedProvider: selected?.provider,
       policy,
-      reason: override
-        ? 'manual_override'
-        : selected
-          ? 'highest_constraint_compatible_score'
-          : 'no_model_satisfied_constraints',
+      reason,
       isManualOverride: Boolean(override),
+      isSessionAffinity: isAffinityHit,
       budgetRemainingUsd,
       candidates: candidates.sort((left, right) => right.score - left.score),
       timestamp: Date.now(),

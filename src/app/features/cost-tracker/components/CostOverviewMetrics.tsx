@@ -43,6 +43,10 @@ export function CostOverviewMetrics({ summary, budget }: CostOverviewMetricsProp
 
   // Estimated cache savings in USD (~50% discount on input price)
   const estimatedSavedUsd = Number(((summary.totalCachedTokens / 1_000_000) * 1.25).toFixed(4))
+  const cacheHitRate = summary.totalInputTokens > 0
+    ? Math.round((summary.totalCachedTokens / summary.totalInputTokens) * 1000) / 10
+    : 0
+  const uncachedInput = Math.max(0, summary.totalInputTokens - summary.totalCachedTokens)
 
   // Average cost per request
   const avgCostPerReq =
@@ -147,8 +151,16 @@ export function CostOverviewMetrics({ summary, budget }: CostOverviewMetricsProp
             <Sparkles className="w-3.5 h-3.5 text-violet-400" />
             Prompt Caching
           </span>
-          <Badge variant="outline" className="text-[8.5px] px-1 py-0 bg-violet-500/15 text-violet-300 border-violet-500/30">
-            Giảm 50-80%
+          <Badge
+            variant="outline"
+            className={cn(
+              'text-[8.5px] px-1 py-0 font-mono',
+              cacheHitRate >= 70
+                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                : 'bg-violet-500/15 text-violet-300 border-violet-500/30'
+            )}
+          >
+            {cacheHitRate > 0 ? `Hit ${cacheHitRate}%` : 'Giảm 50-80%'}
           </Badge>
         </div>
 
@@ -159,17 +171,20 @@ export function CostOverviewMetrics({ summary, budget }: CostOverviewMetricsProp
               : '0'}
           </div>
           <div className="text-[10px] text-white/40 mt-1 flex items-center justify-between">
-            <span>Tiết kiệm ước tính:</span>
+            <span>Tiết kiệm / Chưa cache:</span>
             <span className="font-mono text-emerald-400 font-semibold">
-              +${estimatedSavedUsd}
+              +${estimatedSavedUsd} <span className="text-white/30 font-normal">| {uncachedInput.toLocaleString()} tok</span>
             </span>
           </div>
         </div>
 
         <div className="w-full bg-white/[0.04] h-1 rounded-full overflow-hidden">
           <div
-            className="bg-violet-400 h-full rounded-full transition-all"
-            style={{ width: `${summary.totalCachedTokens > 0 ? 100 : 0}%` }}
+            className={cn(
+              'h-full rounded-full transition-all',
+              cacheHitRate >= 70 ? 'bg-emerald-400' : 'bg-violet-400'
+            )}
+            style={{ width: `${Math.min(100, Math.max(cacheHitRate > 0 ? cacheHitRate : (summary.totalCachedTokens > 0 ? 100 : 0)))}%` }}
           />
         </div>
       </Card>

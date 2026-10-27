@@ -1,15 +1,16 @@
 import type { AppMode } from '@/types/electron.d'
 import { callUniversalLLM } from './universalLlm'
 import { stripCodeFences } from './parseOptions'
+import { getOrCreateCandidateBrief } from './candidateBrief'
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
  * TIERED CONTEXT ARCHITECTURE
  * ─────────────────────────────────────────────────────────────────────────────
- * Tier 1: Permanent Context  — CV, JD, user preferences, meeting objective (~1500 tokens)
- * Tier 2: Session Memory     — Rolling summary, decisions, facts, topics (~1000 tokens)
- * Tier 3: Short-Term Memory  — 10-20 most recent conversational utterances (~1500 tokens)
- * Tier 4: Current Input      — Active question / immediate user prompt (~500 tokens)
+ * Tier 1: Permanent Context  — CandidateBrief / CV / JD (~600–900 tokens)
+ * Tier 2: Session Memory     — Rolling summary, decisions, facts (~400–600 tokens)
+ * Tier 3: Short-Term Memory  — 3-5 most recent conversational utterances (~300–500 tokens)
+ * Tier 4: Current Input      — Active question / immediate user prompt (~300–400 tokens)
  *
  * Priority Rule on Exceeding Budget:
  * Current Input (P1) > Short-Term Memory (P2) > Session Memory (P3) > Permanent Context (P4)
@@ -47,11 +48,11 @@ export interface LayerTokenBudget {
 }
 
 export const DEFAULT_TOKEN_BUDGET: LayerTokenBudget = {
-  permanent: 1500,
-  sessionMemory: 1000,
-  shortTerm: 1500,
-  currentInput: 600,
-  totalMax: 4600,
+  permanent: 1200,
+  sessionMemory: 600,
+  shortTerm: 600,
+  currentInput: 400,
+  totalMax: 2800,
 }
 
 export interface TranscriptUtterance {
@@ -63,6 +64,7 @@ export interface TranscriptUtterance {
 
 export interface ContextAssemblyOptions {
   permanentOverride?: string
+  fullContext?: boolean
 }
 
 export interface AssembledContext {
@@ -141,10 +143,10 @@ export class TieredContextManager {
   private budget: LayerTokenBudget
   private isSummarizingIncremental = false
 
-  // Incremental threshold: when unsummarized old lines reach 20 lines
-  private readonly BATCH_THRESHOLD = 20
-  // Short-term memory window kept raw
-  private readonly RECENT_WINDOW = 15
+  // Incremental threshold: when unsummarized old lines reach 10 lines
+  private readonly BATCH_THRESHOLD = 10
+  // Short-term memory window kept raw (last 5 turns)
+  private readonly RECENT_WINDOW = 5
 
   private visualQuestions: Array<{
     id: string
@@ -225,6 +227,30 @@ export class TieredContextManager {
 
   public setPermanentContext(context: PermanentContext): void {
     this.permanent = { ...this.permanent, ...context }
+  }
+
+  public getCandidateContext(fullContext = false): string {
+    if (fullContext) {
+      const parts = [
+        this.permanent.cvSummary ? `HỒ SƠ CV ỨNG VIÊN:\n${this.permanent.cvSummary}` : '',
+        this.permanent.jobDescription ? `MÔ TẢ CÔNG VIỆC (JD):\n${this.permanent.jobDescription}` : '',
+        this.permanent.backgroundAnalysis ? `PHÂN TÍCH CV NÂNG CAO:\n${this.permanent.backgroundAnalysis}` : '',
+      ].filter(Boolean)
+      return parts.join('\n\n')
+    }
+
+    if (this.permanent.cvSummary) {
+      const brief = getOrCreateCandidateBrief({
+        cvText: this.permanent.cvSummary,
+        jdText: this.permanent.jobDescription,
+        backgroundAnalysis: this.permanent.backgroundAnalysis,
+        role: this.permanent.role,
+        companyName: this.permanent.companyName,
+      })
+      return brief.formattedBriefText
+    }
+
+    return ''
   }
 
   public getPermanentContext(): PermanentContext {
@@ -451,14 +477,26 @@ Trả về kết quả duy nhất ở định dạng JSON hợp lệ:
           `HƯỚNG DẪN RIÊNG CHO AI (CUSTOM INSTRUCTIONS):\n${this.permanent.customInstructions}`
         )
       }
-      if (this.permanent.cvSummary) {
-        permParts.push(`HỒ SƠ CV ỨNG VIÊN:\n${this.permanent.cvSummary}`)
-      }
-      if (this.permanent.jobDescription) {
-        permParts.push(`MÔ TẢ CÔNG VIỆC (JD):\n${this.permanent.jobDescription}`)
-      }
-      if (this.permanent.backgroundAnalysis) {
-        permParts.push(`PHÂN TÍCH CV NÂNG CAO:\n${this.permanent.backgroundAnalysis}`)
+      if (options?.fullContext) {
+        if (this.permanent.cvSummary) {
+          permParts.push(`HỒ SƠ CV ỨNG VIÊN:\n${this.permanent.cvSummary}`)
+        }
+        if (this.permanent.jobDescription) {
+          permParts.push(`MÔ TẢ CÔNG VIỆC (JD):\n${this.permanent.jobDescription}`)
+        }
+        if (this.permanent.backgroundAnalysis) {
+          permParts.push(`PHÂN TÍCH CV NÂNG CAO:\n${this.permanent.backgroundAnalysis}`)
+        }
+      } else if (this.permanent.cvSummary) {
+        // Compress CV + JD into concise CandidateBrief (~600–900 tokens)
+        const brief = getOrCreateCandidateBrief({
+          cvText: this.permanent.cvSummary,
+          jdText: this.permanent.jobDescription,
+          backgroundAnalysis: this.permanent.backgroundAnalysis,
+          role: this.permanent.role,
+          companyName: this.permanent.companyName,
+        })
+        permParts.push(brief.formattedBriefText)
       }
     } else {
       if (this.permanent.discussionTopic || this.permanent.meetingObjective) {

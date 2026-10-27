@@ -19,6 +19,9 @@ import {
   localRagIndex,
   type LocalRagOptions,
 } from './localRag'
+import { buildStaticSystemPrefix, buildDynamicUserPrompt } from './promptTemplate'
+import { isFullContextNeeded } from './candidateBrief'
+import { usageTrackerService } from '../../usage-tracker'
 
 export interface InterviewStreamInit {
   label: string
@@ -73,9 +76,13 @@ export interface GenerateInterviewAnswerParams {
     interviewNotes?: string
   }
   signal?: AbortSignal
+  fullContext?: boolean
 }
 
-function buildInterviewPrompt(params: {
+/**
+ * Backward compatible prompt generator (delegates to static prefix + dynamic user prompt).
+ */
+export function buildInterviewPrompt(params: {
   assembled: ReturnType<TieredContextManager['assembleContext']>
   retrievalContext?: string
   lang: ResponseLanguage
@@ -106,7 +113,7 @@ QUY TẮC PHẢN HỒI (BẮT BUỘC TEXT THUẦN, KHÔNG JSON, KHÔNG THẺ TAG
 
 /**
  * Generates interview answer in real-time streaming mode for TTFT < 1s.
- * Initializes metadata (strategy, citations) synchronously/pre-stream.
+ * Leverages byte-identical static prefix caching across turns to minimize token costs.
  */
 export async function generateInterviewAnswerStream(
   params: GenerateInterviewAnswerParams,
@@ -141,10 +148,21 @@ export async function generateInterviewAnswerStream(
   await localRagIndex.indexDocuments(ragDocuments)
   const retrieval = await localRagIndex.query(question, params.rag)
 
+  const useFullContext = params.fullContext ?? isFullContextNeeded(question)
+  const candidateContext = cm.getCandidateContext(useFullContext)
+  const perm = cm.getPermanentContext()
+
+  // 1. Static Prefix: 100% byte-invariant across turns for prompt caching
+  const systemPrompt = buildStaticSystemPrefix({
+    candidateContext,
+    role: perm.role,
+    companyName: perm.companyName,
+    customInstructions: perm.customInstructions,
+  })
+
+  // 2. Assemble dynamic context (rolling session summary + short-term utterances)
   const assembled = cm.assembleContext(question, 'interview', {
-    permanentOverride: retrieval.context
-      ? `RETRIEVED EVIDENCE (use citations internally; do not invent facts):\n${retrieval.context}`
-      : undefined,
+    fullContext: useFullContext,
   })
 
   const selection = selectAnswerStrategy(
@@ -194,19 +212,20 @@ export async function generateInterviewAnswerStream(
     groundingBase,
   })
 
-  const prompt = buildInterviewPrompt({
-    assembled,
-    retrievalContext: retrieval.context,
-    lang,
-    strategy,
+  // 3. Dynamic User Prompt: Strategy directive + top-k RAG + rolling summary + recent turns + question
+  const dynamicPrompt = buildDynamicUserPrompt({
     question,
-    intent: params.intent,
+    strategyDirective: `${strategy.label}\n${strategy.buildPrompt({ question, intent: params.intent })}`,
+    retrievalContext: retrieval.context,
+    sessionMemoryBlock: assembled.sessionMemoryBlock,
+    recentTranscriptBlock: assembled.shortTermBlock,
+    lang,
   })
 
   let accumulated = ''
 
   return callUniversalLLMStream(
-    prompt,
+    dynamicPrompt,
     {
       onFirstToken: (ttftMs) => {
         callbacks.onFirstToken?.(ttftMs)
@@ -232,6 +251,7 @@ export async function generateInterviewAnswerStream(
           retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
           routing: rawRes.routing,
           failover: rawRes.failover,
+          usage: rawRes.usage,
         })
       },
       onError: (err, partialText) => {
@@ -241,6 +261,7 @@ export async function generateInterviewAnswerStream(
     {
       maxTokens: 600,
       temperature: 0.3,
+      systemPrompt,
       sessionId,
       feature: 'copilot_interview',
       signal: params.signal,
@@ -249,7 +270,7 @@ export async function generateInterviewAnswerStream(
 }
 
 /**
- * Generates an interview answer personalized to the candidate CV and question.
+ * Generates an interview answer personalized to candidate CV and question.
  * Backward compatible wrapper for non-streaming callers.
  */
 export async function generateInterviewAnswer(
@@ -280,29 +301,44 @@ export async function generateInterviewAnswer(
   })
   await localRagIndex.indexDocuments(ragDocuments)
   const retrieval = await localRagIndex.query(question, params.rag)
-  const assembled = cm.assembleContext(question, 'interview', {
-    permanentOverride: retrieval.context
-      ? `RETRIEVED EVIDENCE (use citations internally; do not invent facts):\n${retrieval.context}`
-      : undefined,
+
+  const useFullContext = params.fullContext ?? isFullContextNeeded(question)
+  const candidateContext = cm.getCandidateContext(useFullContext)
+  const perm = cm.getPermanentContext()
+
+  // 1. Static Prefix: 100% byte-invariant across turns for prompt caching
+  const systemPrompt = buildStaticSystemPrefix({
+    candidateContext,
+    role: perm.role,
+    companyName: perm.companyName,
+    customInstructions: perm.customInstructions,
   })
+
+  // 2. Assemble dynamic context (rolling session summary + short-term utterances)
+  const assembled = cm.assembleContext(question, 'interview', {
+    fullContext: useFullContext,
+  })
+
   const selection = selectAnswerStrategy(
     { question, intent: params.intent },
     params.strategyOverride
   )
   const strategy = answerStrategyRouter.get(selection.strategyId)
 
-  const prompt = buildInterviewPrompt({
-    assembled,
-    retrievalContext: retrieval.context,
-    lang,
-    strategy,
+  // 3. Dynamic User Prompt: Strategy directive + top-k RAG + rolling summary + recent turns + question
+  const dynamicPrompt = buildDynamicUserPrompt({
     question,
-    intent: params.intent,
+    strategyDirective: `${strategy.label}\n${strategy.buildPrompt({ question, intent: params.intent })}`,
+    retrievalContext: retrieval.context,
+    sessionMemoryBlock: assembled.sessionMemoryBlock,
+    recentTranscriptBlock: assembled.shortTermBlock,
+    lang,
   })
 
-  const rawRes = await callUniversalLLM(prompt, {
+  const rawRes = await callUniversalLLM(dynamicPrompt, {
     maxTokens: 600,
     temperature: 0.3,
+    systemPrompt,
     sessionId,
     feature: 'copilot_interview',
   })
@@ -366,6 +402,84 @@ export async function generateInterviewAnswer(
     retrieval: { citations: retrieval.citations, diagnostics: retrieval.diagnostics },
     routing: rawRes.routing,
     failover: rawRes.failover,
+    usage: rawRes.usage,
   }
 }
 
+export interface PrewarmCopilotCacheParams {
+  cvSummary: string
+  jobDescription?: string
+  backgroundAnalysis?: string
+  role?: string
+  companyName?: string
+  customInstructions?: string
+  sessionId?: string
+  contextManager?: TieredContextManager
+}
+
+export interface PrewarmResult {
+  warmed: boolean
+  modelName?: string
+  provider?: string
+  ttftMs?: number
+  skippedReason?: string
+}
+
+/**
+ * Pre-warms the provider's prompt cache before the first real interview question.
+ * Sends a lightweight 1-token request containing the identical byte-invariant static candidate prefix.
+ * Respects budget limits (aborts if budget guard is tripped).
+ */
+export async function prewarmCopilotCache(
+  params: PrewarmCopilotCacheParams
+): Promise<PrewarmResult> {
+  const { cvSummary, jobDescription, backgroundAnalysis, role, companyName, customInstructions, sessionId } = params
+  if (!cvSummary || !cvSummary.trim()) {
+    return { warmed: false, skippedReason: 'no_cv' }
+  }
+
+  // Budget guard check: do not prewarm if monthly limit reached
+  if (usageTrackerService.isBudgetExceeded()) {
+    return { warmed: false, skippedReason: 'budget_exceeded' }
+  }
+
+  const cm = params.contextManager || tieredContextManager
+  cm.setPermanentContext({
+    cvSummary,
+    jobDescription,
+    backgroundAnalysis,
+    role,
+    companyName,
+    customInstructions,
+  })
+
+  const candidateContext = cm.getCandidateContext(false)
+  const systemPrompt = buildStaticSystemPrefix({
+    candidateContext,
+    role,
+    companyName,
+    customInstructions,
+  })
+
+  try {
+    const started = performance.now()
+    const result = await callUniversalLLM('ping', {
+      systemPrompt,
+      maxTokens: 1,
+      temperature: 0,
+      sessionId,
+      feature: 'copilot_interview',
+    })
+
+    const ttftMs = Math.round(performance.now() - started)
+    return {
+      warmed: !!result,
+      modelName: result?.modelName,
+      provider: result?.provider,
+      ttftMs,
+    }
+  } catch (err) {
+    console.warn('[prewarmCopilotCache] Pre-warm failed silently (will proceed without cache warmup):', err)
+    return { warmed: false, skippedReason: 'llm_error' }
+  }
+}

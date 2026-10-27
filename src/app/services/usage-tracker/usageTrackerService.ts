@@ -181,6 +181,13 @@ export class UsageTrackerService {
   }
 
   /**
+   * Alias for getMonthlySummary
+   */
+  public getMonthSummary(targetYearMonth?: string): MonthlyUsageSummary {
+    return this.getMonthlySummary(targetYearMonth)
+  }
+
+  /**
    * Retrieves summary for a specific month (defaults to current month: YYYY-MM)
    */
   public getMonthlySummary(targetYearMonth?: string): MonthlyUsageSummary {
@@ -532,6 +539,36 @@ export class UsageTrackerService {
    */
   public resetStatistics(): void {
     this.resetLocalStatistics(true)
+  }
+
+  public isBudgetExceeded(): boolean {
+    const summary = this.getCurrentMonthSummary()
+    const limit = this.budgetSettings.monthlyBudgetLimitUsd ?? this.budgetSettings.monthlyLimitUsd
+    if (typeof limit !== 'number' || limit <= 0) return false
+    return summary.totalEstimatedCostUsd >= limit
+  }
+
+  public getCacheMetrics(yearMonth?: string): {
+    totalInputTokens: number
+    totalCachedTokens: number
+    uncachedTokens: number
+    cacheHitRate: number
+    estimatedSavingsUsd: number
+  } {
+    const summary = yearMonth ? this.getMonthlySummary(yearMonth) : this.getCurrentMonthSummary()
+    const totalInput = summary.totalInputTokens || 0
+    const totalCached = summary.totalCachedTokens || 0
+    const uncached = Math.max(0, totalInput - totalCached)
+    const cacheHitRate = totalInput > 0 ? Math.round((totalCached / totalInput) * 1000) / 10 : 0
+    const estimatedSavingsUsd = Number(((totalCached * 0.25) / 1_000_000).toFixed(6))
+
+    return {
+      totalInputTokens: totalInput,
+      totalCachedTokens: totalCached,
+      uncachedTokens: uncached,
+      cacheHitRate,
+      estimatedSavingsUsd,
+    }
   }
 
   public getBudgetSettings(): BudgetSettings {

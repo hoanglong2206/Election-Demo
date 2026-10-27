@@ -35,6 +35,7 @@ import {
   extractHeuristicLatestExchange,
   scanLatestExchangeWithAI,
   type ScannedExchangeResult,
+  prewarmCopilotCache,
 } from '../../services/ai-model/copilotResponseService'
 import type {
   MeetingModeProps,
@@ -387,6 +388,26 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       backgroundAnalysis: mode === 'interview' ? cvAnalysis : discussionAnalysis,
     })
   }, [activeCV, activeJD, profileSnapshot, contextData, mode, cvAnalysis, discussionAnalysis])
+
+  const lastWarmedKeyRef = useRef<string>('')
+
+  // Pre-warm LLM prompt cache when meeting starts with an active CV
+  useEffect(() => {
+    if (mode !== 'interview' || !activeCV || !activeCV.trim()) return
+    const warmKey = `${activeCV.trim()}::${activeJD.trim()}`
+    if (lastWarmedKeyRef.current === warmKey) return
+    lastWarmedKeyRef.current = warmKey
+
+    prewarmCopilotCache({
+      cvSummary: activeCV,
+      jobDescription: activeJD,
+      backgroundAnalysis: cvAnalysis,
+      role: profileSnapshot.role,
+      companyName: profileSnapshot.companyName,
+      customInstructions: profileSnapshot.customInstructions,
+      sessionId: sessionIdRef.current,
+    }).catch(() => {})
+  }, [mode, activeCV, activeJD, cvAnalysis, profileSnapshot])
 
   // Sync initial audio source type based on selected audio device
   useEffect(() => {

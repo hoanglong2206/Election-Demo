@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import type { DiagnosticViewTab } from '../types'
 import type { AIModelConfig } from '../../../services/ai-model/aiModels'
 import type { MultimodalModelOption } from '../../../services/screen-capture/types'
+import { usageTrackerService } from '../../../services/usage-tracker'
 
 interface AIDiagnosticHeaderProps {
   activeTab: DiagnosticViewTab
@@ -118,6 +119,19 @@ export function AIDiagnosticHeader({
             {currentVision?.name || 'Tự động chọn Vision Model'}
           </span>
           {currentVision?.provider && <span className="text-white/30">({currentVision.provider})</span>}
+        </span>
+
+        <span className="text-white/20">•</span>
+
+        <span className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+          Prompt Cache Hit:
+          <span className="font-mono text-violet-300 font-medium ml-0.5">
+            {usageTrackerService.getCacheMetrics().cacheHitRate}%
+          </span>
+          <span className="text-white/30">
+            ({usageTrackerService.getCacheMetrics().totalCachedTokens.toLocaleString()} tokens tiết kiệm)
+          </span>
         </span>
       </div>
     </div>

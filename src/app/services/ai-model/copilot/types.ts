@@ -3,6 +3,7 @@ import type { AnswerStrategyId } from './answerStrategyRouter'
 import type { GroundingResult } from './answerGrounding'
 import type { RetrievalDiagnostics, RetrievalCitation } from './localRag'
 import type { RoutingDecision } from '../model-router'
+export type { ResponseLanguage } from '../language'
 
 export interface ContextUsageInfo {
   totalTokens: number
@@ -35,6 +36,14 @@ export interface CopilotInterviewResult {
     citations: RetrievalCitation[]
     diagnostics: RetrievalDiagnostics
   }
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    cachedTokens?: number
+    uncachedTokens?: number
+    cacheHitRate?: number
+    estimatedCostUsd?: number | null
+  }
   routing?: RoutingDecision
   failover?: {
     switched: boolean
@@ -64,6 +73,8 @@ export interface UniversalLLMResult {
     inputTokens: number
     outputTokens: number
     cachedTokens?: number
+    uncachedTokens?: number
+    cacheHitRate?: number
     estimatedCostUsd?: number | null
   }
   routing?: RoutingDecision

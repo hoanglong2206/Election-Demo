@@ -611,7 +611,7 @@ export class ElectronCredentialStore {
         max_completion_tokens: input.maxTokens ?? 250,
         ...(!reasoningModel ? { temperature: input.temperature ?? 0.2 } : {}),
         stream: true,
-        ...(provider === 'openai' ? { stream_options: { include_usage: true } } : {}),
+        ...(provider === 'openai' || provider === 'groq' ? { stream_options: { include_usage: true } } : {}),
       }
     } else if (provider === 'gemini') {
       url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`
@@ -942,6 +942,7 @@ export class ElectronCredentialStore {
         ? {
             inputTokens: data.usage.prompt_tokens,
             outputTokens: data.usage.completion_tokens,
+            cachedTokens: data.usage.prompt_tokens_details?.cached_tokens,
           }
         : undefined
       return { text, modelName: modelId, provider: 'Groq', usage }
