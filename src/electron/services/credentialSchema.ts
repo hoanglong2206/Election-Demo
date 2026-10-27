@@ -11,7 +11,7 @@ export const CredentialProviderSchema = z
   .string()
   .transform((v) => v.toLowerCase().trim())
   .pipe(
-    z.enum(['groq', 'openai', 'gemini', 'google']).transform((val) => {
+    z.enum(['groq', 'openai', 'gemini', 'google', 'deepl', 'google_translate']).transform((val) => {
       if (val === 'google') return 'gemini' as const
       return val
     })

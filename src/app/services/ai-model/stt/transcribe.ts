@@ -2,7 +2,6 @@ import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
 import { settingsManager } from '../../settings'
 import type { TranscribeResult } from './types'
 import { base64ToBlob, blobToBase64 } from './audioUtils'
-import { translateSTTText } from './translate'
 import { usageTrackerService } from '../../usage-tracker'
 
 /**
@@ -87,7 +86,8 @@ export async function transcribeAudio(
         .replace(/\[pause\]/gi, '')
         .trim()
 
-      const translatedVi = cleanText ? await translateSTTText(cleanText) : ''
+      // Translation is handled asynchronously by TranslationService on transcript commit
+      const translatedVi = ''
 
       return {
         success: res.success && Boolean(cleanText),
@@ -148,7 +148,8 @@ export async function transcribeAudio(
           } catch {}
 
           const cleanText = res.text.trim()
-          const translatedVi = cleanText ? await translateSTTText(cleanText) : ''
+          // Translation is handled asynchronously by TranslationService on transcript commit
+          const translatedVi = ''
           return {
             success: Boolean(cleanText),
             text: cleanText,
@@ -241,7 +242,8 @@ export async function transcribeAudio(
         })
       } catch {}
 
-      const translatedVi = await translateSTTText(text)
+      // Translation is handled asynchronously by TranslationService on transcript commit
+      const translatedVi = ''
 
       return {
         success: true,

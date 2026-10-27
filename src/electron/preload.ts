@@ -304,6 +304,18 @@ const api = {
       sttModels?: any[]
       configuredProviders?: string[]
     }> => ipcRenderer.invoke('credentials:syncModels'),
+    translateText: (params: {
+      texts: string[]
+      sourceLang?: string
+      targetLang?: string
+      provider?: 'google_translate' | 'deepl'
+    }): Promise<{
+      success: boolean
+      translations: string[]
+      error?: string
+      status?: number
+      retryAfterSec?: number
+    }> => ipcRenderer.invoke('credentials:translateText', params),
   },
 }
 

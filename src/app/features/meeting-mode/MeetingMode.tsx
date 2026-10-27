@@ -85,7 +85,7 @@ import {
   speechSegmentationTelemetry,
 } from '../../core/audio'
 import { stitchFragments } from '../../services/ai-model/copilot/scanLatestExchange'
-
+import { translationService } from '../../services/ai-model/translation'
 
 export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
@@ -98,6 +98,10 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const [responseLang, setResponseLang] = useState<ResponseLanguage>(() =>
     normalizeResponseLanguage(getSavedResponseLanguage())
   )
+  const responseLangRef = useRef(responseLang)
+  useEffect(() => {
+    responseLangRef.current = responseLang
+  }, [responseLang])
   const [answerStrategyOverride, setAnswerStrategyOverride] = useState<AnswerStrategyId | undefined>()
   const [copiedAnswer, setCopiedAnswer] = useState(false)
   const [copiedOptionId, setCopiedOptionId] = useState<number | null>(null)
@@ -506,6 +510,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           speaker: speakerLabel || 'Speaker',
         }
 
+        let targetLineId = newLine.id
+        let textToTranslate = result.text
+
         setTranscriptLines((prev) => {
           if (prev.length === 0) return [newLine]
 
@@ -517,6 +524,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           if (continuation && lastLine.speaker === newLine.speaker) {
             targetLineId = lastLine.id
             const combinedOriginal = stitchFragments([lastLine.original, result.text])
+            textToTranslate = combinedOriginal
             const combinedTranslated = stitchFragments([
               lastLine.translated,
               result.translatedVi || result.text,
@@ -537,6 +545,33 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
           }
           return [...prev, newLine]
         })
+
+        // ── Non-blocking Background Translation (Decoupled from STT/Commit) ──
+        if (targetLineId !== 0) {
+          const shouldTranslate =
+            needsVietnameseTranslation(responseLangRef.current) &&
+            settingsManager.get('translationEnabled')
+          const isLocalOnly = settingsManager.get('modelRouterPolicy') === 'local-only'
+          const isOffline = typeof navigator !== 'undefined' && !navigator.onLine
+
+          if (shouldTranslate && !isLocalOnly && !isOffline) {
+            const capturedTargetId = targetLineId
+            translationService.enqueueLine({
+              id: capturedTargetId,
+              text: textToTranslate,
+              sttReportedLang: sttLang,
+              onTranslate: (translated, status) => {
+                if (status === 'translated' && translated && translated !== textToTranslate) {
+                  setTranscriptLines((prev) =>
+                    prev.map((line) =>
+                      line.id === capturedTargetId ? { ...line, translated } : line
+                    )
+                  )
+                }
+              },
+            })
+          }
+        }
       }
     })
 
@@ -649,55 +684,55 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       }
     } else {
       // ── Rollback / Fallback: Legacy Fixed 1.0s Interval Slicing ──────────
-    const intervalTimer = setInterval(() => {
-      const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 1.2)
-      if (!segment) return
+      const intervalTimer = setInterval(() => {
+        const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 1.2)
+        if (!segment) return
 
-      lastProcessedSampleRef.current = segment.endSample
+        lastProcessedSampleRef.current = segment.endSample
 
-      const seqId = sequenceIdRef.current++
-      const now = new Date()
-      const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+        const seqId = sequenceIdRef.current++
+        const now = new Date()
+        const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
 
-      const speakerLabel =
-        mode === 'interview'
-          ? sourceType === 'system'
-            ? 'Interviewer'
+        const speakerLabel =
+          mode === 'interview'
+            ? sourceType === 'system'
+              ? 'Interviewer'
+              : 'You'
+            : sourceType === 'system'
+            ? 'Cuộc họp'
             : 'You'
-          : sourceType === 'system'
-          ? 'Cuộc họp'
-          : 'You'
 
-      const dynamicPrompt =
-        whisperPromptBuilder.buildPrompt(activeKeywords || [], {
-          contextType: mode,
-          previousTranscript: lastTranscriptTextRef.current,
-        }) || whisperPrompt || undefined
+        const dynamicPrompt =
+          whisperPromptBuilder.buildPrompt(activeKeywords || [], {
+            contextType: mode,
+            previousTranscript: lastTranscriptTextRef.current,
+          }) || whisperPrompt || undefined
 
-      const job: STTJob = {
-        jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
-        sessionId: sessionIdRef.current,
-        sequenceId: seqId,
-        audioBuffer: segment.blob,
+        const job: STTJob = {
+          jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
+          sessionId: sessionIdRef.current,
+          sequenceId: seqId,
+          audioBuffer: segment.blob,
           hasSpeech: segment.hasAudio,
-        createdAt: Date.now(),
-        priority: segment.hasAudio ? 1 : 0,
-        engineId: getSavedSTTEngineId(),
-        language: sttLang,
-        sourceType,
-        speakerLabel,
-        timestampStr: timeStr,
-        prompt: dynamicPrompt,
+          createdAt: Date.now(),
+          priority: segment.hasAudio ? 1 : 0,
+          engineId: getSavedSTTEngineId(),
+          language: sttLang,
+          sourceType,
+          speakerLabel,
+          timestampStr: timeStr,
+          prompt: dynamicPrompt,
           closeReason: 'silence',
+        }
+
+        sttJobQueue.enqueue(job)
+      }, 1000)
+
+      return () => {
+        clearInterval(intervalTimer)
+        sttJobQueue.pause()
       }
-
-      sttJobQueue.enqueue(job)
-    }, 1000)
-
-    return () => {
-      clearInterval(intervalTimer)
-      sttJobQueue.pause()
-    }
     }
   }, [
     isCapturing,

@@ -70,6 +70,9 @@ function migrateFromLegacyLocalStorage(): AppSettingsSchema {
       modelRouter: {
         ...DEFAULT_SETTINGS.modelRouter,
       },
+      translation: {
+        ...DEFAULT_SETTINGS.translation,
+      },
     }
 
     const validated = validateSettings(legacyMerged)
@@ -148,6 +151,7 @@ export class SettingsManager {
     audio?: Partial<AppSettingsSchema['audio']>
     copilot?: Partial<AppSettingsSchema['copilot']>
     modelRouter?: Partial<AppSettingsSchema['modelRouter']>
+    translation?: Partial<AppSettingsSchema['translation']>
   }): AppSettingsSchema {
     const current = this.getSettings()
 
@@ -172,6 +176,10 @@ export class SettingsManager {
       modelRouter: {
         ...current.modelRouter,
         ...(partial.modelRouter || {}),
+      },
+      translation: {
+        ...current.translation,
+        ...(partial.translation || {}),
       },
     }
 
@@ -226,6 +234,10 @@ export class SettingsManager {
         return s.modelRouter.enabled
       case 'modelRouterPolicy':
         return s.modelRouter.policy
+      case 'translationProvider':
+        return s.translation?.provider || 'google_translate'
+      case 'translationEnabled':
+        return s.translation?.enabled ?? true
     }
   }
 
@@ -244,6 +256,9 @@ export class SettingsManager {
       case 'vadThreshold':
       case 'responseLang':
       case 'autoPersonalize':
+      case 'segmentationMode':
+      case 'silenceEndMs':
+      case 'maxSegmentMs':
         return this.updateSettings({ audio: { [key]: value } as any })
       case 'triggerMode':
       case 'confidenceThreshold':
@@ -253,6 +268,10 @@ export class SettingsManager {
         return this.updateSettings({ modelRouter: { enabled: value } })
       case 'modelRouterPolicy':
         return this.updateSettings({ modelRouter: { policy: value } })
+      case 'translationProvider':
+        return this.updateSettings({ translation: { ...this.getSettings().translation, provider: value } })
+      case 'translationEnabled':
+        return this.updateSettings({ translation: { ...this.getSettings().translation, enabled: value } })
     }
     return this.getSettings()
   }

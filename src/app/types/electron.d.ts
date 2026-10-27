@@ -229,6 +229,18 @@ export interface ElectronAPI {
         sttModels?: any[]
         configuredProviders?: string[]
       }>
+    translateText?: (params: {
+      texts: string[]
+      sourceLang?: string
+      targetLang?: string
+      provider?: 'google_translate' | 'deepl'
+    }) => Promise<{
+      success: boolean
+      translations: string[]
+      error?: string
+      status?: number
+      retryAfterSec?: number
+    }>
   }
 }
 

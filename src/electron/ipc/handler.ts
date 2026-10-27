@@ -460,4 +460,19 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     ipcMain.handle('credentials:syncModels', async () => {
       return credentialStore.syncModels()
     })
+
+    ipcMain.handle(
+      'credentials:translateText',
+      async (
+        _event,
+        payload: {
+          texts: string[]
+          sourceLang?: string
+          targetLang?: string
+          provider?: 'google_translate' | 'deepl'
+        }
+      ) => {
+        return credentialStore.translateText(payload)
+      }
+    )
   }

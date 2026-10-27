@@ -44,6 +44,7 @@ export function createOverlayWindow(): BrowserWindow {
       sandbox: false,               // Allow preload to use Node built-ins
       webSecurity: true,            // NEVER disable web security
       allowRunningInsecureContent: false,
+      backgroundThrottling: false,
     },
   })
 

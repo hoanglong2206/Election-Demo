@@ -41,6 +41,13 @@ export interface ModelRouterSettings {
   policy: ModelRouterPolicy
 }
 
+export type TranslationProviderOption = 'google_translate' | 'deepl' | 'llm' | 'none'
+
+export interface TranslationSettings {
+  provider: TranslationProviderOption
+  enabled: boolean
+}
+
 export interface AppSettingsSchema {
   version: number
   apiKeys: APIKeySettings
@@ -48,6 +55,7 @@ export interface AppSettingsSchema {
   audio: AudioSettings
   copilot: CopilotSettings
   modelRouter: ModelRouterSettings
+  translation: TranslationSettings
 }
 
 export const DEFAULT_SETTINGS: AppSettingsSchema = {
@@ -81,6 +89,10 @@ export const DEFAULT_SETTINGS: AppSettingsSchema = {
     enabled: true,
     policy: 'balanced',
   },
+  translation: {
+    provider: 'google_translate',
+    enabled: true,
+  },
 }
 
 export type FlatSettingsKey =
@@ -103,6 +115,8 @@ export type FlatSettingsKey =
   | 'debounceMs'
   | 'modelRouterEnabled'
   | 'modelRouterPolicy'
+  | 'translationProvider'
+  | 'translationEnabled'
 
 /**
  * Validates, sanitizes and enforces strict types on a raw settings object.
@@ -230,6 +244,18 @@ export function validateSettings(raw: unknown): AppSettingsSchema {
     modelRouter: {
       enabled: modelRouterEnabled,
       policy: modelRouterPolicy,
+    },
+    translation: {
+      provider:
+        obj.translation?.provider === 'deepl' ||
+        obj.translation?.provider === 'llm' ||
+        obj.translation?.provider === 'none'
+          ? obj.translation.provider
+          : 'google_translate',
+      enabled:
+        typeof (obj.translation?.enabled ?? obj.translationEnabled) === 'boolean'
+          ? (obj.translation?.enabled ?? obj.translationEnabled)
+          : true,
     },
   }
 }

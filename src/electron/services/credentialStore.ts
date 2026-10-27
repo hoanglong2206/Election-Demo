@@ -1477,6 +1477,116 @@ export class ElectronCredentialStore {
   }
 
   /**
+   * Official authenticated text translation through Google Cloud Translation v2 or DeepL API.
+   * Decrypts API key only inside Main Process. Supports multi-string batching.
+   */
+  public async translateText(params: {
+    texts: string[]
+    sourceLang?: string
+    targetLang?: string
+    provider?: 'google_translate' | 'deepl'
+  }): Promise<{
+    success: boolean
+    translations: string[]
+    error?: string
+    status?: number
+    retryAfterSec?: number
+  }> {
+    const { texts, sourceLang, targetLang = 'vi', provider = 'google_translate' } = params
+    if (!texts || texts.length === 0) {
+      return { success: true, translations: [] }
+    }
+
+    const key = this.getDecryptedKey(provider)
+    if (!key) {
+      return {
+        success: false,
+        translations: texts,
+        error: `Chưa cấu hình API Key cho ${provider === 'deepl' ? 'DeepL' : 'Google Cloud Translation'} trong Credential Store`,
+        status: 401,
+      }
+    }
+
+    try {
+      if (provider === 'deepl') {
+        const isFree = key.endsWith(':fx')
+        const url = isFree
+          ? 'https://api-free.deepl.com/v2/translate'
+          : 'https://api.deepl.com/v2/translate'
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `DeepL-Auth-Key ${key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: texts,
+            target_lang: targetLang.toUpperCase(),
+            ...(sourceLang ? { source_lang: sourceLang.toUpperCase() } : {}),
+          }),
+          signal: AbortSignal.timeout(4000),
+        })
+
+        if (!res.ok) {
+          const retryAfter = res.headers.get('retry-after')
+          const retryAfterSec = retryAfter ? parseInt(retryAfter, 10) : undefined
+          return {
+            success: false,
+            translations: texts,
+            error: `DeepL HTTP error ${res.status}`,
+            status: res.status,
+            retryAfterSec,
+          }
+        }
+
+        const json = (await res.json()) as any
+        const translations = (json?.translations || []).map((t: any) => t.text || '')
+        return { success: true, translations }
+      } else {
+        // Google Cloud Translation v2 official endpoint
+        const url = `https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(key)}`
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            q: texts,
+            target: targetLang,
+            format: 'text',
+            ...(sourceLang ? { source: sourceLang } : {}),
+          }),
+          signal: AbortSignal.timeout(4000),
+        })
+
+        if (!res.ok) {
+          const retryAfter = res.headers.get('retry-after')
+          const retryAfterSec = retryAfter ? parseInt(retryAfter, 10) : undefined
+          return {
+            success: false,
+            translations: texts,
+            error: `Google Cloud Translation HTTP error ${res.status}`,
+            status: res.status,
+            retryAfterSec,
+          }
+        }
+
+        const json = (await res.json()) as any
+        const translations = (json?.data?.translations || []).map((t: any) => t.translatedText || '')
+        return { success: true, translations }
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        translations: texts,
+        error: err instanceof Error ? err.message : String(err),
+        status: err?.name === 'TimeoutError' ? 408 : 500,
+      }
+    }
+  }
+
+  /**
    * Clears all stored credentials (useful for testing or full app reset).
    */
   public clearAll(): void {
