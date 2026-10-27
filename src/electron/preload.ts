@@ -134,9 +134,13 @@ const api = {
    * File-based Session Storage API (stored in userData/sessions/*.json)
    */
   sessions: {
+    isFirstRun: (): Promise<boolean> => ipcRenderer.invoke('sessions:isFirstRun'),
+    setFirstRunCompleted: (completed: boolean = true): Promise<boolean> =>
+      ipcRenderer.invoke('sessions:setFirstRunCompleted', completed),
     getAll: (): Promise<any[]> => ipcRenderer.invoke('sessions:getAll'),
     getById: (sessionId: string): Promise<any | null> => ipcRenderer.invoke('sessions:getById', sessionId),
-    save: (session: any): Promise<boolean> => ipcRenderer.invoke('sessions:save', session),
+    save: (session: any): Promise<{ success: boolean; id: string; error?: string }> =>
+      ipcRenderer.invoke('sessions:save', session),
     delete: (sessionId: string): Promise<boolean> => ipcRenderer.invoke('sessions:delete', sessionId),
     deleteMany: (sessionIds: string[]): Promise<boolean> =>
       ipcRenderer.invoke('sessions:deleteMany', sessionIds),
@@ -147,14 +151,16 @@ const api = {
     getMigrationStatus: (): Promise<any> => ipcRenderer.invoke('sessions:getMigrationStatus'),
     startMigration: (): Promise<any> => ipcRenderer.invoke('sessions:startMigration'),
     recovery: {
-      list: (): Promise<any[]> => ipcRenderer.invoke('sessions:recovery:list'),
+      list: (options?: any): Promise<any[]> => ipcRenderer.invoke('sessions:recovery:list', options),
       append: (event: any): Promise<boolean> => ipcRenderer.invoke('sessions:recovery:append', event),
-      checkpoint: (sessionId: string, snapshot: Record<string, unknown>): Promise<boolean> =>
+      checkpoint: (sessionId: string, snapshot?: Record<string, unknown>): Promise<boolean> =>
         ipcRenderer.invoke('sessions:recovery:checkpoint', sessionId, snapshot),
       recover: (sessionId: string): Promise<any | null> =>
         ipcRenderer.invoke('sessions:recovery:recover', sessionId),
       complete: (sessionId: string, lifecycle: 'completed' | 'discarded'): Promise<boolean> =>
         ipcRenderer.invoke('sessions:recovery:complete', sessionId, lifecycle),
+      flush: (sessionId?: string): Promise<boolean> =>
+        ipcRenderer.invoke('sessions:recovery:flush', sessionId),
     },
   },
 

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, session, desktopCapturer, globalShortcut } from 'electron'
 import { createOverlayWindow } from './window/overlay-window.js'
-import { registerIpcHandlers } from './ipc/handler.js'
+import { registerIpcHandlers, getActiveSessionRecoveryService } from './ipc/handler.js'
 import { getWhisperProcessManager } from './services/whisperProcessManager.js'
 import { registerMediaSchemeAsPrivileged, registerMediaProtocolHandler } from './services/mediaProtocol.js'
 import path from 'path'
@@ -126,6 +126,13 @@ app.on('before-quit', () => {
     getWhisperProcessManager().destroy()
   } catch (err) {
     console.error('[Electron] Error destroying WhisperProcessManager:', err)
+  }
+
+  // Flush any pending recovery journal writes to disk
+  try {
+    getActiveSessionRecoveryService()?.flushSync()
+  } catch (err) {
+    console.error('[Electron] Error flushing recovery service on before-quit:', err)
   }
   mainWindow = null
 })

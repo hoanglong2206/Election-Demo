@@ -125,6 +125,7 @@ export interface MeetingSession {
   metrics?: SessionMetrics
   exportSchemaVersion?: string // e.g. "2.0"
   _isFullyLoaded?: boolean
+  isSample?: boolean
 }
 
 export type SessionDateFilter = 'all' | 'today' | 'last_7_days' | 'last_30_days'

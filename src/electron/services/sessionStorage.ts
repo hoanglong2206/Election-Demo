@@ -8,6 +8,7 @@ import fsSync from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import { buildMediaUrl } from './mediaProtocol.js'
+import { getAppStateManager } from './appState.js'
 
 export interface ScreenshotReference {
   id: string
@@ -423,6 +424,10 @@ export class ElectronSessionStorage {
 
   public async save(session: any): Promise<boolean> {
     if (!session || !session.id) return false
+    if (session.isSample) {
+      // Dữ liệu mẫu KHÔNG bao giờ ghi vào storage
+      return true
+    }
     const sessionId = String(session.id)
 
     try {
@@ -546,6 +551,9 @@ export class ElectronSessionStorage {
         } catch {}
       }
       await this.writeIndex([])
+      try {
+        getAppStateManager().setFirstRunCompleted(true)
+      } catch {}
       return true
     } catch (err) {
       console.error('[ElectronSessionStorage] Failed to delete all sessions:', err)

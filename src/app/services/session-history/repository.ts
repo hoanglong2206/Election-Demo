@@ -220,6 +220,7 @@ export function normalizeSession(raw: any): MeetingSession {
     _isFullyLoaded: Boolean(raw._isFullyLoaded || (raw.transcripts && raw.transcripts.length > 0) || (raw.suggestions && raw.suggestions.length > 0)),
     metrics,
     exportSchemaVersion: raw.exportSchemaVersion || '2.0',
+    isSample: Boolean(raw.isSample),
   }
 }
 
@@ -246,10 +247,32 @@ function cleanupSessionArtifacts(sessionId: string): void {
   }
 }
 
+function markFirstRunCompleted(): void {
+  if (isElectronIpcAvailable() && window.api?.sessions?.setFirstRunCompleted) {
+    window.api.sessions.setFirstRunCompleted(true).catch(console.error)
+  }
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem('meeting_copilot_first_run_completed', 'true')
+    } catch {}
+  }
+}
+
 function saveToLocalStorageBackup(sessions: MeetingSession[]): void {
   if (typeof localStorage === 'undefined') return
   try {
-    const backupList = sessions.slice(0, 50)
+    // Only persist lightweight index (id, title, date, startedAt, duration, mode), exclude sample sessions
+    const backupList = sessions
+      .filter((s) => !s.isSample)
+      .slice(0, 50)
+      .map((s) => ({
+        id: s.id,
+        title: s.title,
+        date: s.date,
+        startedAt: s.startedAt,
+        durationMinutes: s.durationMinutes,
+        mode: s.mode,
+      }))
     localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(backupList))
   } catch {
     // Ignore quota issues
@@ -349,9 +372,22 @@ export class HybridSessionRepository implements ISessionRepository {
           }
         }
 
-        // 5. Fallback to seed sessions if completely empty
+        // 5. Fallback to seed sessions ONLY on genuine first run
         if (loaded.length === 0 && (!sessionsCache || sessionsCache.length === 0) && initRevision === sessionMutationRevision) {
-          loaded = SEED_SESSIONS.map(normalizeSession)
+          let isFirstRun = false
+          if (isElectronIpcAvailable() && window.api?.sessions?.isFirstRun) {
+            try {
+              isFirstRun = await window.api.sessions.isFirstRun()
+            } catch {
+              isFirstRun = false
+            }
+          } else if (typeof localStorage !== 'undefined') {
+            isFirstRun = localStorage.getItem('meeting_copilot_first_run_completed') !== 'true'
+          }
+
+          if (isFirstRun && Array.isArray(SEED_SESSIONS) && SEED_SESSIONS.length > 0) {
+            loaded = SEED_SESSIONS.map((s) => normalizeSession({ ...s, isSample: true }))
+          }
         }
 
         // A delete/save can happen while Electron or IndexedDB is still loading.
@@ -375,7 +411,7 @@ export class HybridSessionRepository implements ISessionRepository {
         return sessionsCache
       } catch (err) {
         console.error('[SessionStorage] Initialization failed:', err)
-        sessionsCache = sessionsCache || SEED_SESSIONS.map(normalizeSession)
+        sessionsCache = sessionsCache || []
         return sessionsCache
       }
     })()
@@ -401,7 +437,7 @@ export class HybridSessionRepository implements ISessionRepository {
       const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(BACKUP_STORAGE_KEY) || localStorage.getItem(STORAGE_KEY) : null
       if (raw) {
         const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           sessionsCache = parsed.filter((s) => s && !LEGACY_MOCK_IDS.has(s.id)).map(normalizeSession)
           sessionsCache.sort((a, b) => getSessionEpoch(b) - getSessionEpoch(a))
           return sessionsCache
@@ -411,7 +447,7 @@ export class HybridSessionRepository implements ISessionRepository {
       // Ignore
     }
 
-    sessionsCache = SEED_SESSIONS.map(normalizeSession)
+    sessionsCache = []
     return sessionsCache
   }
 
@@ -446,6 +482,10 @@ export class HybridSessionRepository implements ISessionRepository {
   }
 
   public save(session: MeetingSession): void {
+    if (session.isSample) {
+      // Dữ liệu mẫu KHÔNG bao giờ ghi vào storage/backup
+      return
+    }
     const normalized = normalizeSession(session)
     const current = this.getAll()
     sessionMutationRevision++
@@ -468,6 +508,40 @@ export class HybridSessionRepository implements ISessionRepository {
     }
   }
 
+  public async saveAsync(session: MeetingSession): Promise<{ success: boolean; id: string; error?: string }> {
+    if (session.isSample) {
+      return { success: true, id: session.id }
+    }
+    const normalized = normalizeSession(session)
+    const current = this.getAll()
+    sessionMutationRevision++
+    const filtered = current.filter((s) => s.id !== normalized.id)
+    const updated = [normalized, ...filtered]
+    updated.sort((a, b) => getSessionEpoch(b) - getSessionEpoch(a))
+    sessionsCache = updated
+    saveToLocalStorageBackup(updated)
+    notifyListeners()
+
+    if (isElectronIpcAvailable()) {
+      try {
+        const res = await window.api.sessions!.save(normalized)
+        if (typeof res === 'object' && res !== null) {
+          return { success: (res as any).success !== false, id: normalized.id, error: (res as any).error }
+        }
+        return { success: Boolean(res), id: normalized.id }
+      } catch (err: any) {
+        return { success: false, id: normalized.id, error: String(err?.message || err) }
+      }
+    } else {
+      try {
+        await this.indexedDbRepo.save(normalized)
+        return { success: true, id: normalized.id }
+      } catch (err: any) {
+        return { success: false, id: normalized.id, error: String(err?.message || err) }
+      }
+    }
+  }
+
   public delete(sessionId: string): MeetingSession[] {
     const current = this.getAll()
     sessionMutationRevision++
@@ -475,6 +549,7 @@ export class HybridSessionRepository implements ISessionRepository {
     sessionsCache = updated
     saveToLocalStorageBackup(updated)
     notifyListeners()
+    markFirstRunCompleted()
 
     cleanupSessionArtifacts(sessionId)
 
@@ -500,6 +575,7 @@ export class HybridSessionRepository implements ISessionRepository {
     sessionsCache = updated
     saveToLocalStorageBackup(updated)
     notifyListeners()
+    markFirstRunCompleted()
 
     for (const id of sessionIds) {
       cleanupSessionArtifacts(id)
@@ -529,6 +605,7 @@ export class HybridSessionRepository implements ISessionRepository {
     sessionsCache = []
     saveToLocalStorageBackup([])
     notifyListeners()
+    markFirstRunCompleted()
 
     // Persist asynchronously
     if (isElectronIpcAvailable()) {
@@ -585,6 +662,8 @@ export class HybridSessionRepository implements ISessionRepository {
     const oneDayMs = 24 * 60 * 60 * 1000
 
     return all.filter((s) => {
+      // 0. Sample sessions are strictly excluded from search, analytics and costs
+      if (s.isSample) return false
       // 1. Mode check
       if (mode !== 'all' && s.mode !== mode) return false
 
@@ -736,6 +815,10 @@ export function loadFullSession(id: string): Promise<MeetingSession | null> {
 
 export function saveSessionToHistory(session: MeetingSession): void {
   defaultSessionRepository.save(session)
+}
+
+export function saveSessionToHistoryAsync(session: MeetingSession): Promise<{ success: boolean; id: string; error?: string }> {
+  return defaultSessionRepository.saveAsync(session)
 }
 
 export function deleteSessionFromHistory(sessionId: string): MeetingSession[] {

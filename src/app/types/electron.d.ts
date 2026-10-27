@@ -107,9 +107,11 @@ export interface ElectronAPI {
     ) => () => void
   }
   sessions?: {
+    isFirstRun?: () => Promise<boolean>
+    setFirstRunCompleted?: (completed?: boolean) => Promise<boolean>
     getAll: () => Promise<any[]>
     getById: (sessionId: string) => Promise<any | null>
-    save: (session: any) => Promise<boolean>
+    save: (session: any) => Promise<{ success: boolean; id: string; error?: string } | boolean>
     delete: (sessionId: string) => Promise<boolean>
     deleteMany: (sessionIds: string[]) => Promise<boolean>
     deleteAll: () => Promise<boolean>
@@ -125,11 +127,12 @@ export interface ElectronAPI {
     }>
     startMigration?: () => Promise<any>
     recovery?: {
-      list: () => Promise<any[]>
+      list: (options?: any) => Promise<any[]>
       append: (event: any) => Promise<boolean>
-      checkpoint: (sessionId: string, snapshot: Record<string, unknown>) => Promise<boolean>
+      checkpoint: (sessionId: string, snapshot?: Record<string, unknown>) => Promise<boolean>
       recover: (sessionId: string) => Promise<any | null>
       complete: (sessionId: string, lifecycle: 'completed' | 'discarded') => Promise<boolean>
+      flush?: (sessionId?: string) => Promise<boolean>
     }
   }
   credentials?: {

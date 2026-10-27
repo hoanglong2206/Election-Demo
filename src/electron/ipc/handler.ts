@@ -4,6 +4,13 @@ import { getWhisperProcessManager } from '../services/whisperProcessManager.js'
 import { ElectronSessionStorage } from '../services/sessionStorage.js'
 import { getElectronCredentialStore } from '../services/credentialStore.js'
 import { SessionRecoveryService } from '../services/sessionRecovery.js'
+import { getAppStateManager } from '../services/appState.js'
+
+let activeSessionRecoveryService: SessionRecoveryService | null = null
+
+export function getActiveSessionRecoveryService(): SessionRecoveryService | null {
+  return activeSessionRecoveryService
+}
 
 export function registerIpcHandlers(win: BrowserWindow): void {
   // ── Window controls ────────────────────────────────────────────────────────
@@ -273,6 +280,14 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       path.join(app.getPath('userData'), 'sessions', 'recovery')
     )
 
+    ipcMain.handle('sessions:isFirstRun', () => {
+      return !getAppStateManager().isFirstRunCompleted()
+    })
+
+    ipcMain.handle('sessions:setFirstRunCompleted', (_event, completed: boolean = true) => {
+      return getAppStateManager().setFirstRunCompleted(completed)
+    })
+
     ipcMain.handle('sessions:getAll', () => {
       return sessionStorage.getAll()
     })
@@ -281,19 +296,27 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       return sessionStorage.getById(sessionId)
     })
 
-    ipcMain.handle('sessions:save', (_event, session: any) => {
-      return sessionStorage.save(session)
+    ipcMain.handle('sessions:save', async (_event, session: any) => {
+      try {
+        const success = await sessionStorage.save(session)
+        return { success: Boolean(success), id: String(session?.id || '') }
+      } catch (err: any) {
+        return { success: false, id: String(session?.id || ''), error: String(err?.message || err) }
+      }
     })
 
     ipcMain.handle('sessions:delete', (_event, sessionId: string) => {
+      getAppStateManager().setFirstRunCompleted(true)
       return sessionStorage.delete(sessionId)
     })
 
     ipcMain.handle('sessions:deleteMany', (_event, sessionIds: string[]) => {
+      getAppStateManager().setFirstRunCompleted(true)
       return sessionStorage.deleteMany(sessionIds)
     })
 
-    ipcMain.handle('sessions:deleteAll', () => {
+    ipcMain.handle('sessions:deleteAll', async () => {
+      getAppStateManager().setFirstRunCompleted(true)
       return sessionStorage.deleteAll()
     })
 
@@ -323,15 +346,21 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       })
     }, 2500)
 
-    ipcMain.handle('sessions:recovery:list', () => sessionRecoveryService.listUnfinished())
+    ipcMain.handle('sessions:recovery:list', (_event, options?: any) => sessionRecoveryService.listUnfinished(options))
     ipcMain.handle('sessions:recovery:append', (_event, event) => sessionRecoveryService.append(event))
-    ipcMain.handle('sessions:recovery:checkpoint', (_event, sessionId: string, snapshot: Record<string, unknown>) =>
+    ipcMain.handle('sessions:recovery:checkpoint', (_event, sessionId: string, snapshot?: Record<string, unknown>) =>
       sessionRecoveryService.checkpoint(sessionId, snapshot)
     )
     ipcMain.handle('sessions:recovery:recover', (_event, sessionId: string) => sessionRecoveryService.recover(sessionId))
     ipcMain.handle('sessions:recovery:complete', (_event, sessionId: string, lifecycle: 'completed' | 'discarded') =>
       sessionRecoveryService.complete(sessionId, lifecycle)
     )
+    ipcMain.handle('sessions:recovery:flush', (_event, sessionId?: string) => {
+      sessionRecoveryService.flushSync(sessionId)
+      return true
+    })
+
+    activeSessionRecoveryService = sessionRecoveryService
 
     // ── Secure OS Credential Store Handlers ──────────────────────────────────
     const credentialStore = getElectronCredentialStore()

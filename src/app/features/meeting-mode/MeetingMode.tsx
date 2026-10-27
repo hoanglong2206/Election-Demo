@@ -14,7 +14,11 @@ import {
   type ResponseLanguage,
 } from '../../services/ai-model/aiModels'
 import { getSavedAudioDeviceId, PRESET_AUDIO_DEVICES } from '../../services/audioDevices'
-import { saveSessionToHistory, type MeetingSession, type HistorySuggestion } from '../../services/sessionHistory'
+import {
+  saveSessionToHistoryAsync,
+  type MeetingSession,
+  type HistorySuggestion,
+} from '../../services/sessionHistory'
 import { useAudioPipeline } from '../../hooks/useAudioPipeline'
 import {
   sttJobQueue,
@@ -1754,43 +1758,152 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const [customSessionTitle, setCustomSessionTitle] = useState<string>('')
   const currentSessionTitle = customSessionTitle || defaultSessionTitle
 
+  const currentSessionTitleRef = useRef(currentSessionTitle)
+  currentSessionTitleRef.current = currentSessionTitle
+
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+
+  const recordedLineIdsRef = useRef<Set<string | number>>(new Set())
+  const recordedTranslationsRef = useRef<Map<string | number, string>>(new Map())
+
+  // Initial recovery scan (skipping currently active session)
   useEffect(() => {
     let cancelled = false
-    void window.api.sessions?.recovery?.list().then((records) => {
-      if (!cancelled && records.length > 0) setUnfinishedRecovery(records[0])
-    }).catch((error) => console.warn('[MeetingMode] Recovery scan failed:', error))
-    return () => { cancelled = true }
+    void window.api.sessions?.recovery
+      ?.list({ activeSessionId: sessionIdRef.current })
+      .then((records) => {
+        if (!cancelled && records.length > 0) setUnfinishedRecovery(records[0])
+      })
+      .catch((error) => console.warn('[MeetingMode] Recovery scan failed:', error))
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  useEffect(() => {
-    const latest = validLines[validLines.length - 1]
-    if (!latest || !window.api.sessions?.recovery) return
-    void window.api.sessions.recovery.append({
-      eventId: `transcript:${sessionIdRef.current}:${latest.id}`,
-      sessionId: sessionIdRef.current,
-      type: 'transcript:segment',
-      timestamp: Date.now(),
-      payload: latest,
-    }).catch((error) => console.warn('[MeetingMode] Recovery journal append failed:', error))
-  }, [validLines])
-
+  // Giây 0: Ngay khi bắt đầu phiên, ghi sự kiện meeting:metadata và một checkpoint đầu tiên ngay lập tức
   useEffect(() => {
     if (!window.api.sessions?.recovery) return
-    const timer = window.setInterval(() => {
-      void window.api.sessions?.recovery?.checkpoint(sessionIdRef.current, {
-        id: sessionIdRef.current,
-        title: currentSessionTitle,
-        mode,
-        transcripts: validLines,
-        screenshotQuestions: visualQuestionsHistory,
-        usageRecords: [usageTrackerService.getSessionUsageSummary(sessionIdRef.current)],
-        lifecycle: 'active',
-      }).catch((error) => console.warn('[MeetingMode] Recovery checkpoint failed:', error))
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [currentSessionTitle, mode, validLines, visualQuestionsHistory])
+    const sid = sessionIdRef.current
+    const startedAt = meetingStartTimeRef.current
 
-  const handleSaveToHistory = () => {
+    void window.api.sessions.recovery
+      .append({
+        eventId: `meta:${sid}`,
+        sessionId: sid,
+        type: 'meeting:metadata',
+        timestamp: startedAt,
+        payload: {
+          id: sid,
+          title: currentSessionTitleRef.current,
+          mode: modeRef.current,
+          startedAt,
+          lifecycle: 'active',
+        },
+      })
+      .catch((error) => console.warn('[MeetingMode] Giây 0 metadata append failed:', error))
+
+    void window.api.sessions.recovery
+      .checkpoint(sid, {
+        id: sid,
+        title: currentSessionTitleRef.current,
+        mode: modeRef.current,
+        startedAt,
+        lifecycle: 'active',
+      })
+      .catch((error) => console.warn('[MeetingMode] Giây 0 checkpoint failed:', error))
+  }, [])
+
+  // Journaling: Duyệt theo ID chưa ghi (không chỉ phần tử cuối), và ghi transcript:patch khi bản dịch đến sau
+  useEffect(() => {
+    if (!window.api.sessions?.recovery || validLines.length === 0) return
+    const sid = sessionIdRef.current
+
+    for (const line of validLines) {
+      if (!line || line.id === undefined) continue
+      const lineId = line.id
+
+      if (!recordedLineIdsRef.current.has(lineId)) {
+        recordedLineIdsRef.current.add(lineId)
+        if (line.translated) {
+          recordedTranslationsRef.current.set(lineId, line.translated)
+        }
+        void window.api.sessions.recovery
+          .append({
+            eventId: `transcript:${sid}:${lineId}`,
+            sessionId: sid,
+            type: 'transcript:segment',
+            timestamp: Date.now(),
+            payload: line,
+          })
+          .catch((error) => console.warn('[MeetingMode] Recovery journal append failed:', error))
+      } else if (
+        line.translated &&
+        line.translated !== recordedTranslationsRef.current.get(lineId)
+      ) {
+        // Late translation arrived: emit transcript:patch for ID replay
+        recordedTranslationsRef.current.set(lineId, line.translated)
+        void window.api.sessions.recovery
+          .append({
+            eventId: `patch:${sid}:${lineId}:${Date.now()}`,
+            sessionId: sid,
+            type: 'transcript:patch',
+            timestamp: Date.now(),
+            payload: {
+              id: lineId,
+              translated: line.translated,
+            },
+          })
+          .catch((error) => console.warn('[MeetingMode] Recovery journal patch failed:', error))
+      }
+    }
+  }, [validLines])
+
+  // Checkpoint: MỘT interval (20s) cho cả phiên (đọc qua ref), không reset khi có dòng mới.
+  // Thêm flush khi beforeunload / visibilitychange.
+  useEffect(() => {
+    if (!window.api.sessions?.recovery) return
+
+    const triggerCheckpoint = () => {
+      const sid = sessionIdRef.current
+      if (!sid) return
+      void window.api.sessions?.recovery
+        ?.checkpoint(sid, {
+          id: sid,
+          title: currentSessionTitleRef.current,
+          mode: modeRef.current,
+          screenshotQuestions: visualQuestionsHistoryRef.current,
+          usageRecords: [usageTrackerService.getSessionUsageSummary(sid)],
+          lifecycle: 'active',
+        })
+        .catch((error) => console.warn('[MeetingMode] Recovery checkpoint failed:', error))
+    }
+
+    const timer = window.setInterval(triggerCheckpoint, 20000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        triggerCheckpoint()
+        void window.api.sessions?.recovery?.flush?.(sessionIdRef.current)
+      }
+    }
+
+    const handleBeforeUnload = () => {
+      triggerCheckpoint()
+      void window.api.sessions?.recovery?.flush?.(sessionIdRef.current)
+    }
+
+    window.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [])
+
+  const handleSaveToHistory = async () => {
     const endedAt = Date.now()
     const startedAt = meetingStartTimeRef.current
     const durationSeconds = Math.max(1, Math.round((endedAt - startedAt) / 1000))
@@ -1910,13 +2023,24 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       exportSchemaVersion: '2.0',
     }
 
-    saveSessionToHistory(session)
-    void window.api.sessions?.recovery?.complete(session.id, 'completed')
-    setIsSavedToHistory(true)
-    if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current)
-    saveHistoryTimerRef.current = setTimeout(() => {
-      if (isMountedRef.current) setIsSavedToHistory(false)
-    }, 2500)
+    try {
+      const saveAck = await saveSessionToHistoryAsync(session)
+      if (saveAck && saveAck.success) {
+        // Safe Sequencing: Complete recovery ONLY AFTER confirmed storage save
+        await window.api.sessions?.recovery?.complete(session.id, 'completed')
+        setIsSavedToHistory(true)
+        if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current)
+        saveHistoryTimerRef.current = setTimeout(() => {
+          if (isMountedRef.current) setIsSavedToHistory(false)
+        }, 2500)
+      } else {
+        console.error('[MeetingMode] Save to history failed, preserving crash recovery journal:', saveAck?.error)
+        alert('Không thể lưu cuộc họp vào bộ nhớ bền vững. Dữ liệu phục hồi sự cố được giữ nguyên an toàn!')
+      }
+    } catch (saveErr) {
+      console.error('[MeetingMode] Unexpected exception saving session:', saveErr)
+      alert('Đã xảy ra lỗi khi lưu cuộc họp. Dữ liệu phục hồi sự cố được giữ nguyên!')
+    }
   }
 
   // Guard: In interview mode, both CV and JD are required
