@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { SessionRecoveryService, type SessionEvent } from '../sessionRecovery'
+import { SessionRecoveryService, type SessionEvent } from '../sessions'
 
 describe('SessionRecoveryService Resilience & Durability', () => {
   let testDir: string

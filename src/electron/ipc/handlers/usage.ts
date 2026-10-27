@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { getUsageStorageService, type UsageStorageService } from '../../services/usage/index.js'
+import { IPC_CHANNELS } from '../../../common'
+import { getUsageStorageService, type UsageStorageService } from '../../services/usage'
 
 let activeUsageStorageService: UsageStorageService | null = null
 

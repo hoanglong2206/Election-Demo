@@ -14,7 +14,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import { spawn } from 'node:child_process'
 import * as net from 'node:net'
-import { createSilentWavBuffer } from '../wavHeader'
+import { createSilentWavBuffer } from '../whisper'
 
 function findBinary(name: string): string | null {
   const candidates = [

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { UsageStorageService, type UsageRecord } from '../usageStorage.js'
+import { UsageStorageService, type UsageRecord } from '../usage'
 
 describe('UsageStorageService (Main Process Append-only NDJSON & Durability)', () => {
   let tempDir: string

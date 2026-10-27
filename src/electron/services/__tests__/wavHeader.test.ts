@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import {
-  buildWavBufferFromPcm,
-  createSilentWavBuffer,
-  createWavHeader,
-} from '../wavHeader'
+import { buildWavBufferFromPcm, createSilentWavBuffer, createWavHeader } from '../whisper'
+
 
 describe('WAV Header Builder', () => {
   it('should generate a valid 44-byte standard RIFF/WAVE header', () => {

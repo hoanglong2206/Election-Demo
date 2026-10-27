@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { getElectronCredentialStore } from '../../services/credentials/index.js'
-import { getElectronLlmService } from '../../services/llm/index.js'
+import { IPC_CHANNELS } from '../../../common'
+import { getElectronCredentialStore } from '../../services/credentials'
+import { getElectronLlmService } from '../../services/llm'
 
 export function registerCredentialHandlers(): void {
   const credentialStore = getElectronCredentialStore()

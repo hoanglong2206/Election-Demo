@@ -4,8 +4,7 @@ import fs from 'fs/promises'
 import fsSync from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { ElectronSessionStorage } from '../sessionStorage'
-import { resolveSafeSessionPath, buildMediaUrl } from '../mediaProtocol'
+import { buildMediaUrl, ElectronSessionStorage, resolveSafeSessionPath } from '../sessions'
 
 describe('Session Storage & Screenshot Decoupling Unit Tests', () => {
   let tempDir: string

@@ -1,6 +1,6 @@
 import { ipcMain, type BrowserWindow } from 'electron'
-import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { getWhisperProcessManager } from '../../services/whisper/index.js'
+import { IPC_CHANNELS } from '../../../common'
+import { getWhisperProcessManager } from '../../services/whisper'
 
 export function registerWhisperHandlers(win: BrowserWindow): void {
   const whisperManager = getWhisperProcessManager()

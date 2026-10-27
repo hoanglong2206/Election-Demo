@@ -11,9 +11,10 @@ import {
   CallLLMInputSchema,
   CallMultimodalLLMInputSchema,
   sanitizeLogMessage,
-} from '../credentials/credentialSchema.js'
-import { getElectronCredentialStore, type ElectronCredentialStore } from '../credentials/credentialStore.js'
-import { resolveSafeSessionPath } from '../sessions/mediaProtocol.js'
+  getElectronCredentialStore,
+  type ElectronCredentialStore,
+} from '../credentials/index.js'
+import { resolveSafeSessionPath } from '../sessions/index.js'
 import { SSEStreamParser } from './sseParser.js'
 import { getValidatedModelId } from './modelDefaults.js'
 import { parseJsonSafe, readStreamingBenchmark } from './benchmark.js'

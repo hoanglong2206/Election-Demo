@@ -1,11 +1,9 @@
 import {
   ElectronCredentialStore as PureCredentialStore,
-} from './credentials/credentialStore.js'
-import { getElectronLlmService } from './llm/llmService.js'
-import type { CallLLMInput, CallMultimodalLLMInput } from './credentials/credentialSchema.js'
-
-export * from './credentials/credentialStore.js'
-export * from './credentials/credentialSchema.js'
+  type CallLLMInput,
+  type CallMultimodalLLMInput
+} from './credentials/index.js'
+import { getElectronLlmService } from './llm/index.js'
 
 /**
  * Backward compatibility facade:

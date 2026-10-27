@@ -3,7 +3,7 @@ import {
   cleanSilenceHallucination,
   isRepetitiveLoop,
   isSilenceHallucination,
-} from '../hallucinationFilter'
+} from '../whisper/hallucinationFilter'
 
 describe('Hallucination Filter', () => {
   it('should detect and filter YouTube/subtitle boilerplate silence hallucinations', () => {

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { getElectronLlmService } from '../../services/llm/index.js'
+import { getElectronLlmService } from '../../services/llm'
 
 interface ActiveLLMStreamInfo {
   requestId: string

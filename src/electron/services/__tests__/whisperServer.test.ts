@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as http from 'node:http'
-import { AsyncMutex } from '../whisperProcessManager'
-import { createSilentWavBuffer } from '../wavHeader'
+import { AsyncMutex, createSilentWavBuffer } from '../whisper'
+
 
 describe('Whisper Persistent Server Engine - Unit & Integration Tests', () => {
   describe('AsyncMutex', () => {

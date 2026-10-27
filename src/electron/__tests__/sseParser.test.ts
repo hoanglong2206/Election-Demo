@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { SSEStreamParser } from '../services/sseParser'
+import { SSEStreamParser } from '../services/llm/sseParser'
 
 describe('SSEStreamParser', () => {
   it('parses standard OpenAI stream chunks cleanly', () => {
