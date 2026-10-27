@@ -36,7 +36,6 @@ import {
 	subscribeSessions,
 	type MeetingSession,
 } from "../../services/sessionHistory";
-import { parseDocumentFile } from "../../services/documentParser";
 
 import {
 	analyzeCvJdMatchHeuristic,
@@ -795,6 +794,7 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
 		setParsingError(null);
 
 		try {
+			const { parseDocumentFile } = await import("../../services/documentParser");
 			const parsed = await parseDocumentFile(file);
 			// Allow up to 15,000 characters for rich context
 			const content =

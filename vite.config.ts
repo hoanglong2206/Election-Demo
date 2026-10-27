@@ -20,6 +20,36 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     chunkSizeWarningLimit: 2000,
+    modulePreload: {
+      polyfill: false,
+      resolveDependencies: (_filename, deps) => {
+        // Exclude heavy document parsers (pdfjs, unpdf, mammoth) from initial modulepreload
+        return deps.filter(
+          (dep) =>
+            !dep.includes('pdfjs') &&
+            !dep.includes('dist-') &&
+            !dep.includes('unpdf') &&
+            !dep.includes('mammoth') &&
+            !dep.includes('documentParser') &&
+            !dep.includes('document-parser')
+        )
+      },
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('unpdf') || id.includes('pdfjs')) {
+            return 'pdfjs-vendor'
+          }
+          if (id.includes('mammoth')) {
+            return 'mammoth-vendor'
+          }
+          if (id.includes('documentParser')) {
+            return 'document-parser'
+          }
+        },
+      },
+    },
   },
   server: {
     port: 5173,

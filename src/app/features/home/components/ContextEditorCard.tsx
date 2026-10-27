@@ -110,6 +110,13 @@ export function ContextEditorCard({
 	const [isExtractingKeywords, setIsExtractingKeywords] = useState(false);
 	const [extractKeywordsSuccess, setExtractKeywordsSuccess] = useState(false);
 
+	const handleTriggerFileUpload = () => {
+		// Preload parser chunk dynamically in background while file dialog is open,
+		// ensuring pdfjs/mammoth are never loaded during app boot (< 300ms startup)
+		void import("../../../services/documentParser");
+		fileInputRef.current?.click();
+	};
+
 	const handleReExtract = () => {
 		if (isExtractingKeywords || !onReExtractKeywords) return;
 		setIsExtractingKeywords(true);
@@ -709,7 +716,7 @@ export function ContextEditorCard({
 										type="button"
 										id="btn-upload-cv"
 										disabled={isParsingDocument}
-										onClick={() => fileInputRef.current?.click()}
+										onClick={handleTriggerFileUpload}
 										className={cn(
 											"text-[10px] h-6 flex items-center gap-1 px-2 rounded-md border transition-all font-medium whitespace-nowrap shadow-sm",
 											isParsingDocument
@@ -745,7 +752,7 @@ export function ContextEditorCard({
 										type="button"
 										id="btn-upload-jd"
 										disabled={isParsingDocument}
-										onClick={() => fileInputRef.current?.click()}
+										onClick={handleTriggerFileUpload}
 										className={cn(
 											"text-[10px] h-6 flex items-center gap-1 px-2 rounded-md border transition-all font-medium whitespace-nowrap shadow-sm",
 											isParsingDocument
@@ -787,7 +794,7 @@ export function ContextEditorCard({
 								type="button"
 								id="btn-upload-discussion-doc"
 								disabled={isParsingDocument}
-								onClick={() => fileInputRef.current?.click()}
+								onClick={handleTriggerFileUpload}
 								className={cn(
 									"text-[10px] h-6 flex items-center gap-1 px-2 rounded-md border transition-all font-medium whitespace-nowrap shadow-sm",
 									isParsingDocument

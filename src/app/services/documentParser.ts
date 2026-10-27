@@ -54,8 +54,11 @@ export async function parseDocumentFile(file: File): Promise<ParseDocumentResult
       const { getDocumentProxy, extractText } = await import('unpdf')
       const arrayBuffer = await file.arrayBuffer()
       const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer))
-      const { totalPages, text: rawPdfText } = await extractText(pdf, { mergePages: true })
-      const text = cleanDocumentText(Array.isArray(rawPdfText) ? rawPdfText.join('\n\n') : rawPdfText || '')
+      const res = await extractText(pdf, { mergePages: true })
+      const totalPages = res.totalPages
+      const rawPdfText = Array.isArray(res.text) ? res.text.join('\n\n') : res.text || ''
+
+      const text = cleanDocumentText(rawPdfText)
 
       if (!text) {
         throw new Error(
