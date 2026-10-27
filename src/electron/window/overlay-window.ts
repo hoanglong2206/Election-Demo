@@ -26,10 +26,11 @@ export function createOverlayWindow(): BrowserWindow {
     // ── Overlay appearance ─────────────────────────────────────────────────
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000', // Prevents DWM white flash on window focus / click
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
-    hasShadow: true,
+    hasShadow: false, // Prevents Windows DWM native border/shadow white repaint on focus
     show: false, // Don't show immediately to prevent stealing focus on startup
 
     // ── Always-on-top level (above most apps, including meeting clients) ───
@@ -47,6 +48,9 @@ export function createOverlayWindow(): BrowserWindow {
       backgroundThrottling: false,
     },
   })
+
+  // Explicitly enforce transparent root buffer to eliminate white flashes on Windows composition
+  win.setBackgroundColor('#00000000')
 
   // ── Screen Protection & Always-on-top ────────────────────────────────────
   // Ẩn hoàn toàn khỏi screen capture / screen share / WebRTC (kể cả Entire Screen)

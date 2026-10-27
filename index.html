@@ -1,14 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
     <meta name="description" content="Real-time AI Meeting Copilot — live transcript translation and AI suggestions." />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: app-media:; media-src 'self' blob: app-media:; connect-src 'self' https: http: ws: wss: app-media:;" />
     <title>AI Meeting Copilot</title>
     <style>
-      /* Prevent flash of white background during load */
-      html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+      /* Prevent flash of white background during load, focus, or window activation */
+      :root {
+        color-scheme: dark;
+        --tw-ring-offset-color: transparent;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: transparent !important;
+        color-scheme: dark;
+        overflow: hidden;
+      }
+      textarea, input, select {
+        color-scheme: dark;
+        -webkit-tap-highlight-color: transparent;
+      }
     </style>
   </head>
   <body>

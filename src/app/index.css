@@ -8,6 +8,7 @@
 /* ── Shadcn/ui CSS variables (dark theme by default for the overlay) ───────── */
 @layer base {
   :root {
+    color-scheme: dark;
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
 
@@ -62,9 +63,29 @@
     padding: 0;
     overflow: hidden;
     background: transparent;
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  textarea,
+  input {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent browser autofill white flash on inputs & textareas */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover, 
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus {
+    -webkit-text-fill-color: #ffffff;
+    -webkit-box-shadow: 0 0 0px 1000px rgba(11, 15, 25, 0.95) inset;
+    transition: background-color 5000s ease-in-out 0s;
   }
 
   /* Prevent text selection on drag regions */

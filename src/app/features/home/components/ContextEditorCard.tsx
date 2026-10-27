@@ -335,9 +335,11 @@ export function ContextEditorCard({
 								handleAddKeyword();
 							}
 						}}
+						autoComplete="off"
+						spellCheck={false}
 						placeholder="+ Thêm keyword mới (nhấn Enter)..."
 						className={cn(
-							"bg-black/50 border border-white/10 rounded-md px-2 py-0.5 text-[10px] text-white/90 placeholder:text-white/30 focus:outline-none flex-1 min-w-0 transition-all",
+							"bg-black/50 border border-white/10 rounded-md px-2 py-0.5 text-[10px] text-white/90 placeholder:text-white/30 focus:outline-none flex-1 min-w-0 transition-colors duration-150",
 							focusBorder,
 						)}
 					/>
@@ -824,15 +826,17 @@ export function ContextEditorCard({
 			<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 				{mode === "interview" ? (
 					interviewTab === "cv" ? (
-						<div className="w-full flex-1 min-h-0 flex flex-col justify-between overflow-hidden gap-1 animate-fade-in">
+						<div className="w-full flex-1 min-h-0 flex flex-col justify-between overflow-hidden gap-1">
 							<textarea
 								id="input-cv-text"
 								value={contextData.cvSummary}
 								onChange={(e) =>
 									onContextChange({ ...contextData, cvSummary: e.target.value })
 								}
+								autoComplete="off"
+								spellCheck={false}
 								placeholder="Dán tóm tắt CV, dự án thực tế, tech stack của bạn vào đây (hoặc nhấn Upload CV .pdf/.docx)... AI sẽ dùng kinh nghiệm này để trả lời phỏng vấn theo đúng thực tế."
-								className="w-full flex-1 min-h-0 bg-black/35 hover:bg-black/45 focus:bg-black/50 border border-white/[0.08] focus:border-violet-500/50 rounded-xl p-2.5 text-[11px] text-white/90 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-violet-500/30 resize-none font-mono leading-relaxed custom-scrollbar transition-all"
+								className="w-full flex-1 min-h-0 bg-[#0d111d] hover:bg-[#0f1424] focus:bg-[#0f1424] border border-white/[0.08] focus:border-violet-500/50 rounded-xl p-2.5 text-[11px] text-white/90 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-violet-500/30 resize-none font-mono leading-relaxed custom-scrollbar transition-colors duration-150 caret-violet-400"
 							/>
 							<div className="flex items-center justify-between px-1 text-[9px] text-white/40 shrink-0">
 								<span className="truncate">
@@ -853,7 +857,7 @@ export function ContextEditorCard({
 							</div>
 						</div>
 					) : (
-						<div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden animate-fade-in">
+						<div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
 							<div className="flex-1 shrink-0 flex flex-col relative">
 								<textarea
 									id="input-jd-text"
@@ -864,8 +868,10 @@ export function ContextEditorCard({
 											jobDescription: e.target.value,
 										})
 									}
+									autoComplete="off"
+									spellCheck={false}
 									placeholder="Dán yêu cầu tuyển dụng (JD) vào đây hoặc bấm Upload JD... Ví dụ: Vị trí Senior Software Engineer, yêu cầu Microservices, React, Docker, Golang..."
-									className="w-full h-full bg-black/35 hover:bg-black/45 focus:bg-black/50 border border-white/[0.08] focus:border-violet-500/50 rounded-xl p-2.5 text-[11px] text-white/90 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-violet-500/30 resize-none font-mono leading-relaxed custom-scrollbar transition-all"
+									className="w-full h-full bg-[#0d111d] hover:bg-[#0f1424] focus:bg-[#0f1424] border border-white/[0.08] focus:border-violet-500/50 rounded-xl p-2.5 text-[11px] text-white/90 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-violet-500/30 resize-none font-mono leading-relaxed custom-scrollbar transition-colors duration-150 caret-violet-400"
 								/>
 								<div className="absolute right-2 bottom-1.5 text-[8.5px] font-mono text-white/30 pointer-events-none bg-black/60 px-1.5 py-0.5 rounded border border-white/[0.05]">
 									{contextData.jobDescription?.length || 0} ký tự • ~{jdTokens}{" "}
@@ -876,7 +882,7 @@ export function ContextEditorCard({
 						</div>
 					)
 				) : (
-					<div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden animate-fade-in">
+					<div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
 						<div className="flex-1 shrink-0 flex flex-col relative">
 							<textarea
 								id="input-discussion-text"
@@ -887,8 +893,10 @@ export function ContextEditorCard({
 										discussionTopic: e.target.value,
 									})
 								}
+								autoComplete="off"
+								spellCheck={false}
 								placeholder="Điền chủ đề cuộc họp, bài toán kiến trúc hoặc tải lên tài liệu (.pdf, .docx)... Ví dụ: Thiết kế hệ thống Rate Limiting phân tán, xử lý cache stampede khi flash sale, hoặc di chuyển từ Monolith sang Microservices..."
-								className="w-full h-full bg-black/35 hover:bg-black/45 focus:bg-black/50 border border-white/[0.08] focus:border-indigo-500/50 rounded-xl p-2.5 text-[11px] text-white/90 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 resize-none font-mono leading-relaxed custom-scrollbar transition-all"
+								className="w-full h-full bg-[#0d111d] hover:bg-[#0f1424] focus:bg-[#0f1424] border border-white/[0.08] focus:border-indigo-500/50 rounded-xl p-2.5 text-[11px] text-white/90 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 resize-none font-mono leading-relaxed custom-scrollbar transition-colors duration-150 caret-indigo-400"
 							/>
 							<div className="absolute right-2 bottom-1.5 text-[8.5px] font-mono text-white/30 pointer-events-none bg-black/60 px-1.5 py-0.5 rounded border border-white/[0.05]">
 								{contextData.discussionTopic?.length || 0} ký tự • ~

@@ -344,8 +344,10 @@ export function AILatencyBenchmarkSection({
             value={customPrompt}
             onChange={(e) => handlePromptChange(e.target.value)}
             rows={2}
+            autoComplete="off"
+            spellCheck={false}
             placeholder="Nhập câu hỏi benchmark tùy chọn..."
-            className="w-full text-xs font-mono bg-black/40 border border-white/10 rounded-xl p-2.5 text-white/90 placeholder-white/30 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 resize-none transition-all"
+            className="w-full text-xs font-mono bg-[#0d111d] border border-white/10 rounded-xl p-2.5 text-white/90 placeholder-white/30 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 resize-none transition-colors duration-150 caret-amber-400"
           />
         </div>
 
