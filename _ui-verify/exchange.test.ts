@@ -122,6 +122,17 @@ checks['stitch: removes word overlap'] =
 checks['stitch: joins plain fragments'] =
   stitchFragments(['hello there', 'how are you']) === 'hello there how are you'
 
+// ── 9. scanLatestExchangeWithAI returns assembler result with 0 LLM calls
+const { scanLatestExchangeWithAI } = await import('../src/app/services/ai-model/copilot/scanLatestExchange')
+const aiScanned = await scanLatestExchangeWithAI(interviewLines, 'interview')
+checks['scanLatestExchangeWithAI: returns assembled result'] = aiScanned?.original === 'Can you explain how CAP theorem applies to your system?'
+checks['scanLatestExchangeWithAI: does not mark as AI scanned'] = aiScanned?.isAiScanned === false
+checks['scanLatestExchangeWithAI: includes fullTurnText'] = aiScanned?.fullTurnText === 'Can you explain how CAP theorem applies to your system?'
+
+// ── 10. Valid word repetition preservation
+checks['stitch: preserves valid word repetitions'] =
+  stitchFragments(['I think that', 'that is true']) === 'I think that that is true'
+
 let allPass = true
 for (const [name, ok] of Object.entries(checks)) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`)
@@ -135,3 +146,4 @@ console.log(JSON.stringify(ms, null, 2))
 
 console.log(allPass ? '\nPASS: latest-exchange logic is correct' : '\nFAIL: exchange logic regression')
 process.exit(allPass ? 0 : 1)
+

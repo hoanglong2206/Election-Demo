@@ -6,6 +6,16 @@ import {
   type InterviewStreamInit,
 } from '../services/ai-model/copilot/interview'
 import type { CopilotInterviewResult } from '../services/ai-model/copilot/types'
+import type { GateDecision } from '../services/ai-model/copilot/intentGate'
+
+export type StreamingAnswerCallbacks = {
+  onInit?: (init: InterviewStreamInit) => void
+  onFirstToken?: (ttftMs: number) => void
+  onDelta?: (delta: string, currentFullText: string) => void
+  onDone?: (result: CopilotInterviewResult) => void
+  onError?: (error: Error, partialText: string) => void
+  onGateDecision?: (decision: GateDecision) => void
+}
 
 export interface UseStreamingAnswerReturn {
   streamingState: StreamingState
@@ -16,13 +26,7 @@ export interface UseStreamingAnswerReturn {
   activeRequestId: string | null
   startStream: (
     params: GenerateInterviewAnswerParams,
-    callbacks?: {
-      onInit?: (init: InterviewStreamInit) => void
-      onFirstToken?: (ttftMs: number) => void
-      onDelta?: (delta: string, currentFullText: string) => void
-      onDone?: (result: CopilotInterviewResult) => void
-      onError?: (error: Error, partialText: string) => void
-    }
+    callbacks?: StreamingAnswerCallbacks
   ) => Promise<void>
   cancelStream: () => void
   reset: () => void
@@ -82,13 +86,7 @@ export function useStreamingAnswer(): UseStreamingAnswerReturn {
   const startStream = useCallback(
     async (
       params: GenerateInterviewAnswerParams,
-      callbacks?: {
-        onInit?: (init: InterviewStreamInit) => void
-        onFirstToken?: (ttftMs: number) => void
-        onDelta?: (delta: string, currentFullText: string) => void
-        onDone?: (result: CopilotInterviewResult) => void
-        onError?: (error: Error, partialText: string) => void
-      }
+      callbacks?: StreamingAnswerCallbacks
     ) => {
       // 1. Cancel previous stream if active
       if (cancelActiveStreamRef.current) {
@@ -124,6 +122,10 @@ export function useStreamingAnswer(): UseStreamingAnswerReturn {
             setStreamingState('streaming')
             callbacks?.onFirstToken?.(tokenTtft)
           },
+          onGateDecision: (decision) => {
+            if (activeRequestIdRef.current !== requestId) return
+            callbacks?.onGateDecision?.(decision)
+          },
           onDelta: (delta) => {
             if (activeRequestIdRef.current !== requestId) return
             accumulatedTextRef.current += delta
@@ -147,6 +149,16 @@ export function useStreamingAnswer(): UseStreamingAnswerReturn {
             if (rafIdRef.current !== null) {
               cancelAnimationFrame(rafIdRef.current)
               rafIdRef.current = null
+            }
+            const isGateAbort = err.message?.includes('Intent Gate')
+            if (isGateAbort) {
+              // Zero UI flicker: do not render anything to UI, reset state to idle
+              accumulatedTextRef.current = ''
+              setStreamedContent('')
+              setError(null)
+              setStreamingState('idle')
+              callbacks?.onError?.(err, '')
+              return
             }
             const fallback = accumulatedTextRef.current || partialText
             setStreamedContent(fallback)

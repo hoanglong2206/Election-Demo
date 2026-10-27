@@ -1,7 +1,17 @@
 import type { AppMode } from '@/types/electron.d'
 import type { TriggerMode } from '../../settings/schema'
+import { assembleLatestExchange } from './exchangeAssembler'
+import {
+  CONFIDENCE_HIGH,
+  CONFIDENCE_LOW,
+  BUDGET_USAGE_LIMIT_PERCENT,
+  getGateMetrics,
+  resetGateMetrics,
+  recordGateCall,
+} from './intentGate'
 
 export type { TriggerMode } from '../../settings/schema'
+export { CONFIDENCE_HIGH, CONFIDENCE_LOW }
 
 /**
  * Supported Intent categories for Copilot trigger decisions.
@@ -56,6 +66,8 @@ export interface IntentDetectionResult {
   mergedLineCount: number
   matchedPatterns: string[]
   timestamp?: string
+  gateRequired?: boolean
+  isAmbiguous?: boolean
 }
 
 export interface QuestionDetectorConfig {
@@ -90,26 +102,51 @@ export function getAdaptiveDebounceMs(
 export interface IntentMetrics {
   detectedQuestions: number
   falseTriggers: number
-  classifierCalls: number
+  gateCalls: number
+  gateCancelled: number
+  wastedTokens: number
   averageDetectionLatency: number
+  classifierCalls?: number
 }
 
 const intentMetrics: IntentMetrics = {
   detectedQuestions: 0,
   falseTriggers: 0,
-  classifierCalls: 0,
+  get gateCalls() {
+    return getGateMetrics().gateCalls
+  },
+  get gateCancelled() {
+    return getGateMetrics().gateCancelled
+  },
+  get wastedTokens() {
+    return getGateMetrics().wastedTokens
+  },
   averageDetectionLatency: 0,
+  get classifierCalls() {
+    return getGateMetrics().gateCalls
+  },
+  set classifierCalls(_val: number | undefined) {
+    // backward compat
+  },
 }
 
 export function getIntentMetrics(): IntentMetrics {
-  return { ...intentMetrics }
+  return {
+    detectedQuestions: intentMetrics.detectedQuestions,
+    falseTriggers: intentMetrics.falseTriggers,
+    gateCalls: getGateMetrics().gateCalls,
+    gateCancelled: getGateMetrics().gateCancelled,
+    wastedTokens: getGateMetrics().wastedTokens,
+    averageDetectionLatency: intentMetrics.averageDetectionLatency,
+    classifierCalls: getGateMetrics().gateCalls,
+  }
 }
 
 export function resetIntentMetrics(): void {
   intentMetrics.detectedQuestions = 0
   intentMetrics.falseTriggers = 0
-  intentMetrics.classifierCalls = 0
   intentMetrics.averageDetectionLatency = 0
+  resetGateMetrics()
 }
 
 export function recordFalseTrigger(): void {
@@ -268,6 +305,12 @@ const QUESTION_PATTERNS: { regex: RegExp; pattern: string; score: number }[] = [
   { regex: /(?:phải\s+không|đúng\s+không|được\s+không|ổn\s+không)[.?!…\s]*$/i, pattern: 'phải/đúng không', score: 0.88 },
   { regex: /(?:không|k|ko|hả|hở|nhỉ|à|chăng|đúng chưa)[.?!…\s]*$/i, pattern: 'ending particle (hả, không, nhỉ)', score: 0.82 },
   { regex: /\bchưa[.?!…\s]*$/i, pattern: 'ending chưa', score: 0.8 },
+
+  // 7. Indirect / Implicit interview questions (Ambiguous Band: score 0.50 - 0.58)
+  // Gated by Tier 2 Intent Gate to verify actionable question before rendering
+  { regex: /\b(?:i'm\s+curious|i\s+am\s+curious|i'd\s+love\s+to\s+hear|i'd\s+love\s+to\s+know|i\s+wonder\s+how|i'm\s+interested\s+in|we\s+would\s+like\s+to\s+understand|we'd\s+like\s+to\s+know|i'd\s+like\s+to\s+see)\b/i, pattern: 'indirect question cues (en)', score: 0.55 },
+  { regex: /\b(?:mình\s+muốn\s+nghe|mình\s+muốn\s+biết|mình\s+tò\s+mò\s+về|chia\s+sẻ\s+cho\s+mình|kể\s+cho\s+mình\s+nghe|thử\s+giải\s+thích|cho\s+mình\s+ví\s+dụ|muốn\s+biết\s+bạn)\b/i, pattern: 'indirect question cues (vi)', score: 0.55 },
+  { regex: /\b(?:walk\s+me\s+through\s+how|give\s+me\s+an\s+example\s+of|describe\s+your\s+experience\s+with)\b/i, pattern: 'prompting cues (en)', score: 0.55 },
 ]
 
 /**
@@ -355,7 +398,7 @@ export function stripLeadingFillers(text: string): string {
  */
 export function isCandidateSpeaker(speaker?: string): boolean {
   const s = (speaker || '').toLowerCase()
-  return s.includes('you') || s.includes('bạn') || s.includes('ứng viên')
+  return s.includes('you') || s.includes('bạn') || s.includes('ứng viên') || s.includes('candidate')
 }
 
 /**
@@ -721,26 +764,98 @@ export function detectIntent(
 
 export async function classifyIntent(
   result: IntentDetectionResult,
-  classifier?: IntentClassifier,
+  classifierOrOptions?:
+    | IntentClassifier
+    | {
+        budgetPercent?: number
+        speaker?: string
+        triggerMode?: TriggerMode
+        minWords?: number
+        wordCount?: number
+      },
+  maybeOptions?: {
+    budgetPercent?: number
+    speaker?: string
+    triggerMode?: TriggerMode
+    minWords?: number
+    wordCount?: number
+  }
 ): Promise<IntentDetectionResult> {
-  const activeClassifier = classifier || configuredIntentClassifier
-  const threshold = 0.65
-  if (!activeClassifier || result.confidence >= threshold) return result
-  intentMetrics.classifierCalls += 1
-  const classified = await activeClassifier.classify({
-    text: result.normalizedText,
-    language: detectLanguage(result.normalizedText),
-    heuristicIntent: result.normalizedIntent || 'normal_conversation',
-  })
+  const isCustomClassifier =
+    classifierOrOptions && typeof (classifierOrOptions as any).classify === 'function'
+  const activeClassifier = isCustomClassifier
+    ? (classifierOrOptions as IntentClassifier)
+    : configuredIntentClassifier
+  const options = isCustomClassifier ? maybeOptions : (classifierOrOptions as any)
+
+  if (activeClassifier) {
+    recordGateCall()
+    const classified = await activeClassifier.classify({
+      text: result.normalizedText,
+      language: detectLanguage(result.normalizedText),
+      heuristicIntent: result.normalizedIntent || 'normal_conversation',
+    })
+    return {
+      ...result,
+      normalizedIntent: classified.intent,
+      questionText: classified.questionText ?? result.questionText,
+      triggerReason: classified.triggerReason ?? result.triggerReason,
+      topic: classified.topic ?? result.topic,
+      confidence: Math.max(0, Math.min(1, classified.confidence)),
+      isQuestion: classified.intent !== 'normal_conversation',
+      shouldTriggerCopilot: result.shouldTriggerCopilot || classified.confidence >= CONFIDENCE_HIGH,
+      gateRequired: false,
+      isAmbiguous: false,
+    }
+  }
+
+  // ── 3-Tier Confidence Strategy (Deterministic Zero-Network Classification) ──
+  // Tier 1: High Confidence >= 0.65 -> runs as current (no speculative gating required)
+  if (result.confidence >= CONFIDENCE_HIGH) {
+    return {
+      ...result,
+      gateRequired: false,
+      isAmbiguous: false,
+    }
+  }
+
+  // Tier 3: Low Confidence < 0.35 -> ignored / skipped
+  if (result.confidence < CONFIDENCE_LOW) {
+    return {
+      ...result,
+      gateRequired: false,
+      isAmbiguous: false,
+      shouldTriggerCopilot: false,
+      triggerDecisionReason: `Skipped: Low confidence (${(result.confidence * 100).toFixed(0)}% < ${(CONFIDENCE_LOW * 100).toFixed(0)}%)`,
+    }
+  }
+
+  // Tier 2: Ambiguous Range [0.35, 0.65)
+  // Check qualifying conditions:
+  // - triggerMode === 'auto'
+  // - speaker is not the candidate
+  // - minimum word count met
+  // - budget remaining (< 80% usage)
+  const triggerMode = options?.triggerMode || 'auto'
+  const isCandidate = isCandidateSpeaker(options?.speaker || result.speaker)
+  const wordCount = options?.wordCount ?? result.normalizedText.trim().split(/\s+/).filter(Boolean).length
+  const minWords = options?.minWords ?? 3
+  const budgetPercent = options?.budgetPercent ?? 0
+
+  const meetsAmbiguousConditions =
+    triggerMode === 'auto' &&
+    !isCandidate &&
+    wordCount >= minWords &&
+    budgetPercent < BUDGET_USAGE_LIMIT_PERCENT
+
   return {
     ...result,
-    normalizedIntent: classified.intent,
-    questionText: classified.questionText ?? result.questionText,
-    triggerReason: classified.triggerReason ?? result.triggerReason,
-    topic: classified.topic ?? result.topic,
-    confidence: Math.max(0, Math.min(1, classified.confidence)),
-    isQuestion: classified.intent !== 'normal_conversation',
-    shouldTriggerCopilot: result.shouldTriggerCopilot || classified.confidence >= threshold,
+    gateRequired: true,
+    isAmbiguous: true,
+    shouldTriggerCopilot: meetsAmbiguousConditions,
+    triggerDecisionReason: meetsAmbiguousConditions
+      ? `Speculative Trigger: Ambiguous confidence (${(result.confidence * 100).toFixed(0)}%) with Intent Gate`
+      : `Skipped: Ambiguous confidence (${(result.confidence * 100).toFixed(0)}%) condition not met (triggerMode=${triggerMode}, candidate=${isCandidate}, words=${wordCount}, budget=${budgetPercent}%)`,
   }
 }
 
@@ -750,7 +865,7 @@ export async function classifyIntent(
  * and returns the coherent IntentDetectionResult.
  */
 export function detectIntentFromRecentLines(
-  lines: { id?: number; speaker: string; original: string; translated?: string; timestamp?: string }[],
+  lines: { id?: number; speaker: string; original: string; translated?: string; timestamp?: string; continuation?: boolean; sequenceId?: number }[],
   config?: QuestionDetectorConfig
 ): IntentDetectionResult | null {
   if (!lines || lines.length === 0) return null
@@ -758,64 +873,30 @@ export function detectIntentFromRecentLines(
   const mode = config?.mode || 'interview'
   const triggerMode = config?.triggerMode || 'auto'
   const threshold = config?.confidenceThreshold ?? 0.65
-  const maxLookback = config?.maxLookbackLines ?? 4
+  const maxLookback = config?.maxLookbackLines ?? 6
 
-  // 1. Identify target line:
-  // In interview mode: prioritize latest non-candidate line.
-  // In discussion mode: latest line.
-  let targetIdx = lines.length - 1
-  if (mode === 'interview') {
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (!isCandidateSpeaker(lines[i].speaker)) {
-        targetIdx = i
-        break
-      }
-    }
-  }
+  // 1. Assemble exchange using unified deterministic assembler
+  const assembled = assembleLatestExchange(lines, mode, {
+    maxLookbackLines: maxLookback,
+  })
 
-  const targetLine = lines[targetIdx]
-  const targetSpeaker = targetLine.speaker || 'Speaker'
+  if (!assembled) return null
 
-  // 2. Lookback and stitch preceding chunks from the same speaker if incomplete
-  let startIdx = targetIdx
-  while (
-    startIdx > 0 &&
-    targetIdx - startIdx < maxLookback &&
-    lines[startIdx - 1].speaker === targetSpeaker
-  ) {
-    const prevText = cleanUtterance(lines[startIdx - 1].original || '')
-    // Stop lookback if the preceding line ended cleanly with a full sentence (. ? !)
-    // UNLESS it ended with trailing ellipsis ...
-    if (/[.!?\u3002\uff01\uff1f]$/.test(prevText) && !/\.\.\.$/.test(prevText)) {
-      break
-    }
-    startIdx--
-  }
+  const mergedText = assembled.original
+  const targetSpeaker = assembled.speaker
+  const isSplit = assembled.mergedLineCount > 1
 
-  const group = lines.slice(startIdx, targetIdx + 1)
-  const isSplit = group.length > 1
-
-  // 3. Assemble fragments cleanly:
-  // e.g. "Can you explain..." + "...how Redis handles expiration?" -> "Can you explain how Redis handles expiration?"
-  const cleanedParts = group.map((l) => {
-    let t = cleanUtterance(l.original || l.translated || '')
-    // Strip leading/trailing ellipsis during stitching
-    t = t.replace(/^\.{2,3}\s*/, '').replace(/\s*\.{2,3}$/, '')
-    return t.trim()
-  }).filter(Boolean)
-
-  const mergedText = cleanedParts.join(' ').replace(/\s+/g, ' ').trim()
-
-  // 4. Classify merged sentence
-  const detection = detectIntent(mergedText || targetLine.original, {
+  // 2. Classify merged sentence
+  const detection = detectIntent(mergedText, {
     speaker: targetSpeaker,
     mode,
     triggerMode,
     confidenceThreshold: threshold,
   })
 
+  const lastLine = lines[lines.length - 1]
   const dedupeKey = config?.dedupeKey || `${mode}:${targetSpeaker}`
-  const signature = `${targetLine.id ?? targetLine.timestamp ?? lines.length}:${cleanUtterance(mergedText)}`
+  const signature = `${lastLine?.id ?? assembled.timestamp ?? lines.length}:${cleanUtterance(mergedText)}`
   if (lastIntentByKey.get(dedupeKey) === signature) {
     return {
       ...detection,
@@ -829,8 +910,8 @@ export function detectIntentFromRecentLines(
   return {
     ...detection,
     isSplitFragment: isSplit,
-    mergedLineCount: group.length,
-    timestamp: targetLine.timestamp,
+    mergedLineCount: assembled.mergedLineCount,
+    timestamp: assembled.timestamp,
   }
 }
 

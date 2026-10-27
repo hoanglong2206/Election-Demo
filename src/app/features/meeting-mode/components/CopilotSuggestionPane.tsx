@@ -546,7 +546,7 @@ export function CopilotSuggestionPane({
             <HelpCircle className="w-3.5 h-3.5 text-violet-400 shrink-0" />
             <div className="min-w-0 text-[11px]">
               <div className="text-violet-200 font-semibold truncate">
-                Phát hiện câu hỏi: &ldquo;{semiAutoPendingQuestion}&rdquo;
+                {latestIntent?.isAmbiguous ? 'Có thể là câu hỏi: ' : 'Phát hiện câu hỏi: '}&ldquo;{semiAutoPendingQuestion}&rdquo;
               </div>
               <div className="text-white/40 text-[9.5px]">
                 Chế độ Semi-Auto — Bấm nút để tạo câu trả lời gợi ý

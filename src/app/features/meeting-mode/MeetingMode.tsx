@@ -33,7 +33,7 @@ import {
   generateDiscussionOptions,
   isQuestionUtterance,
   extractHeuristicLatestExchange,
-  scanLatestExchangeWithAI,
+  assembleLatestExchange,
   type ScannedExchangeResult,
   prewarmCopilotCache,
 } from '../../services/ai-model/copilotResponseService'
@@ -67,6 +67,7 @@ import {
   classifyIntent,
   detectIntentFromRecentLines,
   getAdaptiveDebounceMs,
+  speculativeRateLimiter,
   type IntentDetectionResult,
   type TriggerMode,
   tieredContextManager,
@@ -862,6 +863,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         await streamingAnswer.startStream(
           {
             question: questionText,
+            fullTurnText: currentExchange?.fullTurnText,
             cvSummary: activeCV,
             backgroundAnalysis: activeCvBg,
             transcriptLines: lines,
@@ -888,6 +890,20 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
                 streamingState: 'connecting',
               })
             },
+            onGateDecision: (decision) => {
+              if (!isMountedRef.current) return
+              console.log(`[IntentGate] Gate resolved: ${decision.intent} (conf: ${decision.confidence.toFixed(2)})`)
+              setLatestIntent((prev) => {
+                if (!prev) return prev
+                return {
+                  ...prev,
+                  normalizedIntent: decision.intent,
+                  confidence: decision.confidence,
+                  gateRequired: false,
+                  isAmbiguous: false,
+                }
+              })
+            },
             onFirstToken: (ttftMs) => {
               performance.mark('first_delta')
               try {
@@ -896,6 +912,15 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
                 console.log(
                   `[InterviewStreaming] TTFT: ${Math.round(measure?.duration ?? ttftMs)}ms (p50 target <= 1000ms)`
                 )
+              } catch {}
+              try {
+                performance.measure('stop_to_first_delta', 'stop_listening_click', 'first_delta')
+                const stopMeasure = performance.getEntriesByName('stop_to_first_delta').pop()
+                if (stopMeasure) {
+                  console.log(
+                    `[Telemetry] Stop -> First Token: ${Math.round(stopMeasure.duration)}ms (Target < 1500ms, LLM calls: 1)`
+                  )
+                }
               } catch {}
             },
             onDelta: (_delta, currentFullText) => {
@@ -1011,6 +1036,13 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
             onError: (err, partialText) => {
               if (!isMountedRef.current) return
               setIsGeneratingAIResponse(false)
+              const isGateAbort = err.message?.includes('Intent Gate')
+              if (isGateAbort) {
+                // Zero UI flicker: cancelled early before emitting any content
+                setCustomInterviewAnswer(null)
+                setAiError(null)
+                return
+              }
               if (partialText && partialText.trim()) {
                 setCustomInterviewAnswer((prev) =>
                   prev && prev.id === answerId
@@ -1138,12 +1170,23 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       }
 
       // 1. Detect Intent with 0ms latency heuristic + multi-chunk Whisper stitching
+      const lastLine = validLines[validLines.length - 1]
+      const exchangeWordCount = (lastLine?.original || '').trim().split(/\s+/).filter(Boolean).length
+      const currentBudgetPercent = contextUsage?.usagePercent ?? 0
+
       const heuristicIntent = detectIntentFromRecentLines(validLines, {
         mode,
         triggerMode,
-        dedupeKey: `${mode}:${validLines[validLines.length - 1]?.speaker || 'Speaker'}`,
+        dedupeKey: `${mode}:${lastLine?.speaker || 'Speaker'}`,
       })
-      const intentRes = heuristicIntent ? await classifyIntent(heuristicIntent) : null
+      const intentRes = heuristicIntent
+        ? await classifyIntent(heuristicIntent, {
+            triggerMode,
+            speaker: lastLine?.speaker,
+            wordCount: exchangeWordCount,
+            budgetPercent: currentBudgetPercent,
+          })
+        : null
       setLatestIntent(intentRes)
       if (intentRes?.isQuestion) {
         void window.api.sessions?.recovery?.append({
@@ -1187,7 +1230,10 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       }
 
       if (triggerMode === 'semi-auto') {
-        if (intentRes?.isQuestion && intentRes.confidence >= 0.7) {
+        // High confidence question: ready chip. Ambiguous range: show "có thể là câu hỏi" chip without calling LLM
+        if (intentRes?.isQuestion && intentRes.confidence >= 0.65) {
+          setSemiAutoPendingQuestion(intentRes.normalizedText)
+        } else if (intentRes?.isAmbiguous && intentRes.normalizedText) {
           setSemiAutoPendingQuestion(intentRes.normalizedText)
         } else {
           setSemiAutoPendingQuestion(null)
@@ -1198,11 +1244,20 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       // Auto Mode: Only trigger if shouldTriggerCopilot is true (Question/Command/Discussion in discussion mode)
       // Small talk ("Okay", "I see", "Right", "Thank you") sets shouldTriggerCopilot = false -> LLM call skipped!
       if (intentRes?.shouldTriggerCopilot && targetExchange) {
+        // Speculative rate limit check for ambiguous band
+        if (intentRes.isAmbiguous && !speculativeRateLimiter.canExecute()) {
+          console.log('[IntentGate] Speculative call rate limit reached (max 6/min). Skipping auto speculative stream.')
+          return
+        }
+
         // When segment closed by natural silence, debounce can be reduced for instant answers
         if (copilotDebounceTimerRef.current) clearTimeout(copilotDebounceTimerRef.current)
         const debounceMs = getAdaptiveDebounceMs(targetExchange.original, 500, lastCloseReasonRef.current)
         copilotDebounceTimerRef.current = setTimeout(async () => {
           if (!isMountedRef.current) return
+          if (intentRes.isAmbiguous) {
+            speculativeRateLimiter.recordExecution()
+          }
           // Câu hỏi mới: hủy stream cũ nếu đang chạy và bắt đầu stream mới ngay
           if (isGeneratingAIResponseRef.current) {
             streamingAnswer.cancelStream()
@@ -1235,27 +1290,47 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     isTogglingAudioRef.current = true
     try {
       if (isCapturing) {
+        performance.mark('stop_listening_click')
         stopCapture()
         setIsListening(false)
         if (validLines.length > 0) {
-          // Bấm Dừng → AI quét transcript ngắt quãng để lấy trao đổi gần nhất bằng ngôn ngữ gốc,
-          // đồng thời tóm tắt nội dung rồi dùng chính ngữ cảnh đó để đề xuất phản hồi.
-          setIsGeneratingAIResponse(true)
-          setIsScanningExchange(true)
-          try {
-            const scanned = await scanLatestExchangeWithAI(validLines, mode)
-            if (scanned && isMountedRef.current) {
-              setLatestExchange(scanned)
-              setIsLatestAQuestion(scanned.isQuestion)
-            }
-            if (isMountedRef.current) {
-              setIsScanningExchange(false)
-              markExchangeScanned()
-            }
+          // Bấm Dừng:
+          // 1. Quét ghép trao đổi gần nhất xác định (0 token, vài ms) bằng exchangeAssembler
+          const asmStart = performance.now()
+          const scanned = assembleLatestExchange(validLines, mode)
+          const asmDuration = performance.now() - asmStart
+          console.log(`[ExchangeAssembler] Assembled in ${asmDuration.toFixed(2)}ms (target < 5ms)`)
 
-            const summary = await handleGenerateSummary(validLines)
-            if (isMountedRef.current) {
-              await handleGenerateCopilotResponse(validLines, summary, scanned)
+          if (scanned && isMountedRef.current) {
+            setLatestExchange(scanned)
+            setIsLatestAQuestion(scanned.isQuestion)
+            markExchangeScanned()
+          }
+          if (isMountedRef.current) {
+            setIsScanningExchange(false)
+          }
+
+          setIsGeneratingAIResponse(true)
+          try {
+            if (mode === 'interview') {
+              // INTERVIEW MODE: Bắt đầu stream câu trả lời NGAY LẬP TỨC (1 lượt LLM, TTFT < 1s).
+              // KHÔNG chờ tóm tắt vì nhánh này không cần summary. Chạy tóm tắt nền song song.
+              void handleGenerateSummary(validLines)
+              if (isMountedRef.current) {
+                await handleGenerateCopilotResponse(validLines, null, scanned)
+              }
+            } else {
+              // DISCUSSION MODE: Dùng incremental summary sẵn có từ tieredContextManager làm summaryOverride,
+              // sinh gợi ý ngay lập tức. Chạy tóm tắt mới song song và cập nhật UI khi hoàn tất.
+              const readyIncrementalSummary =
+                tieredContextManager.getIncrementalSummary() || meetingSummary || ''
+
+              const copilotPromise = isMountedRef.current
+                ? handleGenerateCopilotResponse(validLines, readyIncrementalSummary, scanned)
+                : Promise.resolve()
+
+              const summaryPromise = handleGenerateSummary(validLines)
+              await Promise.allSettled([copilotPromise, summaryPromise])
             }
           } finally {
             if (isMountedRef.current) {
@@ -1467,15 +1542,18 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     setIsRegenerating(true)
     setIsShortened(false)
     try {
-      setIsScanningExchange(true)
-      const scanned = await scanLatestExchangeWithAI(validLines, mode)
-      if (scanned) {
+      const scanned = assembleLatestExchange(validLines, mode)
+      if (scanned && isMountedRef.current) {
         setLatestExchange(scanned)
         setIsLatestAQuestion(scanned.isQuestion)
+        markExchangeScanned()
       }
       setIsScanningExchange(false)
-      markExchangeScanned()
-      await handleGenerateCopilotResponse(validLines, null, scanned)
+      const summaryToUse =
+        mode === 'discussion'
+          ? tieredContextManager.getIncrementalSummary() || meetingSummary || null
+          : null
+      await handleGenerateCopilotResponse(validLines, summaryToUse, scanned)
     } finally {
       setIsScanningExchange(false)
       setIsRegenerating(false)

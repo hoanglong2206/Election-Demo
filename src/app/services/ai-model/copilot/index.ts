@@ -8,7 +8,12 @@ export * from './universalLlm'
 export * from './backgroundAnalysis'
 export * from './interview'
 export * from './discussion'
-export * from './scanLatestExchange'
+export {
+  extractHeuristicLatestExchange,
+  scanLatestExchangeWithAI,
+  stitchFragments,
+  type ScannedExchangeResult,
+} from './scanLatestExchange'
 export * from './cvJdMatcher'
 export * from './contextManager'
 export * from './answerStrategyRouter'
@@ -16,3 +21,17 @@ export * from './answerGrounding'
 export * from './localRag'
 export * from './candidateBrief'
 export * from './promptTemplate'
+export {
+  assembleLatestExchange,
+  stitchTwoChunks,
+  extractSentences,
+  wordsMatch,
+  levenshteinDistance,
+  endsWithSentencePunctuation,
+  cleanAudioAnnotations,
+  type AssemblerLine,
+  type AssemblerOptions,
+  type AssembledExchange,
+} from './exchangeAssembler'
+export * from './intentGate'
+

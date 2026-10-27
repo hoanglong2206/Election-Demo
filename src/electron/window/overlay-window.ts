@@ -57,7 +57,7 @@ export function createOverlayWindow(): BrowserWindow {
   // Trên Windows 10 (2004+) & Windows 11: Electron tự gọi SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
   // Trên macOS: NSWindowSharingNone
   try {
-    win.setContentProtection(true)
+    win.setContentProtection(false)
     console.log('[Electron] Content protection enabled (WDA_EXCLUDEFROMCAPTURE):', win.isContentProtected())
   } catch (err) {
     console.error('[Electron] Failed to enable content protection:', err)

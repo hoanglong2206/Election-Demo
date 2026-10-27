@@ -12,7 +12,10 @@ import {
   selectAnswerStrategy,
   type AnswerStrategyId,
 } from './answerStrategyRouter'
-import type { IntentDetectionResult } from './questionDetector'
+import {
+  type IntentDetectionResult,
+  recordFalseTrigger,
+} from './questionDetector'
 import { validateAnswerGrounding, type GroundingMode } from './answerGrounding'
 import {
   createInterviewDocuments,
@@ -22,6 +25,16 @@ import {
 import { buildStaticSystemPrefix, buildDynamicUserPrompt } from './promptTemplate'
 import { isFullContextNeeded } from './candidateBrief'
 import { usageTrackerService } from '../../usage-tracker'
+import {
+  IntentGateStreamParser,
+  stripGateTag,
+  inferStrategyFromGateIntent,
+  isDistinctStrategyMismatch,
+  recordGateCall,
+  recordGateCancelled,
+  recordGatePassed,
+  type GateDecision,
+} from './intentGate'
 
 export interface InterviewStreamInit {
   label: string
@@ -56,10 +69,12 @@ export interface GenerateInterviewAnswerStreamCallbacks {
   onDelta: (delta: string) => void
   onDone: (result: CopilotInterviewResult) => void
   onError: (error: Error, partialText: string) => void
+  onGateDecision?: (decision: GateDecision) => void
 }
 
 export interface GenerateInterviewAnswerParams {
   question: string
+  fullTurnText?: string
   cvSummary: string
   backgroundAnalysis?: string
   transcriptLines?: { speaker: string; original: string; translated?: string }[]
@@ -77,6 +92,7 @@ export interface GenerateInterviewAnswerParams {
   }
   signal?: AbortSignal
   fullContext?: boolean
+  hasReRouted?: boolean
 }
 
 /**
@@ -215,6 +231,7 @@ export async function generateInterviewAnswerStream(
   // 3. Dynamic User Prompt: Strategy directive + top-k RAG + rolling summary + recent turns + question
   const dynamicPrompt = buildDynamicUserPrompt({
     question,
+    fullTurnText: params.fullTurnText,
     strategyDirective: `${strategy.label}\n${strategy.buildPrompt({ question, intent: params.intent })}`,
     retrievalContext: retrieval.context,
     sessionMemoryBlock: assembled.sessionMemoryBlock,
@@ -222,20 +239,97 @@ export async function generateInterviewAnswerStream(
     lang,
   })
 
-  let accumulated = ''
+  recordGateCall()
 
-  return callUniversalLLMStream(
+  const gateParser = new IntentGateStreamParser({
+    isAmbiguous: params.intent?.isAmbiguous,
+    initialConfidence: params.intent?.confidence,
+  })
+
+  let accumulated = ''
+  let activeCancelStream: (() => void) | null = null
+  let isAbortedByGate = false
+  let gateResolved = false
+  let hasReRouted = params.hasReRouted ?? false
+
+  const cancelStream = await callUniversalLLMStream(
     dynamicPrompt,
     {
       onFirstToken: (ttftMs) => {
         callbacks.onFirstToken?.(ttftMs)
       },
       onDelta: (delta) => {
+        if (isAbortedByGate) return
         accumulated += delta
-        callbacks.onDelta(delta)
+
+        const parseResult = gateParser.processDelta(delta)
+
+        if (parseResult.status === 'buffering') {
+          // Buffering line 1 for intent gate resolution; do not emit to UI
+          return
+        }
+
+        if (parseResult.status === 'abort') {
+          isAbortedByGate = true
+          recordGateCancelled(parseResult.wastedChars)
+          recordFalseTrigger()
+          if (activeCancelStream) {
+            activeCancelStream()
+          }
+          callbacks.onError(
+            new Error(`Stream aborted by Intent Gate: ${parseResult.reason || 'not an interview question'}`),
+            ''
+          )
+          return
+        }
+
+        if (parseResult.status === 'pass') {
+          if (!gateResolved) {
+            gateResolved = true
+            recordGatePassed()
+            if (parseResult.decision) {
+              callbacks.onGateDecision?.(parseResult.decision)
+
+              // Requirement 6: Strategy re-routing (max 1 restart if distinct mismatch)
+              if (!hasReRouted) {
+                const gateIntent = parseResult.decision.intent
+                if (isDistinctStrategyMismatch(selection.strategyId, gateIntent)) {
+                  const newStrategyId = inferStrategyFromGateIntent(gateIntent)
+                  if (newStrategyId && newStrategyId !== selection.strategyId) {
+                    console.log(
+                      `[IntentGate] Strategy mismatch detected (${selection.strategyId} vs ${gateIntent}). Re-routing to ${newStrategyId} (max 1 restart)`
+                    )
+                    hasReRouted = true
+                    if (activeCancelStream) {
+                      activeCancelStream()
+                    }
+                    void generateInterviewAnswerStream(
+                      {
+                        ...params,
+                        strategyOverride: newStrategyId,
+                        hasReRouted: true,
+                      },
+                      callbacks
+                    ).then((restartedCancel) => {
+                      activeCancelStream = restartedCancel
+                    })
+                    return
+                  }
+                }
+              }
+            }
+          }
+
+          if (parseResult.contentDelta) {
+            callbacks.onDelta(parseResult.contentDelta)
+          }
+        }
       },
       onDone: (rawRes) => {
-        const text = stripCodeFences(accumulated || rawRes.text)
+        if (isAbortedByGate) return
+
+        const cleanAccumulated = stripGateTag(accumulated)
+        const text = stripCodeFences(cleanAccumulated || stripGateTag(rawRes.text))
         const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
         const shortContent = lines.slice(0, 3).join('\n')
 
@@ -255,7 +349,8 @@ export async function generateInterviewAnswerStream(
         })
       },
       onError: (err, partialText) => {
-        callbacks.onError(err, accumulated || partialText)
+        if (isAbortedByGate) return
+        callbacks.onError(err, stripGateTag(accumulated || partialText))
       },
     },
     {
@@ -267,6 +362,13 @@ export async function generateInterviewAnswerStream(
       signal: params.signal,
     }
   )
+
+  activeCancelStream = cancelStream
+  return () => {
+    if (activeCancelStream) {
+      activeCancelStream()
+    }
+  }
 }
 
 /**
@@ -328,6 +430,7 @@ export async function generateInterviewAnswer(
   // 3. Dynamic User Prompt: Strategy directive + top-k RAG + rolling summary + recent turns + question
   const dynamicPrompt = buildDynamicUserPrompt({
     question,
+    fullTurnText: params.fullTurnText,
     strategyDirective: `${strategy.label}\n${strategy.buildPrompt({ question, intent: params.intent })}`,
     retrievalContext: retrieval.context,
     sessionMemoryBlock: assembled.sessionMemoryBlock,
@@ -344,7 +447,7 @@ export async function generateInterviewAnswer(
   })
   if (!rawRes) return null
 
-  const text = stripCodeFences(rawRes.text)
+  const text = stripCodeFences(stripGateTag(rawRes.text))
   if (!text) return null
   if (looksLikeJson(text)) {
     console.warn('[interview] LLM returned unparseable JSON — refusing to render it raw')

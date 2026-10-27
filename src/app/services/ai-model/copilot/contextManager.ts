@@ -419,6 +419,15 @@ Trả về kết quả duy nhất ở định dạng JSON hợp lệ:
   }
 
   /**
+   * Retrieves ready incremental summary text if available.
+   */
+  public getIncrementalSummary(): string {
+    const formatted = this.formatSessionMemoryBlock()
+    if (formatted === '(Chưa có diễn biến trước đó)') return ''
+    return formatted
+  }
+
+  /**
    * Assembles the 4-tier context with strict token budgeting and priority truncation.
    */
   public assembleContext(
