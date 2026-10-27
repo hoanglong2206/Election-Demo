@@ -1,6 +1,6 @@
 import { ipcMain, desktopCapturer, screen } from 'electron'
-import { IPC_CHANNELS } from '../../../common'
-import type { DesktopCaptureOptions, DesktopCaptureResult } from '../../../common'
+import { IPC_CHANNELS } from '../../../common/index.js'
+import type { DesktopCaptureOptions, DesktopCaptureResult } from '../../../common/index.js'
 
 export function registerCaptureHandlers(): void {
   // ── Desktop sources for audio/screen capture ──────────────────────────────

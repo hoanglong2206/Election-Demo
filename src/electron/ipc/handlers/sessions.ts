@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron'
 import path from 'path'
-import { IPC_CHANNELS } from '../../../common'
-import { ElectronSessionStorage, SessionRecoveryService } from '../../services/sessions'
+import { IPC_CHANNELS } from '../../../common/index.js'
+import { ElectronSessionStorage, SessionRecoveryService } from '../../services/sessions/index.js'
 import { getAppStateManager } from '../../services/appState.js'
 
 let activeSessionRecoveryService: SessionRecoveryService | null = null
@@ -67,10 +67,10 @@ export function registerSessionHandlers(): void {
 
   // Run background migration and orphan image cleanup safely after idle delay
   setTimeout(() => {
-    sessionStorage.migrateLegacySessions().catch((err) => {
+    sessionStorage.migrateLegacySessions().catch((err: unknown) => {
       console.warn('[SessionStorage] Background migration warning:', err)
     })
-    sessionStorage.cleanOrphanImages().catch((err) => {
+    sessionStorage.cleanOrphanImages().catch((err: unknown) => {
       console.warn('[SessionStorage] Orphan image cleaner warning:', err)
     })
   }, 2500)

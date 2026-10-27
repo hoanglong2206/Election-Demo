@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import * as fs from 'fs'
 import * as path from 'path'
-import { sanitizeLogMessage } from '../../../../../electron/services/credentialSchema'
+import { sanitizeLogMessage } from '../../../../../electron/services/credentials/credentialSchema'
 
 function getAllSourceFiles(dir: string, fileList: string[] = []): string[] {
   const files = fs.readdirSync(dir)

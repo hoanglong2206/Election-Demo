@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../../../common'
+import { IPC_CHANNELS } from '../../../common/index.js'
 import { getAppStateManager } from '../../services/appState.js'
 
 export function registerAppStateHandlers(): void {

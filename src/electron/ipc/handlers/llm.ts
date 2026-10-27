@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { getElectronLlmService } from '../../services/llm'
+import { IPC_CHANNELS } from '../../../common/index.js'
+import { getElectronLlmService } from '../../services/llm/index.js'
 
 interface ActiveLLMStreamInfo {
   requestId: string
@@ -80,23 +80,23 @@ export function registerLlmHandlers(): void {
       llmService.streamLLM(
         input,
         {
-          onFirstToken: (data) => {
+          onFirstToken: (data: any) => {
             if (!event.sender.isDestroyed()) {
               event.sender.send(IPC_CHANNELS.LLM.STREAM_FIRST_TOKEN, { requestId, ...data })
             }
           },
-          onDelta: (data) => {
+          onDelta: (data: any) => {
             if (!event.sender.isDestroyed()) {
               event.sender.send(IPC_CHANNELS.LLM.STREAM_DELTA, { requestId, ...data })
             }
           },
-          onDone: (data) => {
+          onDone: (data: any) => {
             activeLLMStreams.delete(requestId)
             if (!event.sender.isDestroyed()) {
               event.sender.send(IPC_CHANNELS.LLM.STREAM_DONE, { requestId, ...data })
             }
           },
-          onError: (data) => {
+          onError: (data: any) => {
             activeLLMStreams.delete(requestId)
             if (!event.sender.isDestroyed()) {
               event.sender.send(IPC_CHANNELS.LLM.STREAM_ERROR, { requestId, ...data })

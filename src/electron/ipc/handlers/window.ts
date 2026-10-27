@@ -1,5 +1,5 @@
 import { ipcMain, type BrowserWindow } from 'electron'
-import { IPC_CHANNELS } from '../../../common'
+import { IPC_CHANNELS } from '../../../common/index.js'
 
 export function registerWindowHandlers(win: BrowserWindow): void {
   ipcMain.on(IPC_CHANNELS.WINDOW.MINIMIZE, () => {

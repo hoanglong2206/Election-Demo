@@ -1,4 +1,4 @@
-import type { CredentialProvider } from '../credentials'
+import type { CredentialProvider } from '../credentials/index.js'
 import { SSEStreamParser } from './sseParser.js'
 
 export interface StreamingBenchmarkResult {

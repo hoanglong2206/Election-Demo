@@ -1,12 +1,12 @@
 import { ipcMain, type BrowserWindow } from 'electron'
-import { IPC_CHANNELS } from '../../../common'
-import { getWhisperProcessManager } from '../../services/whisper'
+import { IPC_CHANNELS } from '../../../common/index.js'
+import { getWhisperProcessManager } from '../../services/whisper/index.js'
 
 export function registerWhisperHandlers(win: BrowserWindow): void {
   const whisperManager = getWhisperProcessManager()
 
   // Forward process state and telemetry updates to Renderer window
-  whisperManager.onStateChange((state, telemetry) => {
+  whisperManager.onStateChange((state: any, telemetry?: any) => {
     if (!win.isDestroyed()) {
       win.webContents.send(IPC_CHANNELS.WHISPER.STATE_CHANGE, { state, telemetry })
     }
@@ -34,7 +34,7 @@ export function registerWhisperHandlers(win: BrowserWindow): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.WHISPER.DOWNLOAD_MODEL, async (_event, modelId: string) => {
-    return whisperManager.downloadModel(modelId, (percent, loadedMb, totalMb) => {
+    return whisperManager.downloadModel(modelId, (percent: number, loadedMb: number, totalMb: number) => {
       if (!win.isDestroyed()) {
         win.webContents.send(IPC_CHANNELS.WHISPER.DOWNLOAD_PROGRESS, {
           modelId,
