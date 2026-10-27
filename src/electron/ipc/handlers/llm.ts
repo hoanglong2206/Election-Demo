@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { getElectronCredentialStore } from '../../services/credentialStore.js'
+import { getElectronLlmService } from '../../services/llm/index.js'
 
 interface ActiveLLMStreamInfo {
   requestId: string
@@ -10,7 +10,7 @@ interface ActiveLLMStreamInfo {
 }
 
 export function registerLlmHandlers(): void {
-  const credentialStore = getElectronCredentialStore()
+  const llmService = getElectronLlmService()
   const activeLLMStreams = new Map<string, ActiveLLMStreamInfo>()
   const trackedSenderLifecycles = new Set<number>()
   const MAX_CONCURRENT_PER_SENDER = 4
@@ -38,7 +38,7 @@ export function registerLlmHandlers(): void {
   }
 
   ipcMain.handle(IPC_CHANNELS.LLM.CALL, async (_event, payload: any) => {
-    return credentialStore.callLLM(payload)
+    return llmService.callLLM(payload)
   })
 
   ipcMain.on(
@@ -77,7 +77,7 @@ export function registerLlmHandlers(): void {
         createdAt: Date.now(),
       })
 
-      credentialStore.streamLLM(
+      llmService.streamLLM(
         input,
         {
           onFirstToken: (data) => {
@@ -119,6 +119,6 @@ export function registerLlmHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.LLM.CALL_MULTIMODAL, async (_event, payload: any) => {
-    return credentialStore.callMultimodalLLM(payload)
+    return llmService.callMultimodalLLM(payload)
   })
 }

@@ -1,9 +1,11 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { getElectronCredentialStore } from '../../services/credentialStore.js'
+import { getElectronCredentialStore } from '../../services/credentials/index.js'
+import { getElectronLlmService } from '../../services/llm/index.js'
 
 export function registerCredentialHandlers(): void {
   const credentialStore = getElectronCredentialStore()
+  const llmService = getElectronLlmService()
 
   ipcMain.handle(IPC_CHANNELS.CREDENTIALS.IS_AVAILABLE, () => {
     return credentialStore.isAvailable()
@@ -32,14 +34,14 @@ export function registerCredentialHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.CREDENTIALS.VERIFY_API_KEY,
     async (_event, payload: { provider: string; rawKey?: string }) => {
-      return credentialStore.verifyApiKey(payload.provider, payload.rawKey)
+      return llmService.verifyApiKey(payload.provider, payload.rawKey)
     }
   )
 
   ipcMain.handle(
     IPC_CHANNELS.CREDENTIALS.TEST_MODEL_AVAILABILITY,
     async (_event, payload: { provider: string; rawKey: string; modelId: string }) =>
-      credentialStore.testModelAvailability(payload.provider, payload.rawKey, payload.modelId)
+      llmService.testModelAvailability(payload.provider, payload.rawKey, payload.modelId)
   )
 
   ipcMain.handle(
@@ -48,7 +50,7 @@ export function registerCredentialHandlers(): void {
       _event,
       payload: { audioBase64: string; modelId?: string; language?: string; prompt?: string }
     ) => {
-      return credentialStore.transcribeGroq(
+      return llmService.transcribeGroq(
         payload.audioBase64,
         payload.modelId,
         payload.language,
@@ -58,7 +60,7 @@ export function registerCredentialHandlers(): void {
   )
 
   ipcMain.handle(IPC_CHANNELS.CREDENTIALS.SYNC_MODELS, async () => {
-    return credentialStore.syncModels()
+    return llmService.syncModels()
   })
 
   ipcMain.handle(
@@ -72,7 +74,7 @@ export function registerCredentialHandlers(): void {
         provider?: 'google_translate' | 'deepl'
       }
     ) => {
-      return credentialStore.translateText(payload)
+      return llmService.translateText(payload)
     }
   )
 }

@@ -1,8 +1,8 @@
 import { app, BrowserWindow, session, desktopCapturer, globalShortcut } from 'electron'
 import { createOverlayWindow } from './window/overlay-window.js'
 import { registerIpcHandlers, getActiveSessionRecoveryService, getActiveUsageStorageService } from './ipc/handler.js'
-import { getWhisperProcessManager } from './services/whisperProcessManager.js'
-import { registerMediaSchemeAsPrivileged, registerMediaProtocolHandler } from './services/mediaProtocol.js'
+import { getWhisperProcessManager } from './services/whisper/index.js'
+import { registerMediaSchemeAsPrivileged, registerMediaProtocolHandler } from './services/sessions/index.js'
 import path from 'path'
 
 // Register app-media scheme as privileged before app is ready

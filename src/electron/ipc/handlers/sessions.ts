@@ -1,8 +1,7 @@
 import { app, ipcMain } from 'electron'
 import path from 'path'
 import { IPC_CHANNELS } from '../../../common/ipc/channels.js'
-import { ElectronSessionStorage } from '../../services/sessionStorage.js'
-import { SessionRecoveryService } from '../../services/sessionRecovery.js'
+import { ElectronSessionStorage, SessionRecoveryService } from '../../services/sessions/index.js'
 import { getAppStateManager } from '../../services/appState.js'
 
 let activeSessionRecoveryService: SessionRecoveryService | null = null
