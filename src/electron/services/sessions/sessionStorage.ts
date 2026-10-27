@@ -116,18 +116,42 @@ function safeId(id: string): string {
 
 /**
  * Performs atomic file write: writes to temporary file then renames.
+ * Resilient against Windows EPERM/EBUSY race conditions with retry backoff and copy fallback.
  */
 async function atomicWriteFile(filePath: string, content: string | Buffer): Promise<void> {
   const dir = path.dirname(filePath)
   await fs.mkdir(dir, { recursive: true })
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 7)}.tmp`
   await fs.writeFile(tempPath, content)
-  await fs.rename(tempPath, filePath)
+
+  const maxRetries = 6
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await fs.rename(tempPath, filePath)
+      return
+    } catch (err: any) {
+      const isLockError = err?.code === 'EPERM' || err?.code === 'EBUSY' || err?.code === 'EACCES'
+      if (!isLockError || attempt === maxRetries) {
+        // Fallback on Windows: overwrite via copyFile, then unlink temp
+        try {
+          await fs.copyFile(tempPath, filePath)
+          await fs.unlink(tempPath).catch(() => {})
+          return
+        } catch {
+          await fs.unlink(tempPath).catch(() => {})
+          throw err
+        }
+      }
+      // Exponential backoff: 25ms, 50ms, 100ms, 200ms, 400ms...
+      await new Promise((res) => setTimeout(res, 25 * Math.pow(2, attempt - 1)))
+    }
+  }
 }
 
 export class ElectronSessionStorage {
   private readonly sessionsDir: string
   private readonly indexPath: string
+  private indexLock: Promise<any> = Promise.resolve()
   private activeSessionId: string | null = null
   private migrationStatus: MigrationProgress = {
     isRunning: false,
@@ -349,12 +373,16 @@ export class ElectronSessionStorage {
   }
 
   public async writeIndex(sessions: SessionIndexItem[]): Promise<void> {
-    const payload: SessionsIndexFile = {
-      version: 1,
-      updatedAt: Date.now(),
-      sessions,
-    }
-    await atomicWriteFile(this.indexPath, JSON.stringify(payload, null, 2))
+    const nextWrite = this.indexLock.then(async () => {
+      const payload: SessionsIndexFile = {
+        version: 1,
+        updatedAt: Date.now(),
+        sessions,
+      }
+      await atomicWriteFile(this.indexPath, JSON.stringify(payload, null, 2))
+    })
+    this.indexLock = nextWrite.catch(() => {})
+    return nextWrite
   }
 
   /**

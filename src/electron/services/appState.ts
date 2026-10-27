@@ -71,7 +71,16 @@ export class AppStateManager {
       }
       const tmp = `${this.stateFilePath}.${process.pid}.${Date.now()}.tmp`
       fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf8')
-      fs.renameSync(tmp, this.stateFilePath)
+      try {
+        fs.renameSync(tmp, this.stateFilePath)
+      } catch (renameErr: any) {
+        if (renameErr?.code === 'EPERM' || renameErr?.code === 'EBUSY' || renameErr?.code === 'EACCES') {
+          fs.copyFileSync(tmp, this.stateFilePath)
+          try { fs.unlinkSync(tmp) } catch {}
+        } else {
+          throw renameErr
+        }
+      }
       this.cachedState = { ...state }
       return true
     } catch (err) {

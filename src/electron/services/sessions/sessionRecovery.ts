@@ -39,7 +39,27 @@ function atomicWriteWithFsync(filePath: string, content: string): void {
   } finally {
     fs.closeSync(fd)
   }
-  fs.renameSync(temporary, filePath)
+
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      fs.renameSync(temporary, filePath)
+      return
+    } catch (err: any) {
+      const isLockError = err?.code === 'EPERM' || err?.code === 'EBUSY' || err?.code === 'EACCES'
+      if (!isLockError || attempt === 6) {
+        try {
+          fs.copyFileSync(temporary, filePath)
+          try { fs.unlinkSync(temporary) } catch {}
+          return
+        } catch {
+          try { fs.unlinkSync(temporary) } catch {}
+          throw err
+        }
+      }
+      const start = Date.now()
+      while (Date.now() - start < 15 * attempt) {}
+    }
+  }
 }
 
 function sanitizePayloadForRecovery(payload: Record<string, unknown>): Record<string, unknown> {
