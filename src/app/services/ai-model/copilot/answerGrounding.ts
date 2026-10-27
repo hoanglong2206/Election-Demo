@@ -1,11 +1,16 @@
 /**
  * Answer Grounding & Anti-Hallucination Pipeline (3-Tier Hybrid Engine)
  * Layer 0: Structured FactSheet extraction & caching.
- * Layer 1: Fast, deterministic verification (0 token, regex lookarounds, multilingual aliases, exact metrics & relations).
+ * Layer 1: Fast, deterministic verification (0 token, inverted alias map, tech entity validation, context-aware metrics).
  * Layer 2: LLM Entailment Judge (1 batched request, feature 'grounding', temperature 0, timeout guarded).
  */
 
-import { extractFactSheet, type CandidateFactSheet } from './factSheet'
+import {
+  extractFactSheet,
+  computeContentHash,
+  detectMetricContextCategory,
+  type CandidateFactSheet,
+} from './factSheet'
 import { callUniversalLLM } from './universalLlm'
 
 export type GroundingMode = 'strict' | 'balanced'
@@ -43,15 +48,32 @@ export interface GroundingResult {
   degraded?: boolean
 }
 
-export interface GroundingInput {
-  answer: string
+export interface EvidenceIndex {
+  hash: string
+  factSheet: CandidateFactSheet
+  candidateEvidenceText: string
+  normalizedEvidenceText: string
+  candidateTokenSet: Set<string>
+  candidateTechEntities: Set<string>
+  candidateCompanies: Set<string>
+  evidenceList: GroundingEvidence[]
+  excerptTokenSets: Map<string, Set<string>>
+}
+
+export interface GroundingEvidenceInput {
   cv?: string
   profile?: string
   jobDescription?: string
   transcript?: string
   session?: string
   mode?: GroundingMode
+  answer?: string
+}
+
+export interface GroundingInput extends GroundingEvidenceInput {
+  answer: string
   signal?: AbortSignal
+  evidenceIndex?: EvidenceIndex
 }
 
 // ─── CONSTANTS & VOCABULARIES ────────────────────────────────────────────────
@@ -61,11 +83,16 @@ export const EXPLICIT_OVERLAP_THRESHOLD = 0.80
 export const INFERRED_OVERLAP_THRESHOLD = 0.25
 
 // Lookaround-based patterns with Unicode flag 'u' to safely handle Vietnamese diacritics
-export const PERSONAL_PATTERN = /(?<!\p{L})(?:i|i've|i have|i led|i built|i worked|i managed|my|we|tôi|tôi đã|mình|chúng tôi|em đã|anh đã|chị đã|kinh nghiệm của tôi|dự án của tôi|bản thân tôi|team của tôi|chúng em)(?!\p{L})/iu
+export const PERSONAL_PATTERN = /(?<!\p{L})(?:i|i've|i have|i led|i built|i worked|i managed|my|we|our|ours|our team|our system|tôi|tôi đã|mình|chúng tôi|chúng em|em|em đã|anh đã|chị đã|bên mình|team mình|công ty cũ|nhóm mình|phía mình|kinh nghiệm của tôi|dự án của tôi|bản thân tôi|team của tôi)(?!\p{L})|(?<!\p{L})(?:at|tại)\s+[A-Z\p{Lu}][\p{L}\p{N}.-]+/iu
+
+export const STARTING_ACTION_VERBS = /^\s*(?:implemented|led|built|designed|developed|optimized|scaled|managed|architected|created|integrated|migrated|authored|deployed|delivered|triển khai|xây dựng|thiết kế|tối ưu|tối ưu hóa|dẫn dắt|quản lý|chủ trì|phát triển|tạo ra|tích hợp|chuyển đổi|vận hành|đã\s+[\p{L}]+)\b/iu
+
+export const BULLET_PREFIX_REGEX = /^\s*(?:[-*•]|\d+\.)\s+/
 
 export const METRIC_PATTERN = /(?<!\p{L})(?:\d+(?:\.\d+)?%?|\d+\+?\s*(?:years?|năm|tháng|months?|members?|thành viên|engineers?|kỹ sư|người|people|triệu|million|scale|tỷ|billion|k|m|ms|rps|qps))(?!\p{L})/iu
 
-export const GENERAL_TECHNICAL_MARKERS = /(?<!\p{L})(?:theorem|algorithm|architecture|pattern|protocol|concept|definition|định lý|nguyên lý|mô hình|kiến trúc|khái niệm|bản chất|thông thường|theo lý thuyết|trong thực tế|microservices|monolith|acid|cap|cache|database|sql|nosql|rest|grpc|kafka|docker|k8s)(?!\p{L})/iu
+// Architectural & theoretical concepts (tool names like kafka, docker, k8s, cache, sql, etc. removed)
+export const GENERAL_TECHNICAL_MARKERS = /(?<!\p{L})(?:theorem|algorithm|architecture|pattern|protocol|concept|definition|trade-off|tradeoff|indexes|định lý|nguyên lý|mô hình|kiến trúc|khái niệm|bản chất|thông thường|theo lý thuyết|về mặt lý thuyết|trong thực tế|về cơ bản|in theory|by definition|stands for|is defined as|refers to|means that|là một khái niệm|được định nghĩa là|acid|cap|cap theorem|acid properties|acid principle|b-tree|cache-aside|event-driven|microservices|monolith)(?!\p{L})/iu
 
 export const OPINION_APPROACH_MARKERS = /(?<!\p{L})(?:i would|i typically|i prefer|in my opinion|approach|strategy|theo tôi|quan điểm của tôi|thông thường tôi|tôi thường ưu tiên|phương pháp tiếp cận|giải pháp đề xuất)(?!\p{L})/iu
 
@@ -81,6 +108,24 @@ export const STOP_WORDS = new Set([
   'đã', 'và', 'có', 'là', 'cho', 'trong', 'một', 'những', 'các', 'với', 'khi', 'được', 'để',
   'em', 'anh', 'chị', 'bằng', 'như', 'vào', 'tại', 'về', 'tới', 'sang', 'qua', 'ra',
   'tiếp theo', 'sau đó', 'đồng thời', 'ngoài ra',
+  'bên', 'mình', 'chúng', 'của', 'tôi',
+])
+
+export const CANONICAL_TECH_ENTITIES = new Set([
+  // Message & Streaming
+  'kafka', 'rabbitmq', 'sqs', 'sns', 'activemq', 'nats', 'pulsar', 'kinesis',
+  // Data Warehouses & Big Data
+  'snowflake', 'dbt', 'bigquery', 'redshift', 'databricks', 'spark', 'pyspark', 'flink', 'hadoop', 'hive', 'airflow', 'clickhouse', 'presto', 'trino',
+  // Databases & Stores
+  'postgres', 'postgresql', 'mysql', 'mongodb', 'redis', 'elasticsearch', 'cassandra', 'dynamodb', 'sqlite', 'mariadb', 'oracle', 'neo4j', 'couchbase', 'memcached',
+  // Programming Languages
+  'python', 'java', 'golang', 'go', 'rust', 'c#', 'c++', 'typescript', 'javascript', 'php', 'ruby', 'scala', 'kotlin', 'swift', 'dart',
+  // Frameworks & Libraries
+  'react', 'react native', 'vue', 'angular', 'svelte', 'next.js', 'nextjs', 'nuxt', 'node.js', 'nodejs', 'express', 'nest.js', 'nestjs', 'fastapi', 'django', 'flask', 'spring', 'spring boot', 'laravel', 'asp.net', '.net',
+  // Cloud & DevOps
+  'docker', 'kubernetes', 'k8s', 'aws', 'gcp', 'azure', 'terraform', 'ansible', 'jenkins', 'gitlab ci', 'github actions', 'helm', 'argocd', 'argo cd', 'prometheus', 'grafana',
+  // Protocols & APIs
+  'grpc', 'graphql', 'rest', 'websocket',
 ])
 
 export const VI_EN_TECH_ALIASES: Record<string, string[]> = {
@@ -95,7 +140,9 @@ export const VI_EN_TECH_ALIASES: Record<string, string[]> = {
   'cơ sở dữ liệu': ['database', 'db', 'sql', 'nosql', 'postgres', 'postgresql', 'mysql'],
   'tối ưu': ['optimize', 'optimized', 'optimization', 'performance'],
   'tối ưu hóa': ['optimize', 'optimized', 'optimization', 'performance'],
-  'hiệu năng': ['performance', 'latency', 'throughput', 'speed'],
+  'hiệu năng': ['performance', 'latency', 'throughput', 'speed', 'vitals'],
+  'tốc độ': ['speed', 'performance', 'latency', 'render', 'vitals'],
+  'vitals': ['performance', 'speed', 'tốc độ', 'render', 'hiệu năng'],
   'triển khai': ['deploy', 'deployed', 'deployment', 'release'],
   'xây dựng': ['build', 'built', 'develop', 'developed', 'architect'],
   'phát triển': ['develop', 'developed', 'development', 'build', 'built'],
@@ -105,7 +152,7 @@ export const VI_EN_TECH_ALIASES: Record<string, string[]> = {
   'vi dịch vụ': ['microservices', 'microservice'],
   'phân tán': ['distributed', 'distributed systems'],
   'bộ nhớ đệm': ['cache', 'caching', 'redis', 'memcached'],
-  'hàng đợi': ['queue', 'message queue', 'kafka', 'rabbitmq', 'messaging'],
+  'hàng đợi': ['queue', 'message queue', 'messaging'],
   'tin nhắn': ['message', 'messaging', 'queue'],
   'giảm': ['reduce', 'reduced', 'reduction', 'decrease', 'decreased'],
   'tăng': ['increase', 'increased', 'boost', 'boosted', 'improve', 'improved'],
@@ -150,8 +197,191 @@ export function stem(word: string): string {
 }
 
 /**
- * Extracts meaningful tokens, preserving short numbers (e.g. 5, 12),
- * 2-char tech terms (go, c#, ai, ml, js), and 2-char Vietnamese morphemes.
+ * Prebuilt Inverted Alias Map built once at module load:
+ * Maps each token and stem to its aliases for O(1) lookup.
+ */
+export const INVERTED_ALIAS_MAP: Map<string, string[]> = (() => {
+  const map = new Map<string, Set<string>>()
+
+  const addMapping = (from: string, to: string) => {
+    if (!from || !to || from === to) return
+    let existing = map.get(from)
+    if (!existing) {
+      existing = new Set<string>()
+      map.set(from, existing)
+    }
+    existing.add(to)
+  }
+
+  for (const [viPhrase, enList] of Object.entries(VI_EN_TECH_ALIASES)) {
+    const viClean = viPhrase.toLowerCase().trim()
+    const viParts = viClean.split(/\s+/).filter(Boolean)
+    const viStem = stem(viClean)
+
+    const viVariants = new Set<string>([viClean])
+    if (viStem) viVariants.add(viStem)
+    for (const p of viParts) {
+      viVariants.add(p)
+      const pStem = stem(p)
+      if (pStem) viVariants.add(pStem)
+    }
+
+    const enVariants = new Set<string>()
+    for (const en of enList) {
+      const enClean = en.toLowerCase().trim()
+      enVariants.add(enClean)
+      const enSt = stem(enClean)
+      if (enSt) enVariants.add(enSt)
+      const enParts = enClean.split(/\s+/).filter(Boolean)
+      for (const ep of enParts) {
+        enVariants.add(ep)
+        const epSt = stem(ep)
+        if (epSt) enVariants.add(epSt)
+      }
+    }
+
+    for (const v of viVariants) {
+      for (const e of enVariants) {
+        addMapping(v, e)
+        addMapping(e, v)
+      }
+    }
+
+    for (const e1 of enVariants) {
+      for (const e2 of enVariants) {
+        if (e1 !== e2) addMapping(e1, e2)
+      }
+    }
+  }
+
+  const result = new Map<string, string[]>()
+  for (const [key, set] of map.entries()) {
+    result.set(key, Array.from(set))
+  }
+  return result
+})()
+
+/**
+ * Normalizes technology entity names to canonical form.
+ */
+export function normalizeTechEntity(entity: string): string {
+  const norm = entity.toLowerCase().trim().replace(/^[.,;:!?]+|[.,;:!?]+$/g, '')
+  if (norm === 'postgresql') return 'postgres'
+  if (norm === 'k8s') return 'kubernetes'
+  if (norm === 'nodejs') return 'node.js'
+  if (norm === 'nextjs') return 'next.js'
+  if (norm === 'nestjs') return 'nest.js'
+  if (norm === 'nuxtjs') return 'nuxt'
+  if (norm === 'golang') return 'go'
+  if (norm === 'argo cd') return 'argocd'
+  if (norm === 'reactnative') return 'react native'
+  return norm
+}
+
+export const CANONICAL_TECH_REGEX = new RegExp(
+  '(?<![\\p{L}\\p{N}])(?:' +
+    Array.from(CANONICAL_TECH_ENTITIES)
+      .sort((a, b) => b.length - a.length)
+      .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|') +
+    ')(?![\\p{L}\\p{N}])',
+  'giu'
+)
+
+/**
+ * Extracts tech entities from text using canonical dictionary + heuristics (CamelCase, dotted names).
+ */
+export function extractTechEntitiesFromText(text: string): Set<string> {
+  const result = new Set<string>()
+  if (!text) return result
+
+  // 1. Single-pass regex for all canonical tech keywords
+  CANONICAL_TECH_REGEX.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = CANONICAL_TECH_REGEX.exec(text)) !== null) {
+    const raw = m[0].toLowerCase()
+    result.add(raw)
+    result.add(normalizeTechEntity(raw))
+  }
+
+  // 2. Dotted names (e.g. Node.js, Vue.js, Three.js)
+  const dottedRegex = /(?<![\p{L}\p{N}])([A-Za-z0-9]+(?:\.[a-zA-Z0-9]+)+)(?![\p{L}\p{N}])/gu
+  while ((m = dottedRegex.exec(text)) !== null) {
+    const raw = m[1].toLowerCase()
+    if (!/^\d+(\.\d+)+$/.test(raw) && !raw.endsWith('.com') && !raw.endsWith('.org')) {
+      result.add(raw)
+      result.add(normalizeTechEntity(raw))
+    }
+  }
+
+  // 3. CamelCase technology names (e.g. ElasticSearch, DynamoDB, BigQuery, Snowflake, etc.)
+  const camelRegex = /(?<![\p{L}\p{N}])([A-Z][a-z0-9]+[A-Z][a-zA-Z0-9]*)(?![\p{L}\p{N}])/gu
+  while ((m = camelRegex.exec(text)) !== null) {
+    const raw = m[1].toLowerCase()
+    result.add(raw)
+    result.add(normalizeTechEntity(raw))
+  }
+
+  return result
+}
+
+export interface ParsedClaimEntities {
+  entities: string[]
+  contrastAdopted: string[]
+  contrastReplaced: string[]
+}
+
+/**
+ * Parses tech entities and contrastive relationships from a claim.
+ * Handles "used X instead of Y", "replaced Y with X", "chuyển từ Y sang X", etc.
+ */
+export function parseClaimTechEntities(claim: string): ParsedClaimEntities {
+  const contrastAdopted: string[] = []
+  const contrastReplaced: string[] = []
+
+  const cleanEntity = (str: string) =>
+    str.toLowerCase().replace(/^[.,;:!?]+|[.,;:!?]+$/g, '').trim()
+
+  // 1. "used X instead of Y" / "dùng X thay vì Y"
+  const insteadRegex = /(?:used?|use|chọn|dùng|sử dụng)\s+([\p{L}\p{N}.-]+)\s+(?:instead of|rather than|thay vì|thay cho)\s+([\p{L}\p{N}.-]+)/giu
+  let m: RegExpExecArray | null
+  while ((m = insteadRegex.exec(claim)) !== null) {
+    const x = cleanEntity(m[1])
+    const y = cleanEntity(m[2])
+    if (x) contrastAdopted.push(x)
+    if (y) contrastReplaced.push(y)
+  }
+
+  // 2. "replaced Y with X" / "thay thế Y bằng X"
+  const replaceRegex = /(?:replaced?|replace|thay thế|thay)\s+([\p{L}\p{N}.-]+)\s+(?:with|by|bằng)\s+([\p{L}\p{N}.-]+)/giu
+  while ((m = replaceRegex.exec(claim)) !== null) {
+    const y = cleanEntity(m[1])
+    const x = cleanEntity(m[2])
+    if (x) contrastAdopted.push(x)
+    if (y) contrastReplaced.push(y)
+  }
+
+  // 3. "chuyển từ Y sang X" / "migrated from Y to X"
+  const migrateRegex = /(?:migrat(?:e|ed|ing)?|chuyển|chuyển đổi|move[d]?)\s+[\s\S]*?\b(?:from|từ)\s+([\p{L}\p{N}.-]+)\s+(?:to|into|sang|qua)\s+([\p{L}\p{N}.-]+)/giu
+  while ((m = migrateRegex.exec(claim)) !== null) {
+    const y = cleanEntity(m[1])
+    const x = cleanEntity(m[2])
+    if (x) contrastAdopted.push(x)
+    if (y) contrastReplaced.push(y)
+  }
+
+  // Extract all entities in claim
+  const allExtracted = Array.from(extractTechEntitiesFromText(claim))
+
+  return {
+    entities: allExtracted,
+    contrastAdopted,
+    contrastReplaced,
+  }
+}
+
+/**
+ * Extracts meaningful tokens.
  */
 export function tokens(text: string): string[] {
   const norm = normalize(text)
@@ -162,16 +392,45 @@ export function tokens(text: string): string[] {
     .filter((token) => {
       if (!token) return false
       if (STOP_WORDS.has(token)) return false
-      if (/^\d+(?:\.\d+)?%?$/.test(token)) return true // Keep metrics & numbers!
+      if (/^\d+(?:\.\d+)?%?$/.test(token)) return true
       if (token.length > 2) return true
-      if (SHORT_TECH_TERMS.has(token)) return true // Keep short tech terms!
-      if (token.length === 2 && /[\p{L}]/u.test(token)) return true // 2-char morphemes
+      if (SHORT_TECH_TERMS.has(token)) return true
+      if (token.length === 2 && /[\p{L}]/u.test(token)) return true
       return false
     })
 }
 
 /**
- * Robust sentence splitter that preserves abbreviations (e.g., Node.js, v1.2, etc.) and bullet lines.
+ * Fast O(tokens) alias expansion using prebuilt inverted map.
+ */
+export function expandTokensWithAliases(tokenList: string[]): Set<string> {
+  const set = new Set<string>()
+  for (const token of tokenList) {
+    if (!token) continue
+    set.add(token)
+    const st = stem(token)
+    if (st && st.length >= 2) set.add(st)
+
+    const aliases = INVERTED_ALIAS_MAP.get(token)
+    if (aliases) {
+      for (let i = 0; i < aliases.length; i++) {
+        set.add(aliases[i])
+      }
+    }
+    if (st && st !== token) {
+      const stemAliases = INVERTED_ALIAS_MAP.get(st)
+      if (stemAliases) {
+        for (let i = 0; i < stemAliases.length; i++) {
+          set.add(stemAliases[i])
+        }
+      }
+    }
+  }
+  return set
+}
+
+/**
+ * Robust sentence splitter that preserves abbreviations and markdown bullets.
  */
 export function splitSentences(answer: string): string[] {
   if (!answer || !answer.trim()) return []
@@ -183,14 +442,12 @@ export function splitSentences(answer: string): string[] {
     const line = rawLine.trim()
     if (!line) continue
 
-    // If it's a markdown bullet point or numbered item, treat each bullet as a distinct claim unit
     if (/^[-*•]\s+|^\d+\.\s+/.test(line)) {
       const cleanLine = line.replace(/^[-*•]\s+|^\d+\.\s+/, '').trim()
       if (cleanLine) results.push(cleanLine)
       continue
     }
 
-    // Split paragraphs on sentence boundaries, guarding abbreviations and tech terms
     const sentenceRegex = /(?<!\b(?:e\.g|i\.e|etc|vs|v|mr|ms|dr|node|vue|next|nuxt|nest))\s*(?<=[.!?。！？])\s+(?=[A-Z\p{Lu}\d"'-])/gu
     const parts = line.split(sentenceRegex).map((p) => p.trim()).filter(Boolean)
     if (parts.length > 0) {
@@ -204,15 +461,33 @@ export function splitSentences(answer: string): string[] {
 }
 
 /**
- * Categorizes a claim to decide proper verification policy.
- * Evaluates OPINION_APPROACH before isPersonal because opinions frequently use personal pronouns ("I prefer").
+ * Determines whether a sentence expresses personal experience or actions without requiring 1st-person pronouns.
  */
-export function classifyClaimType(sentence: string): ClaimType {
+export function isPersonalSentence(sentence: string, index?: EvidenceIndex): boolean {
+  if (PERSONAL_PATTERN.test(sentence)) return true
+  if (STARTING_ACTION_VERBS.test(sentence)) return true
+  if (BULLET_PREFIX_REGEX.test(sentence)) return true
+
+  if (index?.candidateCompanies) {
+    const lower = sentence.toLowerCase()
+    for (const company of index.candidateCompanies) {
+      if (company.length >= 3 && lower.includes(company)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Categorizes a claim to decide proper verification policy.
+ */
+export function classifyClaimType(sentence: string, index?: EvidenceIndex): ClaimType {
   if (OPINION_APPROACH_MARKERS.test(sentence)) {
     return 'opinion_approach'
   }
 
-  const isPersonal = PERSONAL_PATTERN.test(sentence)
+  const isPersonal = isPersonalSentence(sentence, index)
   const hasMetric = METRIC_PATTERN.test(sentence)
 
   if (hasMetric && (isPersonal || /(?:reduced|increased|scaled|achieved|tăng|giảm|đạt)/i.test(sentence))) {
@@ -221,17 +496,15 @@ export function classifyClaimType(sentence: string): ClaimType {
   if (isPersonal) {
     return 'personal_experience'
   }
-  if (GENERAL_TECHNICAL_MARKERS.test(sentence) || !isPersonal) {
-    return 'general_technical'
-  }
+
+  // Not personal: general technical concept, principle, architecture, or 3rd-person mechanics
   return 'general_technical'
 }
 
 /**
  * Builds evidence list, explicitly tagging candidate-owned sources vs external context.
- * Does NOT truncate CV context to 4000 chars.
  */
-export function buildEvidence(input: GroundingInput): GroundingEvidence[] {
+export function buildEvidence(input: GroundingEvidenceInput): GroundingEvidence[] {
   const list: GroundingEvidence[] = []
 
   if (input.cv?.trim()) {
@@ -253,7 +526,6 @@ export function buildEvidence(input: GroundingInput): GroundingEvidence[] {
   }
 
   if (input.transcript?.trim()) {
-    // Only lines spoken by candidate prove personal experience
     const candidateLines = input.transcript
       .split('\n')
       .filter((line) => /^(?:candidate|you|me|ứng viên|tôi):/i.test(line))
@@ -297,36 +569,122 @@ export function buildEvidence(input: GroundingInput): GroundingEvidence[] {
   return list
 }
 
-/**
- * Expand tokens with bilingual Vietnamese <-> English aliases and stems for cross-lingual matching.
- */
-export function expandTokensWithAliases(tokenList: string[]): Set<string> {
-  const set = new Set<string>()
-  for (const token of tokenList) {
-    set.add(token)
-    const st = stem(token)
-    if (st && st.length >= 2) set.add(st)
+// ─── EVIDENCE INDEX & CACHING (REQUIREMENT 1) ───────────────────────────────
 
-    for (const [vi, enList] of Object.entries(VI_EN_TECH_ALIASES)) {
-      const viParts = vi.split(' ')
-      if (token === vi || viParts.includes(token)) {
-        for (const en of enList) {
-          set.add(en)
-          const enSt = stem(en)
-          if (enSt && enSt.length >= 2) set.add(enSt)
+const evidenceIndexCache = new Map<string, EvidenceIndex>()
+
+export function clearEvidenceIndexCache(): void {
+  evidenceIndexCache.clear()
+}
+
+export function computeEvidenceHash(input: GroundingEvidenceInput): string {
+  const combined = [
+    input.cv || '',
+    input.profile || '',
+    input.jobDescription || '',
+    input.transcript || '',
+    input.session || '',
+  ].join('\n---\n')
+  return computeContentHash(combined)
+}
+
+/**
+ * Builds or retrieves cached EvidenceIndex.
+ * Builds candidate token set with expanded aliases once, eliminating repeated tokenization & alias loops.
+ */
+export function getOrCreateEvidenceIndex(input: GroundingEvidenceInput): EvidenceIndex {
+  const hash = computeEvidenceHash(input)
+  const cached = evidenceIndexCache.get(hash)
+  if (cached) return cached
+
+  const evidenceList = buildEvidence(input)
+  const factSheet = extractFactSheet(input.cv, input.profile)
+
+  const personalEvidences = evidenceList.filter((e) => e.isCandidateSource)
+  const candidateEvidenceText = personalEvidences.map((e) => e.excerpt).join('\n')
+  const normalizedEvidenceText = normalize(candidateEvidenceText)
+
+  const rawCandidateTokens = tokens(candidateEvidenceText)
+  const candidateTokenSet = expandTokensWithAliases(rawCandidateTokens)
+
+  // Candidate tech entities from CV and profile ONLY (JD is strictly excluded)
+  const candidateTechEntities = extractTechEntitiesFromText(candidateEvidenceText)
+  for (const tech of factSheet.techStack) {
+    candidateTechEntities.add(tech.toLowerCase())
+    candidateTechEntities.add(normalizeTechEntity(tech))
+  }
+
+  const candidateCompanies = new Set<string>(
+    factSheet.companies.map((c) => c.toLowerCase())
+  )
+
+  const excerptTokenSets = new Map<string, Set<string>>()
+  for (const e of personalEvidences) {
+    if (personalEvidences.length === 1 && e.excerpt === candidateEvidenceText) {
+      excerptTokenSets.set(e.id, candidateTokenSet)
+    } else {
+      const eTokens = tokens(e.excerpt)
+      excerptTokenSets.set(e.id, expandTokensWithAliases(eTokens))
+    }
+  }
+
+  const index: EvidenceIndex = {
+    hash,
+    factSheet,
+    candidateEvidenceText,
+    normalizedEvidenceText,
+    candidateTokenSet,
+    candidateTechEntities,
+    candidateCompanies,
+    evidenceList,
+    excerptTokenSets,
+  }
+
+  if (evidenceIndexCache.size >= 100) {
+    const firstKey = evidenceIndexCache.keys().next().value
+    if (firstKey) evidenceIndexCache.delete(firstKey)
+  }
+  evidenceIndexCache.set(hash, index)
+
+  return index
+}
+
+/**
+ * Computes overlap score against a precomputed candidate token set in O(claim_tokens).
+ */
+export function overlapScoreWithTokenSet(claim: string, candidateTokenSet: Set<string>): number {
+  const claimTokens = tokens(claim)
+  if (claimTokens.length === 0) return 0
+
+  let matched = 0
+  for (const t of claimTokens) {
+    const tStem = stem(t)
+    if (candidateTokenSet.has(t) || (tStem && candidateTokenSet.has(tStem))) {
+      matched++
+      continue
+    }
+
+    const tAliases = INVERTED_ALIAS_MAP.get(t) || (tStem ? INVERTED_ALIAS_MAP.get(tStem) : undefined)
+    if (tAliases) {
+      let found = false
+      for (let i = 0; i < tAliases.length; i++) {
+        if (candidateTokenSet.has(tAliases[i])) {
+          found = true
+          break
         }
       }
-      if (enList.includes(token) || enList.some((en) => stem(en) === token || stem(en) === st)) {
-        set.add(vi)
-        for (const p of viParts) {
-          if (p) set.add(p)
-        }
+      if (found) {
+        matched++
       }
     }
   }
-  return set
+
+  return matched / claimTokens.length
 }
 
+/**
+ * Overlap score (backward-compatible signature).
+ */
 export function overlapScore(claim: string, evidenceText: string): number {
   const claimTokens = tokens(claim)
   if (claimTokens.length === 0) return 0
@@ -334,28 +692,7 @@ export function overlapScore(claim: string, evidenceText: string): number {
   const evidenceTokens = tokens(evidenceText)
   const evidenceTokenSet = expandTokensWithAliases(evidenceTokens)
 
-  let matched = 0
-  for (const t of claimTokens) {
-    const tStem = stem(t)
-    if (evidenceTokenSet.has(t) || (tStem && evidenceTokenSet.has(tStem))) {
-      matched++
-      continue
-    }
-
-    const tAliases = expandTokensWithAliases([t])
-    let hasAliasMatch = false
-    for (const alias of tAliases) {
-      if (evidenceTokenSet.has(alias)) {
-        hasAliasMatch = true
-        break
-      }
-    }
-    if (hasAliasMatch) {
-      matched++
-    }
-  }
-
-  return matched / claimTokens.length
+  return overlapScoreWithTokenSet(claim, evidenceTokenSet)
 }
 
 /**
@@ -434,13 +771,15 @@ function isSameUnitCategory(u1: string, u2: string): boolean {
 }
 
 /**
- * Checks for metric mismatch (e.g. claim "12 engineers" vs CV "5 engineers").
+ * Checks for metric contradiction using context (unit + noun/subject).
+ * Only CONTRADICTED if there is a fact with the SAME context but different value and NO fact matches.
+ * If metric has no fact in that context, returns isUngrounded: true (UNSUPPORTED, not CONTRADICTED).
  */
 export function checkMetricContradiction(
   claim: string,
   factSheet: CandidateFactSheet
-): { hasContradiction: boolean; reason?: string } {
-  const claimMetrics: Array<{ number: number; unit?: string; raw: string }> = []
+): { hasContradiction: boolean; isUngrounded?: boolean; reason?: string } {
+  const claimMetrics: Array<{ number: number; unit?: string; raw: string; contextCategory: string }> = []
   const metricRegex = /(?<!\p{L})(\d+(?:\.\d+)?)\s*(%|percent|năm|years?|months?|tháng|members?|thành viên|engineers?|kỹ sư|people|người|triệu|million|thousand|k|m|users?|người dùng)?(?!\p{L})/giu
 
   let match: RegExpExecArray | null
@@ -448,37 +787,59 @@ export function checkMetricContradiction(
     const num = parseFloat(match[1])
     const unit = (match[2] || '').toLowerCase()
     if (!isNaN(num)) {
-      claimMetrics.push({ number: num, unit: unit || undefined, raw: match[0] })
+      claimMetrics.push({
+        number: num,
+        unit: unit || undefined,
+        raw: match[0],
+        contextCategory: detectMetricContextCategory(claim, unit),
+      })
     }
   }
 
   if (claimMetrics.length === 0 || factSheet.metrics.length === 0) {
-    return { hasContradiction: false }
+    return { hasContradiction: false, isUngrounded: claimMetrics.length > 0 }
   }
+
+  let hasAnyMatchingContextFact = false
 
   for (const cm of claimMetrics) {
     if (!cm.unit) continue
-    // Check if CV has any fact with the exact same unit context but different number
-    for (const fm of factSheet.metrics) {
-      if (fm.unit && isSameUnitCategory(cm.unit, fm.unit)) {
-        const val1 = toNormalizedNumber(cm.number, cm.unit)
-        const val2 = toNormalizedNumber(fm.number, fm.unit)
-        if (val1 !== val2) {
-          return {
-            hasContradiction: true,
-            reason: `Sai lệch số liệu: Câu trả lời đề cập ${cm.raw}, trong khi hồ sơ ghi nhận ${fm.rawValue}.`,
-          }
+
+    const matchingContextFacts = factSheet.metrics.filter(
+      (fm) =>
+        fm.unit &&
+        isSameUnitCategory(cm.unit!, fm.unit) &&
+        (fm.contextCategory === cm.contextCategory ||
+          fm.contextCategory === 'general' ||
+          cm.contextCategory === 'general')
+    )
+
+    if (matchingContextFacts.length > 0) {
+      hasAnyMatchingContextFact = true
+      const valClaim = toNormalizedNumber(cm.number, cm.unit)
+
+      const hasValueMatch = matchingContextFacts.some((fm) => {
+        const valFact = toNormalizedNumber(fm.number, fm.unit)
+        return valClaim === valFact
+      })
+
+      if (!hasValueMatch) {
+        return {
+          hasContradiction: true,
+          reason: `Sai lệch số liệu: Câu trả lời đề cập ${cm.raw} (${cm.contextCategory}), trong khi hồ sơ ghi nhận ${matchingContextFacts.map((f) => f.rawValue).join(', ')}.`,
         }
       }
     }
   }
 
-  return { hasContradiction: false }
+  return {
+    hasContradiction: false,
+    isUngrounded: !hasAnyMatchingContextFact,
+  }
 }
 
 /**
  * Scans candidate evidence for negation of the claim's core predicates or keywords.
- * Guards against substrings like 'notification' by using Unicode lookarounds.
  */
 export function checkNegationContradiction(
   claim: string,
@@ -492,8 +853,6 @@ export function checkNegationContradiction(
   if (claimTokens.length === 0) return { hasContradiction: false }
 
   const expandedClaimTokens = expandTokensWithAliases(claimTokens)
-
-  // Split evidence into sentences
   const evidenceSentences = candidateEvidence.split(/(?<=[.!?。！？\n])\s+/u)
 
   for (const sentence of evidenceSentences) {
@@ -503,7 +862,6 @@ export function checkNegationContradiction(
     for (let i = 0; i < words.length; i++) {
       const cleanWord = words[i].replace(/[^\p{L}\p{N}]+/gu, '')
       if (NEGATION_PATTERN.test(cleanWord)) {
-        // Look ahead 1-5 words after negation
         const windowWords = words.slice(i + 1, i + 6).map((w) => w.replace(/[^\p{L}\p{N}]+/gu, ''))
         const windowTokens = windowWords.filter((w) => w && !STOP_WORDS.has(w))
         const expandedWindowTokens = expandTokensWithAliases(windowTokens)
@@ -534,9 +892,20 @@ export function classifyClaimDeterministic(
   claimText: string,
   evidence: GroundingEvidence[],
   factSheet: CandidateFactSheet,
-  mode: GroundingMode
+  mode: GroundingMode,
+  evidenceIndex?: EvidenceIndex
 ): GroundingClaim {
-  const claimType = classifyClaimType(claimText)
+  const index =
+    evidenceIndex ||
+    getOrCreateEvidenceIndex({
+      cv: evidence.find((e) => e.source === 'cv')?.excerpt,
+      profile: evidence.find((e) => e.source === 'profile')?.excerpt,
+      jobDescription: evidence.find((e) => e.source === 'jd')?.excerpt,
+      transcript: evidence.find((e) => e.source === 'transcript')?.excerpt,
+      session: evidence.find((e) => e.source === 'session')?.excerpt,
+    })
+
+  const claimType = classifyClaimType(claimText, index)
 
   // 1. General technical knowledge does not need candidate CV proof
   if (claimType === 'general_technical' || claimType === 'opinion_approach') {
@@ -554,11 +923,11 @@ export function classifyClaimDeterministic(
 
   // 2. Personal and metric claims MUST be grounded by candidate-owned evidence
   const personalEvidences = evidence.filter((e) => e.isCandidateSource)
-  const combinedPersonalText = personalEvidences.map((e) => e.excerpt).join('\n')
+  const combinedPersonalText = index.candidateEvidenceText || personalEvidences.map((e) => e.excerpt).join('\n')
 
-  // Check explicit exact match first (prior to contradiction check to prevent false positives)
+  // Check explicit exact match first
   const normClaim = normalize(claimText)
-  const normEvidence = normalize(combinedPersonalText)
+  const normEvidence = index.normalizedEvidenceText || normalize(combinedPersonalText)
   if (normClaim.length >= 10 && normEvidence.includes(normClaim)) {
     return {
       id: '',
@@ -572,7 +941,8 @@ export function classifyClaimDeterministic(
     }
   }
 
-  // Check directed relation contradiction
+  // 3. Contradiction Checks (Directed relation, Metric contradiction, Negation)
+  // Contradictions are severe discrepancies that must take precedence over ungrounded/overlap checks.
   const relationCheck = checkDirectedRelationContradiction(claimText, factSheet)
   if (relationCheck.hasContradiction) {
     return {
@@ -587,7 +957,6 @@ export function classifyClaimDeterministic(
     }
   }
 
-  // Check metric contradiction
   const metricCheck = checkMetricContradiction(claimText, factSheet)
   if (metricCheck.hasContradiction) {
     return {
@@ -602,7 +971,6 @@ export function classifyClaimDeterministic(
     }
   }
 
-  // Check negation contradiction
   const negationCheck = checkNegationContradiction(claimText, combinedPersonalText)
   if (negationCheck.hasContradiction) {
     return {
@@ -617,10 +985,75 @@ export function classifyClaimDeterministic(
     }
   }
 
-  const score = overlapScore(claimText, combinedPersonalText)
-  const matchingRefs = personalEvidences
-    .filter((e) => overlapScore(claimText, e.excerpt) >= INFERRED_OVERLAP_THRESHOLD)
-    .map((e) => e.id)
+  // 4. Tech Entity Verification (Requirement 2)
+  // For personal experience or metric claims: every technology entity must exist in candidate's techStack/projects.
+  // Missing any entity -> UNSUPPORTED regardless of word overlap score.
+  const { entities, contrastAdopted, contrastReplaced } = parseClaimTechEntities(claimText)
+
+  for (const tech of contrastAdopted) {
+    const normTech = normalizeTechEntity(tech)
+    if (!index.candidateTechEntities.has(tech) && !index.candidateTechEntities.has(normTech)) {
+      return {
+        id: '',
+        text: claimText,
+        classification: 'UNSUPPORTED',
+        confidence: 0.95,
+        evidenceRefs: [],
+        priority: 'high',
+        claimType,
+        reason: `Công nghệ '${tech}' (được khẳng định sử dụng) không có trong hồ sơ kinh nghiệm của ứng viên.`,
+      }
+    }
+  }
+
+  if (entities.length > 0) {
+    for (const tech of entities) {
+      if (contrastReplaced.includes(tech)) {
+        continue
+      }
+      const normTech = normalizeTechEntity(tech)
+      if (!index.candidateTechEntities.has(tech) && !index.candidateTechEntities.has(normTech)) {
+        return {
+          id: '',
+          text: claimText,
+          classification: 'UNSUPPORTED',
+          confidence: 0.93,
+          evidenceRefs: [],
+          priority: 'high',
+          claimType,
+          reason: `Công nghệ '${tech}' không có trong danh mục kỹ năng hoặc dự án hồ sơ của ứng viên.`,
+        }
+      }
+    }
+  }
+
+  // 5. Metric Ungrounded Check
+  if (claimType === 'metric' && metricCheck.isUngrounded) {
+    return {
+      id: '',
+      text: claimText,
+      classification: 'UNSUPPORTED',
+      confidence: 0.90,
+      evidenceRefs: [],
+      priority: 'high',
+      claimType,
+      reason: 'Số liệu không tìm thấy bằng chứng đối chiếu trong hồ sơ ứng viên.',
+    }
+  }
+
+  // 7. Fast Overlap Score with precomputed token set
+  const score = overlapScoreWithTokenSet(claimText, index.candidateTokenSet)
+
+  const matchingRefs: string[] = []
+  for (const e of personalEvidences) {
+    const excerptSet = index.excerptTokenSets.get(e.id)
+    const eScore = excerptSet
+      ? overlapScoreWithTokenSet(claimText, excerptSet)
+      : overlapScore(claimText, e.excerpt)
+    if (eScore >= INFERRED_OVERLAP_THRESHOLD) {
+      matchingRefs.push(e.id)
+    }
+  }
 
   if (score >= EXPLICIT_OVERLAP_THRESHOLD) {
     return {
@@ -662,7 +1095,6 @@ export function classifyClaimDeterministic(
 
 /**
  * Generates minimally corrected answer in the same language as input answer.
- * Does NOT drop general technical knowledge.
  */
 export function rewriteAnswer(
   sentences: string[],
@@ -681,12 +1113,10 @@ export function rewriteAnswer(
       continue
     }
 
-    // Contradicted claims are always completely excluded from correctedAnswer
     if (c.classification === 'CONTRADICTED') {
       continue
     }
 
-    // Unsupported personal or metric claims
     if (
       c.classification === 'UNSUPPORTED' &&
       (c.claimType === 'personal_experience' || c.claimType === 'metric' || PERSONAL_PATTERN.test(s))
@@ -694,7 +1124,6 @@ export function rewriteAnswer(
       if (mode === 'strict') {
         continue
       }
-      // In balanced mode, keep with caveat
       const caution = isVietnamese ? `${s} (cần xác nhận kinh nghiệm)` : `${s} (confirm experience)`
       kept.push(caution)
       continue
@@ -714,16 +1143,17 @@ export function rewriteAnswer(
 
 /**
  * Validates answer grounding synchronously using Layer 0 FactSheet and Layer 1 Deterministic Engine.
- * 0 tokens consumed. Safe and backward-compatible.
+ * Reuses precomputed EvidenceIndex to achieve < 20ms response time on 15k char CV.
  */
 export function validateAnswerGrounding(input: GroundingInput): GroundingResult {
   const mode = input.mode || 'balanced'
-  const evidence = buildEvidence(input)
-  const factSheet = extractFactSheet(input.cv, input.profile)
+  const evidenceIndex = input.evidenceIndex || getOrCreateEvidenceIndex(input)
+  const evidence = evidenceIndex.evidenceList
+  const factSheet = evidenceIndex.factSheet
   const sentences = splitSentences(input.answer)
 
   const claims: GroundingClaim[] = sentences.map((text, index) => {
-    const classified = classifyClaimDeterministic(text, evidence, factSheet, mode)
+    const classified = classifyClaimDeterministic(text, evidence, factSheet, mode, evidenceIndex)
     return {
       ...classified,
       id: `claim_${index + 1}`,
@@ -769,15 +1199,12 @@ interface LLMJudgeItem {
 
 /**
  * Asynchronously evaluates candidate claims with LLM Judge (Layer 2).
- * Batches ambiguous/risky personal claims into 1 prompt with feature: 'grounding'.
- * Falls back safely to Layer 1 deterministic result on timeout or error.
  */
 export async function validateAnswerGroundingAsync(
   input: GroundingInput
 ): Promise<GroundingResult> {
   const syncResult = validateAnswerGrounding(input)
 
-  // Identify claims that need LLM Judge (personal/metric claims that are not already 100% explicitly supported)
   const claimsForJudge = syncResult.claims.filter(
     (c) =>
       c.claimType === 'personal_experience' ||
@@ -874,7 +1301,6 @@ TRẢ VỀ CHÍNH XÁC MẢNG JSON (KHÔNG MARKDOWN FENCE, KHÔNG BÌNH LUẬN):
       return { ...syncResult, degraded: true }
     }
 
-    // Merge LLM Judge verdicts into claims
     const updatedClaims = syncResult.claims.map((claim) => {
       const judge = judgeItems.find((j) => j.claimId === claim.id)
       if (!judge) return claim
@@ -914,7 +1340,7 @@ TRẢ VỀ CHÍNH XÁC MẢNG JSON (KHÔNG MARKDOWN FENCE, KHÔNG BÌNH LUẬN):
           : undefined,
       degraded: false,
     }
-  } catch (err) {
+  } catch {
     return { ...syncResult, degraded: true }
   }
 }
@@ -928,16 +1354,19 @@ export interface StreamingGrounder {
 
 /**
  * Creates an incremental streaming grounder that evaluates complete sentences as tokens arrive.
- * UI receives progressive claims to render badges without altering active reading text.
+ * Reuses cached EvidenceIndex to ensure low latency during token streaming.
  */
 export function createStreamingGrounder(
-  input: Omit<GroundingInput, 'answer'> & {
+  input: GroundingEvidenceInput & {
+    signal?: AbortSignal
     onSentenceGround?: (claim: GroundingClaim) => void
+    evidenceIndex?: EvidenceIndex
   }
 ): StreamingGrounder {
   const mode = input.mode || 'balanced'
-  const evidence = buildEvidence(input as GroundingInput)
-  const factSheet = extractFactSheet(input.cv, input.profile)
+  const evidenceIndex = input.evidenceIndex || getOrCreateEvidenceIndex(input)
+  const evidence = evidenceIndex.evidenceList
+  const factSheet = evidenceIndex.factSheet
 
   let accumulated = ''
   let groundedSentencesCount = 0
@@ -950,11 +1379,10 @@ export function createStreamingGrounder(
       const sentences = splitSentences(accumulated)
       const newlyGrounded: GroundingClaim[] = []
 
-      // If there are multiple sentences, all except the last one are complete
       while (groundedSentencesCount < sentences.length - 1) {
         const sentenceText = sentences[groundedSentencesCount]
         allSentences.push(sentenceText)
-        const classified = classifyClaimDeterministic(sentenceText, evidence, factSheet, mode)
+        const classified = classifyClaimDeterministic(sentenceText, evidence, factSheet, mode, evidenceIndex)
         const claim: GroundingClaim = {
           ...classified,
           id: `claim_${allClaims.length + 1}`,
@@ -973,7 +1401,7 @@ export function createStreamingGrounder(
       while (groundedSentencesCount < sentences.length) {
         const sentenceText = sentences[groundedSentencesCount]
         allSentences.push(sentenceText)
-        const classified = classifyClaimDeterministic(sentenceText, evidence, factSheet, mode)
+        const classified = classifyClaimDeterministic(sentenceText, evidence, factSheet, mode, evidenceIndex)
         const claim: GroundingClaim = {
           ...classified,
           id: `claim_${allClaims.length + 1}`,
@@ -1019,4 +1447,3 @@ export function createStreamingGrounder(
     },
   }
 }
-

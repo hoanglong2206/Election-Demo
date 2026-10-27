@@ -9,6 +9,7 @@ export interface MetricFact {
   number: number
   unit?: string
   context: string
+  contextCategory?: string
   sourceRef: string
 }
 
@@ -48,11 +49,49 @@ const KNOWN_TECH_KEYWORDS = [
   'react', 'react native', 'vue', 'angular', 'svelte', 'next.js', 'nuxt',
   'node.js', 'nodejs', 'express', 'nest.js', 'nestjs', 'fastapi', 'django', 'flask',
   'python', 'java', 'golang', 'go', 'rust', 'c#', 'c++', 'typescript', 'javascript', 'php', 'ruby',
+  'scala', 'kotlin', 'swift', 'dart',
   'postgresql', 'postgres', 'mysql', 'mongodb', 'redis', 'elasticsearch', 'cassandra', 'dynamodb', 'sqlite',
-  'kafka', 'rabbitmq', 'sqs', 'sns', 'grpc', 'graphql', 'rest', 'websocket',
-  'docker', 'kubernetes', 'k8s', 'aws', 'gcp', 'azure', 'terraform', 'ansible', 'jenkins', 'ci/cd', 'github actions',
+  'mariadb', 'oracle', 'neo4j', 'couchbase', 'memcached',
+  'kafka', 'rabbitmq', 'sqs', 'sns', 'activemq', 'nats', 'pulsar', 'kinesis',
+  'snowflake', 'dbt', 'bigquery', 'redshift', 'databricks', 'spark', 'pyspark', 'flink', 'hadoop', 'hive', 'airflow', 'clickhouse', 'presto', 'trino',
+  'grpc', 'graphql', 'rest', 'websocket',
+  'docker', 'kubernetes', 'k8s', 'aws', 'gcp', 'azure', 'terraform', 'ansible', 'jenkins', 'ci/cd', 'github actions', 'gitlab ci', 'helm', 'argocd', 'argo cd',
+  'prometheus', 'grafana',
   'linux', 'git', 'microservices', 'distributed systems', 'system design',
 ]
+
+/**
+ * Detect context noun/category of a metric to prevent cross-metric collisions
+ * (e.g., latency reduction % vs error rate %).
+ */
+export function detectMetricContextCategory(text: string, unit?: string): string {
+  const lower = text.toLowerCase()
+  if (/(?:latency|độ trễ|response time|trễ|delay|\bms\b)/i.test(lower)) {
+    return 'latency'
+  }
+  if (/(?:error rate|tỷ lệ lỗi|\blỗi\b|failure rate|\bbug\b)/i.test(lower)) {
+    return 'error_rate'
+  }
+  if (/(?:team|members?|kỹ sư|engineers?|people|thành viên|người|nhân viên|headcount|đội ngũ)/i.test(lower)) {
+    return 'team_size'
+  }
+  if (/(?:năm kinh nghiệm|years? of experience|years?|năm|months?|tháng)/i.test(lower) && !/(?:users?|người dùng)/i.test(lower)) {
+    return 'tenure_years'
+  }
+  if (/(?:throughput|rps|tps|qps|req\/s|requests\/sec|băng thông)/i.test(lower)) {
+    return 'throughput'
+  }
+  if (/(?:users?|người dùng|dau|mau|traffic|khách hàng|customers?)/i.test(lower)) {
+    return 'scale_users'
+  }
+  if (/(?:cost|chi phí|doanh thu|revenue|budget|usd|vnd|tiền|đô)/i.test(lower)) {
+    return 'cost_revenue'
+  }
+  if (unit === '%' || unit === 'percent') {
+    return 'percentage_general'
+  }
+  return 'general'
+}
 
 const KNOWN_ROLES = [
   'frontend', 'front-end', 'backend', 'back-end', 'fullstack', 'full-stack',
@@ -105,7 +144,7 @@ export function extractFactSheet(cv?: string, profile?: string): CandidateFactSh
   }
 
   // 3. Extract metrics and numbers from sentences
-  const metricRegex = /(?<!\p{L})(\d+(?:\.\d+)?)\s*(%|percent|năm|years?|months?|tháng|members?|thành viên|engineers?|kỹ sư|people|người|triệu|million|k|m|ms|s|giây|req\/s|rps)?(?!\p{L})/giu
+  const metricRegex = /(?<!\p{L})(\d+(?:\.\d+)?)\s*(%|percent|năm|years?|months?|tháng|members?|thành viên|engineers?|kỹ sư|people|người|triệu|million|thousand|k|m|ms|s|giây|req\/s|rps|users?|người dùng)?(?!\p{L})/giu
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx]
@@ -120,6 +159,7 @@ export function extractFactSheet(cv?: string, profile?: string): CandidateFactSh
           number: num,
           unit: unit || undefined,
           context: line,
+          contextCategory: detectMetricContextCategory(line, unit),
           sourceRef: `line_${idx}`,
         })
         if (unit.startsWith('năm') || unit.startsWith('year')) {

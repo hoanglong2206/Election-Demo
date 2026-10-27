@@ -32,6 +32,10 @@ export interface GoldenTestCase {
     | 'negation_boundary'
     | 'source_isolation'
     | 'long_context'
+    | 'tech_entity_fabrication'
+    | 'non_pronoun_personal'
+    | 'contextual_metric'
+    | 'mixed_en_vi'
   description: string
   answer: string
   cv: string
@@ -679,4 +683,186 @@ export const GOLDEN_GROUNDING_DATASET: GoldenTestCase[] = [
     expectedVerdict: 'SUPPORTED',
     expectedClaimType: 'personal_experience',
   },
+
+  // ─── 14. TECH ENTITY FABRICATION & CONTRAST (68-72) ────────────────────────
+  {
+    id: 'case_68',
+    category: 'tech_entity_fabrication',
+    description: 'Claiming Kafka when CV only has RabbitMQ -> UNSUPPORTED despite word overlap',
+    answer: 'I used Kafka for the message queue.',
+    cv: 'Senior Backend Engineer. Used RabbitMQ for the message queue in microservices architecture.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_69',
+    category: 'tech_entity_fabrication',
+    description: 'Claiming Snowflake and dbt when CV only has PostgreSQL -> UNSUPPORTED',
+    answer: 'I designed our analytics pipeline using Snowflake and dbt.',
+    cv: 'Data Analyst: Built reporting queries and ETL pipelines using PostgreSQL and Python.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_70',
+    category: 'tech_entity_fabrication',
+    description: 'Contrast "used X instead of Y": adopting missing X (Kafka) -> UNSUPPORTED',
+    answer: 'I used Kafka instead of RabbitMQ for our event bus.',
+    cv: 'Backend Developer: Maintained RabbitMQ message broker for order processing.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_71',
+    category: 'tech_entity_fabrication',
+    description: 'Contrast "used X instead of Y": adopting verified X (RabbitMQ) with unmentioned Y -> INFERRED',
+    answer: 'I used RabbitMQ instead of Kafka for our lightweight messaging needs.',
+    cv: 'Software Engineer: Used RabbitMQ for lightweight messaging and queue management.',
+    expectedVerdict: 'INFERRED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_72',
+    category: 'tech_entity_fabrication',
+    description: 'Contrast "replaced Y with X": adopting fabricated X (Kafka) -> UNSUPPORTED',
+    answer: 'I replaced RabbitMQ with Kafka to improve cluster throughput.',
+    cv: 'Software Engineer: Maintained and tuned RabbitMQ clusters for asynchronous notifications.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+
+  // ─── 15. NON-PRONOUN & ACTION VERB PERSONAL CLAIMS (73-77) ─────────────────
+  {
+    id: 'case_73',
+    category: 'non_pronoun_personal',
+    description: 'English past action verb start without pronoun, fabricated tech -> UNSUPPORTED',
+    answer: 'Implemented Kafka consumer to process high-throughput transaction streams.',
+    cv: 'Backend Developer: Implemented RabbitMQ consumer for transaction processing.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_74',
+    category: 'non_pronoun_personal',
+    description: 'Vietnamese past action verb start without pronoun, supported experience -> SUPPORTED',
+    answer: 'Triển khai RabbitMQ làm hàng đợi tin nhắn cho hệ thống vi dịch vụ.',
+    cv: 'Kỹ sư phần mềm: Triển khai RabbitMQ làm hàng đợi tin nhắn cho hệ thống vi dịch vụ.',
+    expectedVerdict: 'SUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_75',
+    category: 'non_pronoun_personal',
+    description: 'Vietnamese dropped subject with fabricated tech (Snowflake) -> UNSUPPORTED',
+    answer: 'Xây dựng data warehouse với Snowflake để phân tích dữ liệu lớn.',
+    cv: 'Kỹ sư dữ liệu: Xây dựng kho dữ liệu với PostgreSQL và MySQL.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_76',
+    category: 'non_pronoun_personal',
+    description: 'Markdown bullet point with missing tech (Kafka) -> UNSUPPORTED',
+    answer: '- Triển khai cụm Kafka để xử lý giao dịch thanh toán.',
+    cv: 'Lập trình viên backend: Xử lý giao dịch thanh toán với RabbitMQ.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_77',
+    category: 'non_pronoun_personal',
+    description: 'Markdown bullet point with verified experience -> SUPPORTED',
+    answer: '- Architected distributed caching using Redis across microservices.',
+    cv: 'Senior Engineer: Architected distributed caching using Redis across microservices.',
+    expectedVerdict: 'SUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+
+  // ─── 16. EXPANDED PERSONAL MARKERS (78-80) ─────────────────────────────────
+  {
+    id: 'case_78',
+    category: 'non_pronoun_personal',
+    description: '"Bên mình" personal marker with verified tech -> SUPPORTED',
+    answer: 'Bên mình đã chuyển đổi toàn bộ hạ tầng sang Kubernetes.',
+    cv: 'DevOps Engineer: Chuyển đổi toàn bộ hạ tầng sang Kubernetes.',
+    expectedVerdict: 'SUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_79',
+    category: 'non_pronoun_personal',
+    description: '"Team mình" personal marker with fabricated tech -> UNSUPPORTED',
+    answer: 'Team mình đã dùng Kafka để làm message broker cho dự án.',
+    cv: 'Backend Developer: Dùng RabbitMQ làm message broker cho dự án.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_80',
+    category: 'non_pronoun_personal',
+    description: '"Our team" metric claim with verified metrics -> SUPPORTED',
+    answer: 'Our team scaled the PostgreSQL database to 50k RPS.',
+    cv: 'Software Engineer: Our team scaled the PostgreSQL database to 50k RPS with zero downtime.',
+    expectedVerdict: 'SUPPORTED',
+    expectedClaimType: 'metric',
+  },
+
+  // ─── 17. CONTEXT-AWARE MULTI-MILESTONE METRICS (81-83) ─────────────────────
+  {
+    id: 'case_81',
+    category: 'contextual_metric',
+    description: 'Latency reduction % does NOT collide with error rate % in CV -> SUPPORTED',
+    answer: 'I reduced latency by 40%.',
+    cv: 'Performance Engineer: Reduced latency by 40% and maintained error rate at 15%.',
+    expectedVerdict: 'SUPPORTED',
+    expectedClaimType: 'metric',
+  },
+  {
+    id: 'case_82',
+    category: 'contextual_metric',
+    description: 'Latency % claim when CV only has error rate % -> UNSUPPORTED (not CONTRADICTED)',
+    answer: 'I reduced latency by 40%.',
+    cv: 'Quality Engineer: Maintained error rate at 15% across all production deployments.',
+    expectedVerdict: 'UNSUPPORTED',
+    expectedClaimType: 'metric',
+  },
+  {
+    id: 'case_83',
+    category: 'contextual_metric',
+    description: 'Latency % claim when CV has different latency % -> CONTRADICTED',
+    answer: 'I reduced latency by 40%.',
+    cv: 'Optimized SQL indexes which reduced latency by 20% and maintained error rate at 15%.',
+    expectedVerdict: 'CONTRADICTED',
+    expectedClaimType: 'metric',
+  },
+
+  // ─── 18. MIXED EN-VI & PURE GENERAL TECHNICAL (84-86) ──────────────────────
+  {
+    id: 'case_84',
+    category: 'mixed_en_vi',
+    description: 'Mixed Vietnamese-English personal claim with matching CV -> SUPPORTED',
+    answer: 'Tôi đã config cụm Kafka cluster và deploy lên Kubernetes.',
+    cv: 'DevOps Lead: Config cụm Kafka cluster và deploy lên Kubernetes.',
+    expectedVerdict: 'SUPPORTED',
+    expectedClaimType: 'personal_experience',
+  },
+  {
+    id: 'case_85',
+    category: 'general_technical',
+    description: 'General technical fact with Kafka must remain GENERAL_KNOWLEDGE',
+    answer: 'Kafka uses partitions to distribute message load across multiple brokers.',
+    cv: 'Fullstack developer with React and Node.js.',
+    expectedVerdict: 'GENERAL_KNOWLEDGE',
+    expectedClaimType: 'general_technical',
+  },
+  {
+    id: 'case_86',
+    category: 'general_technical',
+    description: 'General technical fact with Snowflake must remain GENERAL_KNOWLEDGE',
+    answer: 'Snowflake separates storage and compute to allow independent elasticity.',
+    cv: 'Mobile developer specializing in Flutter.',
+    expectedVerdict: 'GENERAL_KNOWLEDGE',
+    expectedClaimType: 'general_technical',
+  },
 ]
+
