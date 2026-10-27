@@ -2,6 +2,11 @@ import { app, BrowserWindow, session, desktopCapturer, globalShortcut } from 'el
 import { createOverlayWindow } from './window/overlay-window.js'
 import { registerIpcHandlers } from './ipc/handler.js'
 import { getWhisperProcessManager } from './services/whisperProcessManager.js'
+import { registerMediaSchemeAsPrivileged, registerMediaProtocolHandler } from './services/mediaProtocol.js'
+import path from 'path'
+
+// Register app-media scheme as privileged before app is ready
+registerMediaSchemeAsPrivileged()
 
 // Disable security warnings in development
 if (process.env['NODE_ENV'] === 'development') {
@@ -29,6 +34,9 @@ app.on('second-instance', () => {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   try {
+    const sessionsDir = path.join(app.getPath('userData'), 'sessions')
+    registerMediaProtocolHandler(sessionsDir)
+
     // Enable system audio loopback capture for navigator.mediaDevices.getDisplayMedia
     session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
       desktopCapturer.getSources({ types: ['window', 'screen'] }).then((sources) => {

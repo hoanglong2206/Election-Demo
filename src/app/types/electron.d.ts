@@ -108,11 +108,22 @@ export interface ElectronAPI {
   }
   sessions?: {
     getAll: () => Promise<any[]>
+    getById: (sessionId: string) => Promise<any | null>
     save: (session: any) => Promise<boolean>
     delete: (sessionId: string) => Promise<boolean>
     deleteMany: (sessionIds: string[]) => Promise<boolean>
     deleteAll: () => Promise<boolean>
     rename: (sessionId: string, newTitle: string) => Promise<boolean>
+    rebuildIndex?: () => Promise<any[]>
+    getMigrationStatus?: () => Promise<{
+      isRunning: boolean
+      total: number
+      processed: number
+      migrated: number
+      errors: number
+      completed: boolean
+    }>
+    startMigration?: () => Promise<any>
     recovery?: {
       list: () => Promise<any[]>
       append: (event: any) => Promise<boolean>

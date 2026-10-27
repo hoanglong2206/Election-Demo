@@ -1539,7 +1539,10 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       timestamp: vq.timestamp,
       imageMetadata: {
         fileName: 'screenshot.png',
+        dataUrl: vq.thumbnailUrl,
       },
+      thumbnailUrl: vq.thumbnailUrl,
+      dataUrl: vq.thumbnailUrl,
       ocrText: vq.ocrText,
       contentType: vq.contentType,
       analysisResult: {

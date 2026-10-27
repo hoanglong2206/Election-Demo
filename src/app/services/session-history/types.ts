@@ -57,7 +57,13 @@ export interface HistoryScreenshotQuestion {
     height?: number
     fileName?: string
     sizeBytes?: number
+    file?: string
+    thumbnailFile?: string
+    bytes?: number
+    hash?: string
   }
+  imageUrl?: string
+  thumbnailUrl?: string
   ocrText?: string
   contentType?: string
   analysisResult?: {
@@ -107,8 +113,18 @@ export interface MeetingSession {
   transcripts: HistoryTranscriptLine[]
   suggestions: HistorySuggestion[]
   screenshotQuestions?: HistoryScreenshotQuestion[]
+  screenshotSummaries?: Array<{
+    id: string
+    file: string
+    thumbnailFile: string
+    width?: number
+    height?: number
+    summary?: string
+  }>
+  searchSnippet?: string
   metrics?: SessionMetrics
   exportSchemaVersion?: string // e.g. "2.0"
+  _isFullyLoaded?: boolean
 }
 
 export type SessionDateFilter = 'all' | 'today' | 'last_7_days' | 'last_30_days'
@@ -124,6 +140,7 @@ export interface SessionFilterOptions {
 export interface ISessionRepository {
   getAll(): MeetingSession[]
   getById(id: string): MeetingSession | null
+  loadFullSession?(id: string): Promise<MeetingSession | null>
   save(session: MeetingSession): void
   delete(sessionId: string): MeetingSession[]
   deleteMany(sessionIds: string[]): MeetingSession[]

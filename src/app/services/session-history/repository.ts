@@ -65,9 +65,26 @@ export function normalizeSession(raw: any): MeetingSession {
     }
   }
 
+  const sessionId = String(raw.id || `session_${Date.now()}`)
   const rawTranscripts = Array.isArray(raw.transcripts) ? raw.transcripts : []
   const rawSuggestions = Array.isArray(raw.suggestions) ? raw.suggestions : []
-  const rawScreenshots = Array.isArray(raw.screenshotQuestions) ? raw.screenshotQuestions : []
+  const rawScreenshots = Array.isArray(raw.screenshotQuestions) && raw.screenshotQuestions.length > 0
+    ? raw.screenshotQuestions
+    : Array.isArray(raw.screenshotSummaries)
+    ? raw.screenshotSummaries.map((s: any) => ({
+        id: s.id,
+        timestamp: '00:00',
+        imageMetadata: {
+          file: s.file,
+          thumbnailFile: s.thumbnailFile,
+          width: s.width,
+          height: s.height,
+        },
+        analysisResult: {
+          questionSummary: s.summary,
+        },
+      }))
+    : []
 
   const transcripts = rawTranscripts.map((t: any, idx: number) => ({
     id: t.id ?? idx + 1,
@@ -113,15 +130,46 @@ export function normalizeSession(raw: any): MeetingSession {
       : undefined,
   }))
 
-  const screenshotQuestions = rawScreenshots.map((sq: any, idx: number) => ({
-    id: String(sq.id || `sq_${idx}_${Date.now()}`),
-    timestamp: sq.timestamp || '00:00',
-    timestampMs: typeof sq.timestampMs === 'number' ? sq.timestampMs : undefined,
-    imageMetadata: sq.imageMetadata,
-    ocrText: sq.ocrText,
-    contentType: sq.contentType,
-    analysisResult: sq.analysisResult,
-  }))
+  const screenshotQuestions = rawScreenshots.map((sq: any, idx: number) => {
+    const id = String(sq.id || `sq_${idx}_${Date.now()}`)
+    const metadata = sq.imageMetadata || {}
+    const file = metadata.file || (metadata.fileName ? `screenshots/${metadata.fileName}` : '')
+    const thumbnailFile = metadata.thumbnailFile || file
+
+    const buildUrl = (rel: string) => {
+      if (!rel) return undefined
+      if (
+        rel.startsWith('app-media://') ||
+        rel.startsWith('http://') ||
+        rel.startsWith('https://') ||
+        rel.startsWith('data:') ||
+        rel.startsWith('blob:')
+      ) {
+        return rel
+      }
+      return `app-media://sessions/${sessionId}/${rel.replace(/^[/\\]+/, '')}`
+    }
+
+    const imageUrl = sq.imageUrl || (file ? buildUrl(file) : undefined)
+    const thumbnailUrl = sq.thumbnailUrl || (thumbnailFile ? buildUrl(thumbnailFile) : imageUrl)
+
+    return {
+      id,
+      timestamp: sq.timestamp || '00:00',
+      timestampMs: typeof sq.timestampMs === 'number' ? sq.timestampMs : undefined,
+      imageMetadata: {
+        ...metadata,
+        id: metadata.id || id,
+        file: metadata.file || file,
+        thumbnailFile: metadata.thumbnailFile || thumbnailFile,
+      },
+      imageUrl,
+      thumbnailUrl,
+      ocrText: sq.ocrText,
+      contentType: sq.contentType,
+      analysisResult: sq.analysisResult,
+    }
+  })
 
   const totalInteractions = transcripts.length + suggestions.length + screenshotQuestions.length
   const questionCount =
@@ -148,7 +196,7 @@ export function normalizeSession(raw: any): MeetingSession {
   const fallbackStartedAt = getSessionEpoch(raw)
 
   return {
-    id: String(raw.id || `session_${Date.now()}`),
+    id: sessionId,
     title: String(raw.title || 'Buổi họp không tên').trim(),
     profileId: raw.profileId,
     profileSnapshot: raw.profileSnapshot,
@@ -167,6 +215,9 @@ export function normalizeSession(raw: any): MeetingSession {
     transcripts,
     suggestions,
     screenshotQuestions,
+    screenshotSummaries: raw.screenshotSummaries,
+    searchSnippet: raw.searchSnippet,
+    _isFullyLoaded: Boolean(raw._isFullyLoaded || (raw.transcripts && raw.transcripts.length > 0) || (raw.suggestions && raw.suggestions.length > 0)),
     metrics,
     exportSchemaVersion: raw.exportSchemaVersion || '2.0',
   }
@@ -369,6 +420,31 @@ export class HybridSessionRepository implements ISessionRepository {
     return list.find((s) => s.id === id) || null
   }
 
+  public async loadFullSession(id: string): Promise<MeetingSession | null> {
+    if (!id) return null
+    if (isElectronIpcAvailable()) {
+      try {
+        const full = await window.api.sessions!.getById(id)
+        if (full) {
+          const normalized = normalizeSession({ ...full, _isFullyLoaded: true })
+          if (sessionsCache) {
+            const idx = sessionsCache.findIndex((s) => s.id === id)
+            if (idx !== -1) {
+              sessionsCache[idx] = normalized
+            } else {
+              sessionsCache.unshift(normalized)
+            }
+            notifyListeners()
+          }
+          return normalized
+        }
+      } catch (err) {
+        console.warn(`[SessionStorage] Failed to load full session ${id}:`, err)
+      }
+    }
+    return this.getById(id)
+  }
+
   public save(session: MeetingSession): void {
     const normalized = normalizeSession(session)
     const current = this.getAll()
@@ -559,8 +635,12 @@ export class HybridSessionRepository implements ISessionRepository {
         }
       }
 
-      // 5. Full-text search
+      // 5. Full-text search (Leverages lightweight searchSnippet from index + full items if loaded)
       if (query) {
+        if (s.searchSnippet && s.searchSnippet.toLowerCase().includes(query)) {
+          return true
+        }
+
         const matchTitle = s.title.toLowerCase().includes(query)
         const matchModel = s.aiModel.toLowerCase().includes(query)
         const matchProfile =
@@ -648,6 +728,10 @@ export function getSavedSessions(): MeetingSession[] {
 
 export function getSessionById(id: string): MeetingSession | null {
   return defaultSessionRepository.getById(id)
+}
+
+export function loadFullSession(id: string): Promise<MeetingSession | null> {
+  return defaultSessionRepository.loadFullSession(id)
 }
 
 export function saveSessionToHistory(session: MeetingSession): void {

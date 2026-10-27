@@ -84,6 +84,7 @@ export function SessionDetailView({
 
   // Pagination for long meetings
   const [visibleCount, setVisibleCount] = useState(40)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -723,6 +724,21 @@ export function SessionDetailView({
                         </div>
                       )}
 
+                      {(sq.thumbnailUrl || sq.imageUrl) && (
+                        <div className="relative group/thumb rounded-lg overflow-hidden border border-cyan-500/25 bg-black/50 max-w-sm inline-block">
+                          <img
+                            src={sq.thumbnailUrl || sq.imageUrl}
+                            alt="Screenshot"
+                            loading="lazy"
+                            onClick={() => setPreviewImageUrl(sq.imageUrl || sq.thumbnailUrl || null)}
+                            className="max-h-36 w-auto object-contain cursor-zoom-in hover:opacity-90 transition-opacity"
+                          />
+                          <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-[9px] text-cyan-300 opacity-0 group-hover/thumb:opacity-100 transition-opacity pointer-events-none">
+                            Phóng to
+                          </div>
+                        </div>
+                      )}
+
                       {sq.ocrText && (
                         <div className="p-2 rounded bg-black/50 border border-white/5 font-mono text-[10.5px] text-white/70 max-h-24 overflow-y-auto">
                           {sq.ocrText}
@@ -948,6 +964,21 @@ export function SessionDetailView({
                       </div>
                     )}
 
+                    {(sq.imageUrl || sq.thumbnailUrl) && (
+                      <div className="relative group/screenshot rounded-lg overflow-hidden border border-cyan-500/25 bg-black/50 flex justify-center">
+                        <img
+                          src={sq.thumbnailUrl || sq.imageUrl}
+                          alt={`Screenshot ${idx + 1}`}
+                          loading="lazy"
+                          onClick={() => setPreviewImageUrl(sq.imageUrl || sq.thumbnailUrl || null)}
+                          className="max-h-64 w-auto object-contain cursor-zoom-in hover:opacity-95 transition-opacity"
+                        />
+                        <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] text-cyan-300 pointer-events-none opacity-0 group-hover/screenshot:opacity-100 transition-opacity">
+                          Bấm để xem kích thước đầy đủ
+                        </div>
+                      </div>
+                    )}
+
                     {sq.ocrText && (
                       <div className="space-y-1">
                         <span className="text-[10px] text-white/40 font-medium">OCR Text:</span>
@@ -1038,6 +1069,32 @@ export function SessionDetailView({
           </div>
         )}
       </div>
+
+      {/* ── Screenshot Full Size Modal / Lightbox ── */}
+      {previewImageUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPreviewImageUrl(null)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in cursor-zoom-out"
+        >
+          <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={previewImageUrl}
+              alt="Screenshot full preview"
+              className="max-w-full max-h-[82vh] object-contain rounded-xl shadow-2xl border border-white/10"
+            />
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl(null)}
+              className="mt-3 px-3 py-1 bg-white/10 hover:bg-white/20 text-white text-xs rounded-lg border border-white/10 transition-colors flex items-center gap-1.5"
+            >
+              <X className="w-3 h-3" />
+              <span>Đóng xem ảnh (ESC / Bấm ra ngoài)</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

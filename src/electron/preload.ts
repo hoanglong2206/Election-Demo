@@ -135,6 +135,7 @@ const api = {
    */
   sessions: {
     getAll: (): Promise<any[]> => ipcRenderer.invoke('sessions:getAll'),
+    getById: (sessionId: string): Promise<any | null> => ipcRenderer.invoke('sessions:getById', sessionId),
     save: (session: any): Promise<boolean> => ipcRenderer.invoke('sessions:save', session),
     delete: (sessionId: string): Promise<boolean> => ipcRenderer.invoke('sessions:delete', sessionId),
     deleteMany: (sessionIds: string[]): Promise<boolean> =>
@@ -142,6 +143,9 @@ const api = {
     deleteAll: (): Promise<boolean> => ipcRenderer.invoke('sessions:deleteAll'),
     rename: (sessionId: string, newTitle: string): Promise<boolean> =>
       ipcRenderer.invoke('sessions:rename', sessionId, newTitle),
+    rebuildIndex: (): Promise<any[]> => ipcRenderer.invoke('sessions:rebuildIndex'),
+    getMigrationStatus: (): Promise<any> => ipcRenderer.invoke('sessions:getMigrationStatus'),
+    startMigration: (): Promise<any> => ipcRenderer.invoke('sessions:startMigration'),
     recovery: {
       list: (): Promise<any[]> => ipcRenderer.invoke('sessions:recovery:list'),
       append: (event: any): Promise<boolean> => ipcRenderer.invoke('sessions:recovery:append', event),

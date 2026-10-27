@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   getSavedSessions,
   initSessionStorage,
+  loadFullSession,
   subscribeSessions,
   deleteSessionFromHistory,
   deleteMultipleSessionsFromHistory,
@@ -117,6 +118,19 @@ export function SessionHistory() {
     if (selected) return selected
     return selectedSessionId ? null : filteredSessions[0] || null
   }, [sessions, selectedSessionId, filteredSessions])
+
+  // Lazy-load full session details (transcripts & suggestions) on demand
+  useEffect(() => {
+    if (!selectedSessionId) return
+    const current = sessions.find((s) => s.id === selectedSessionId)
+    if (current && !current._isFullyLoaded) {
+      loadFullSession(selectedSessionId).then((full) => {
+        if (full) {
+          setSessions((prev) => prev.map((s) => (s.id === full.id ? full : s)))
+        }
+      })
+    }
+  }, [selectedSessionId, sessions])
 
   const handleDeleteSingle = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()

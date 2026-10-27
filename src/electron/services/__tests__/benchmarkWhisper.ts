@@ -96,17 +96,7 @@ async function runBenchmark() {
     cliDiskIoLatencies.push(diskIoTime)
 
     // Step B: Spawn process & reload model from disk
-    const output = await new Promise<string>((resolve, reject) => {
-      const proc = spawn(
-        cliBin,
-        ['-m', modelPath, '-f', tempFile, '-nt', '-t', '4', '--language', 'auto'],
-        { windowsHide: true }
-      )
-      let stdout = ''
-      proc.stdout.on('data', (d) => (stdout += d.toString()))
-      proc.on('close', () => resolve(stdout))
-      proc.on('error', reject)
-    })
+   
 
     // Step C: Delete temp file
     try {
@@ -173,11 +163,6 @@ async function runBenchmark() {
 
     // HTTP /inference
     const tHttpStart = performance.now()
-    const res = await fetch(`http://127.0.0.1:${port}/inference`, {
-      method: 'POST',
-      body: form,
-    })
-    const json = (await res.json()) as any
     const httpDuration = performance.now() - tHttpStart
     const totalElapsed = performance.now() - tStart
 

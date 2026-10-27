@@ -232,7 +232,6 @@ export class WhisperProcessManager {
   private serverProcess: ChildProcess | null = null
   private serverPort = 0
   private activeModelId = 'ggml-tiny.bin'
-  private activeLanguage = 'auto'
   private isWarmedUp = false
   private watchdogTimer: ReturnType<typeof setInterval> | null = null
   private consecutiveRestarts = 0

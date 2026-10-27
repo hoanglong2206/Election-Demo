@@ -15,6 +15,7 @@ import {
   maskApiKey,
   sanitizeLogMessage,
 } from './credentialSchema.js'
+import { resolveSafeSessionPath } from './mediaProtocol.js'
 
 interface StoredCredentialEntry {
   cipher: string
@@ -1051,7 +1052,36 @@ export class ElectronCredentialStore {
     const prompt = validated.prompt
     const systemPrompt = validated.systemPrompt
     const mimeType = validated.mimeType || 'image/jpeg'
-    const cleanBase64 = validated.imageBase64.replace(/^data:[^;]+;base64,/, '').trim()
+    let cleanBase64 = ''
+
+    if (validated.imageMediaUrl || validated.imagePath) {
+      const srcUrl = validated.imageMediaUrl || validated.imagePath!
+      const sessionsDir = path.join(electronApp ? electronApp.getPath('userData') : process.cwd(), 'sessions')
+      const safePath = resolveSafeSessionPath(sessionsDir, srcUrl)
+      if (safePath) {
+        try {
+          const buf = await fs.promises.readFile(safePath)
+          cleanBase64 = buf.toString('base64')
+        } catch (readErr) {
+          console.warn('[CredentialStore] Failed to read image from resolved path:', readErr)
+        }
+      } else if (path.isAbsolute(srcUrl) && fs.existsSync(srcUrl)) {
+        try {
+          const buf = await fs.promises.readFile(srcUrl)
+          cleanBase64 = buf.toString('base64')
+        } catch (readErr) {
+          console.warn('[CredentialStore] Failed to read image from absolute path:', readErr)
+        }
+      }
+    }
+
+    if (!cleanBase64 && validated.imageBase64) {
+      cleanBase64 = validated.imageBase64.replace(/^data:[^;]+;base64,/, '').trim()
+    }
+
+    if (!cleanBase64) {
+      throw new Error('Không thể tải dữ liệu ảnh để gửi tới Vision API (thiếu imageBase64 hoặc file ảnh không tồn tại).')
+    }
 
     // 1. Google Gemini Multimodal
     if (targetProvider === 'gemini') {

@@ -26,7 +26,7 @@ ${session.screenshotQuestions
   .map(
     (sq, idx) => `### Câu hỏi ${idx + 1} [\`${sq.timestamp}\`] (${sq.contentType || 'visual_question'})
 - **Tóm tắt câu hỏi**: ${sq.analysisResult?.questionSummary || 'Không có tóm tắt'}
-${sq.ocrText ? `> **Nội dung OCR trích xuất**:\n> \`\`\`\n> ${sq.ocrText.replace(/\n/g, '\n> ')}\n> \`\`\`\n` : ''}
+${(sq.imageUrl || sq.thumbnailUrl) ? `> ![Ảnh chụp màn hình](${sq.imageUrl || sq.thumbnailUrl})\n` : ''}${sq.ocrText ? `> **Nội dung OCR trích xuất**:\n> \`\`\`\n> ${sq.ocrText.replace(/\n/g, '\n> ')}\n> \`\`\`\n` : ''}
 ${sq.analysisResult?.codeSnippet ? `> **Mã nguồn giải pháp**:\n> \`\`\`\n> ${sq.analysisResult.codeSnippet.replace(/\n/g, '\n> ')}\n> \`\`\`\n` : ''}
 > **Gợi ý giải pháp AI**: ${sq.analysisResult?.suggestedAnswer || 'N/A'}
 `

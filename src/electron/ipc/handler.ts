@@ -277,6 +277,10 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       return sessionStorage.getAll()
     })
 
+    ipcMain.handle('sessions:getById', (_event, sessionId: string) => {
+      return sessionStorage.getById(sessionId)
+    })
+
     ipcMain.handle('sessions:save', (_event, session: any) => {
       return sessionStorage.save(session)
     })
@@ -296,6 +300,28 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     ipcMain.handle('sessions:rename', (_event, sessionId: string, newTitle: string) => {
       return sessionStorage.rename(sessionId, newTitle)
     })
+
+    ipcMain.handle('sessions:rebuildIndex', () => {
+      return sessionStorage.rebuildIndex()
+    })
+
+    ipcMain.handle('sessions:getMigrationStatus', () => {
+      return sessionStorage.getMigrationStatus()
+    })
+
+    ipcMain.handle('sessions:startMigration', () => {
+      return sessionStorage.migrateLegacySessions()
+    })
+
+    // Run background migration and orphan image cleanup safely after idle delay
+    setTimeout(() => {
+      sessionStorage.migrateLegacySessions().catch((err) => {
+        console.warn('[SessionStorage] Background migration warning:', err)
+      })
+      sessionStorage.cleanOrphanImages().catch((err) => {
+        console.warn('[SessionStorage] Orphan image cleaner warning:', err)
+      })
+    }, 2500)
 
     ipcMain.handle('sessions:recovery:list', () => sessionRecoveryService.listUnfinished())
     ipcMain.handle('sessions:recovery:append', (_event, event) => sessionRecoveryService.append(event))

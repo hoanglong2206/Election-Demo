@@ -30,6 +30,36 @@ function atomicWrite(filePath: string, content: string): void {
   fs.renameSync(temporary, filePath)
 }
 
+function sanitizePayloadForRecovery(payload: Record<string, unknown>): Record<string, unknown> {
+  if (!payload || typeof payload !== 'object') return payload
+  const cloned = { ...payload }
+
+  for (const key of ['dataUrl', 'base64'] as const) {
+    if (typeof cloned[key] === 'string' && (cloned[key] as string).startsWith('data:image')) {
+      delete cloned[key]
+    }
+  }
+
+  if (typeof cloned.thumbnailUrl === 'string' && cloned.thumbnailUrl.startsWith('data:image')) {
+    cloned.thumbnailUrl = (cloned.imageUrl as string) || '[externalized_image]'
+  }
+
+  if (Array.isArray(cloned.screenshotQuestions)) {
+    cloned.screenshotQuestions = cloned.screenshotQuestions.map((sq: any) => {
+      if (!sq || typeof sq !== 'object') return sq
+      const item = { ...sq }
+      delete item.dataUrl
+      delete item.base64
+      if (typeof item.thumbnailUrl === 'string' && item.thumbnailUrl.startsWith('data:image')) {
+        item.thumbnailUrl = item.imageUrl || '[externalized_image]'
+      }
+      return item
+    })
+  }
+
+  return cloned
+}
+
 function safeId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
@@ -60,7 +90,11 @@ export class SessionRecoveryService {
     if (!event.sessionId || !event.eventId || !event.type) return false
     const files = this.files(event.sessionId)
     try {
-      fs.appendFileSync(files.journal, `${JSON.stringify(event)}\n`, 'utf8')
+      const sanitizedEvent = {
+        ...event,
+        payload: sanitizePayloadForRecovery(event.payload),
+      }
+      fs.appendFileSync(files.journal, `${JSON.stringify(sanitizedEvent)}\n`, 'utf8')
       return true
     } catch (error) {
       console.error('[SessionRecovery] Failed to append event:', error)
@@ -72,12 +106,13 @@ export class SessionRecoveryService {
     if (!sessionId) return false
     try {
       const files = this.files(sessionId)
+      const sanitizedSnapshot = sanitizePayloadForRecovery(snapshot)
       atomicWrite(files.snapshot, JSON.stringify({
         version: 1,
         sessionId,
         lifecycle: 'active',
         updatedAt: Date.now(),
-        snapshot,
+        snapshot: sanitizedSnapshot,
       }, null, 2))
       return true
     } catch (error) {

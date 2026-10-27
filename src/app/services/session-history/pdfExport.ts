@@ -155,6 +155,21 @@ export function exportSessionToPDF(session: MeetingSession): void {
     )
     .join('')}
 
+  ${(session.screenshotQuestions && session.screenshotQuestions.length > 0) ? `
+  <h2>3. Câu Hỏi Trực Quan Từ Màn Hình (Visual Coding / Screenshots)</h2>
+  ${session.screenshotQuestions.map((sq, idx) => `
+    <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 14px; margin-bottom: 12px;">
+      <div style="font-size: 12px; font-weight: bold; color: #166534; margin-bottom: 6px;">
+        Câu hỏi ${idx + 1} &bull; ${sq.timestamp} (${sq.contentType || 'Coding Question'})
+      </div>
+      ${(sq.imageUrl || sq.thumbnailUrl) ? `<img src="${sq.thumbnailUrl || sq.imageUrl}" style="max-width: 100%; max-height: 280px; object-fit: contain; border-radius: 6px; margin: 8px 0; border: 1px solid #bbf7d0;" alt="Screenshot" />` : ''}
+      ${sq.analysisResult?.questionSummary ? `<div style="font-weight: 600; font-size: 13px; margin: 6px 0; color: #1e293b;">${sq.analysisResult.questionSummary}</div>` : ''}
+      ${sq.ocrText ? `<pre style="background: #1e293b; color: #e2e8f0; padding: 8px; border-radius: 6px; font-size: 11px; white-space: pre-wrap;">${sq.ocrText}</pre>` : ''}
+      ${sq.analysisResult?.suggestedAnswer ? `<div style="font-size: 13px; color: #374151; margin-top: 6px;"><strong>Gợi ý trả lời:</strong> ${sq.analysisResult.suggestedAnswer}</div>` : ''}
+    </div>
+  `).join('')}
+  ` : ''}
+
   <div class="footer">
     Báo cáo cuộc họp xuất tự động từ AI Meeting Copilot &bull; ${new Date().toLocaleDateString('vi-VN')}
   </div>
