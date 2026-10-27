@@ -144,7 +144,7 @@ export class PricingRegistry {
   }
 
   private notifyRulesUpdated(): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new CustomEvent('pricing-rules-updated'))
     }
   }

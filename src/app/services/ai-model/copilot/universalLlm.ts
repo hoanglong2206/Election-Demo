@@ -74,7 +74,7 @@ export function invalidateApiKeyCache(provider?: string): void {
   }
 }
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('credential-store:key-changed', (e: any) => {
     invalidateApiKeyCache(e?.detail?.provider)
   })

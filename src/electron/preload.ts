@@ -165,6 +165,19 @@ const api = {
   },
 
   /**
+   * Append-Only Monthly NDJSON Usage Storage API
+   */
+  usage: {
+    append: (batch: any[]): Promise<number> => ipcRenderer.invoke('usage:append', batch),
+    query: (params: any): Promise<any> => ipcRenderer.invoke('usage:query', params),
+    migrate: (records: any[]): Promise<{ migratedCount: number; success: boolean }> =>
+      ipcRenderer.invoke('usage:migrate', records),
+    getRecent: (limit?: number): Promise<any[]> => ipcRenderer.invoke('usage:getRecent', limit),
+    loadCurrentMonth: (): Promise<any[]> => ipcRenderer.invoke('usage:loadCurrentMonth'),
+    reset: (): Promise<boolean> => ipcRenderer.invoke('usage:reset'),
+  },
+
+  /**
    * Secure OS Credential Store API (DPAPI / Keychain / Secret Service via safeStorage)
    * The Renderer process NEVER receives raw API keys back after saving.
    */

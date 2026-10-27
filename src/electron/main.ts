@@ -1,6 +1,6 @@
 import { app, BrowserWindow, session, desktopCapturer, globalShortcut } from 'electron'
 import { createOverlayWindow } from './window/overlay-window.js'
-import { registerIpcHandlers, getActiveSessionRecoveryService } from './ipc/handler.js'
+import { registerIpcHandlers, getActiveSessionRecoveryService, getActiveUsageStorageService } from './ipc/handler.js'
 import { getWhisperProcessManager } from './services/whisperProcessManager.js'
 import { registerMediaSchemeAsPrivileged, registerMediaProtocolHandler } from './services/mediaProtocol.js'
 import path from 'path'
@@ -133,6 +133,13 @@ app.on('before-quit', () => {
     getActiveSessionRecoveryService()?.flushSync()
   } catch (err) {
     console.error('[Electron] Error flushing recovery service on before-quit:', err)
+  }
+
+  // Flush usage storage if needed
+  try {
+    getActiveUsageStorageService()?.flushSync()
+  } catch (err) {
+    console.error('[Electron] Error flushing usage storage on before-quit:', err)
   }
   mainWindow = null
 })

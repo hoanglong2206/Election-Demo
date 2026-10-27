@@ -1,24 +1,84 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   FileSpreadsheet,
   Search,
   Sparkles,
+  ChevronDown,
+  Loader2,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { cn } from '@/lib/utils'
-import type { UsageRecord } from '@/services/usage-tracker'
+import { usageTrackerService, type UsageRecord } from '@/services/usage-tracker'
 import { FEATURE_NAMES } from '../types'
 
 interface RecentUsageLogsTableProps {
-  records: UsageRecord[]
+  records?: UsageRecord[]
 }
 
-export function RecentUsageLogsTable({ records }: RecentUsageLogsTableProps) {
+export function RecentUsageLogsTable({ records: initialRecords }: RecentUsageLogsTableProps) {
+  const [records, setRecords] = useState<UsageRecord[]>(() => initialRecords || usageTrackerService.getAllRecords(50))
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedProvider, setSelectedProvider] = useState<string>('all')
   const [selectedFeature, setSelectedFeature] = useState<string>('all')
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
+  const [hasMore, setHasMore] = useState<boolean>(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [totalCount, setTotalCount] = useState<number>(() => (initialRecords ? initialRecords.length : records.length))
+
+  // Query initial page on mount or when initialRecords / provider changes
+  useEffect(() => {
+    let isCancelled = false
+    void (async () => {
+      try {
+        const res = await usageTrackerService.queryPagedRecords({
+          limit: 50,
+          provider: selectedProvider !== 'all' ? selectedProvider : undefined,
+        })
+        if (!isCancelled) {
+          if (res.records.length > 0) {
+            setRecords(res.records)
+            setNextCursor(res.nextCursor)
+            setHasMore(res.hasMore)
+            setTotalCount(res.total)
+          } else if (initialRecords && initialRecords.length > 0) {
+            setRecords(initialRecords)
+            setTotalCount(initialRecords.length)
+            setHasMore(false)
+          }
+        }
+      } catch {
+        if (!isCancelled && initialRecords) {
+          setRecords(initialRecords)
+          setTotalCount(initialRecords.length)
+        }
+      }
+    })()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [initialRecords, selectedProvider])
+
+  const handleLoadMore = useCallback(async () => {
+    if (!nextCursor || isLoadingMore) return
+    setIsLoadingMore(true)
+    try {
+      const res = await usageTrackerService.queryPagedRecords({
+        limit: 50,
+        cursor: nextCursor,
+        provider: selectedProvider !== 'all' ? selectedProvider : undefined,
+      })
+      setRecords((prev) => [...prev, ...res.records])
+      setNextCursor(res.nextCursor)
+      setHasMore(res.hasMore)
+      setTotalCount(res.total)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [nextCursor, isLoadingMore, selectedProvider])
 
   // Extract unique providers & features
   const providers = useMemo(() => {
@@ -79,7 +139,7 @@ export function RecentUsageLogsTable({ records }: RecentUsageLogsTableProps) {
             <CardTitle className="text-[13px] text-white/90 font-semibold flex items-center gap-2">
               <span>Nhật Ký Yêu Cầu API (API Usage Logs)</span>
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 border font-mono bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
-                {filteredRecords.length} / {records.length} bản ghi
+                {filteredRecords.length} / {totalCount} bản ghi
               </Badge>
             </CardTitle>
             <p className="text-[10px] text-white/40 mt-0.5">
@@ -248,6 +308,29 @@ export function RecentUsageLogsTable({ records }: RecentUsageLogsTableProps) {
               </tbody>
             </table>
           </div>
+          {hasMore && (
+            <div className="p-2 flex items-center justify-center border-t border-white/[0.06] bg-black/20">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+                className="text-[11px] h-7 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 flex items-center gap-1.5"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang tải thêm bản ghi...</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    <span>Tải thêm 50 bản ghi cũ hơn</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

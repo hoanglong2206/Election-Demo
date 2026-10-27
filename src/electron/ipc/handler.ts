@@ -5,11 +5,17 @@ import { ElectronSessionStorage } from '../services/sessionStorage.js'
 import { getElectronCredentialStore } from '../services/credentialStore.js'
 import { SessionRecoveryService } from '../services/sessionRecovery.js'
 import { getAppStateManager } from '../services/appState.js'
+import { getUsageStorageService, UsageStorageService } from '../services/usageStorage.js'
 
 let activeSessionRecoveryService: SessionRecoveryService | null = null
+let activeUsageStorageService: UsageStorageService | null = null
 
 export function getActiveSessionRecoveryService(): SessionRecoveryService | null {
   return activeSessionRecoveryService
+}
+
+export function getActiveUsageStorageService(): UsageStorageService | null {
+  return activeUsageStorageService
 }
 
 export function registerIpcHandlers(win: BrowserWindow): void {
@@ -361,6 +367,36 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     })
 
     activeSessionRecoveryService = sessionRecoveryService
+
+    // ── Append-Only Monthly NDJSON Usage Storage Handlers ───────────────────
+    const usageStorage = getUsageStorageService()
+    activeUsageStorageService = usageStorage
+
+    ipcMain.handle('usage:append', (_event, batch: any[]) => {
+      return usageStorage.append(batch)
+    })
+
+    ipcMain.handle('usage:query', (_event, params: any) => {
+      return usageStorage.query(params)
+    })
+
+    ipcMain.handle('usage:migrate', (_event, records: any[]) => {
+      return usageStorage.migrate(records)
+    })
+
+    ipcMain.handle('usage:getRecent', (_event, limit?: number) => {
+      return usageStorage.getRecentRecords(limit)
+    })
+
+    ipcMain.handle('usage:loadCurrentMonth', () => {
+      const now = new Date()
+      const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      return usageStorage.readMonthRecords(ym)
+    })
+
+    ipcMain.handle('usage:reset', () => {
+      return usageStorage.resetAll()
+    })
 
     // ── Secure OS Credential Store Handlers ──────────────────────────────────
     const credentialStore = getElectronCredentialStore()

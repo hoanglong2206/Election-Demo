@@ -135,6 +135,14 @@ export interface ElectronAPI {
       flush?: (sessionId?: string) => Promise<boolean>
     }
   }
+  usage?: {
+    append: (batch: any[]) => Promise<number>
+    query: (params: any) => Promise<{ records: any[]; total: number; nextCursor?: string; hasMore: boolean }>
+    migrate: (records: any[]) => Promise<{ migratedCount: number; success: boolean }>
+    getRecent: (limit?: number) => Promise<any[]>
+    loadCurrentMonth: () => Promise<any[]>
+    reset: () => Promise<boolean>
+  }
   credentials?: {
     isAvailable: () => Promise<boolean>
     saveApiKey: (

@@ -2028,6 +2028,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       if (saveAck && saveAck.success) {
         // Safe Sequencing: Complete recovery ONLY AFTER confirmed storage save
         await window.api.sessions?.recovery?.complete(session.id, 'completed')
+        void usageTrackerService.flushBatch()
         setIsSavedToHistory(true)
         if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current)
         saveHistoryTimerRef.current = setTimeout(() => {
