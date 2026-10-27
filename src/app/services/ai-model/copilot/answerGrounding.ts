@@ -849,7 +849,10 @@ TRẢ VỀ CHÍNH XÁC MẢNG JSON (KHÔNG MARKDOWN FENCE, KHÔNG BÌNH LUẬN):
     const rawRes = await Promise.race([judgePromise, timeoutPromise])
     if (timeoutTimer) clearTimeout(timeoutTimer)
 
-    if (!rawRes || !rawRes.text) {
+    if (!rawRes || !rawRes.text || rawRes.truncated) {
+      if (rawRes?.truncated) {
+        console.warn('[answerGrounding] LLM judge response was truncated mid-stream; falling back to degraded')
+      }
       return { ...syncResult, degraded: true }
     }
 

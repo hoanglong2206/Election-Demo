@@ -139,8 +139,8 @@ Vì họ vừa PHÁT BIỂU, hãy soạn 3 CÂU HỎI GỢI Ý để tôi hỏi 
 
   // The model answered with JSON we could not parse. Showing that blob raw in
   // the UI is worse than showing an error, so refuse it.
-  if (looksLikeJson(text)) {
-    console.warn('[discussion] LLM returned unparseable JSON — refusing to render it raw')
+  if (rawRes.truncated || looksLikeJson(text)) {
+    console.warn('[discussion] LLM returned truncated or unparseable output — refusing to render it raw')
     return null
   }
 

@@ -164,13 +164,31 @@ const api = {
    */
   credentials: {
     isAvailable: (): Promise<boolean> => ipcRenderer.invoke('credentials:isAvailable'),
-    saveApiKey: (
+    saveApiKey: async (
       provider: string,
       key: string
-    ): Promise<{ success: boolean; provider: string; maskedKey?: string; error?: string }> =>
-      ipcRenderer.invoke('credentials:saveApiKey', { provider, key }),
-    deleteApiKey: (provider: string): Promise<{ success: boolean; error?: string }> =>
-      ipcRenderer.invoke('credentials:deleteApiKey', { provider }),
+    ): Promise<{ success: boolean; provider: string; maskedKey?: string; error?: string }> => {
+      const res = await ipcRenderer.invoke('credentials:saveApiKey', { provider, key })
+      if (res?.success) {
+        const g = globalThis as any
+        if (typeof g.dispatchEvent === 'function') {
+          const Evt = g.CustomEvent || g.Event
+          if (Evt) g.dispatchEvent(new Evt('credential-store:key-changed', { detail: { provider, action: 'save' } }))
+        }
+      }
+      return res
+    },
+    deleteApiKey: async (provider: string): Promise<{ success: boolean; error?: string }> => {
+      const res = await ipcRenderer.invoke('credentials:deleteApiKey', { provider })
+      if (res?.success) {
+        const g = globalThis as any
+        if (typeof g.dispatchEvent === 'function') {
+          const Evt = g.CustomEvent || g.Event
+          if (Evt) g.dispatchEvent(new Evt('credential-store:key-changed', { detail: { provider, action: 'delete' } }))
+        }
+      }
+      return res
+    },
     hasApiKey: (provider: string): Promise<boolean> =>
       ipcRenderer.invoke('credentials:hasApiKey', { provider }),
     getStatus: (
@@ -234,6 +252,7 @@ const api = {
         onError: (data: { requestId: string; error: string; partialText: string }) => void
       }
     ): (() => void) => {
+      let isCleanedUp = false
       const handleFirstToken = (_e: any, d: any) => {
         if (d?.requestId === params.requestId) callbacks.onFirstToken?.(d)
       }
@@ -253,6 +272,8 @@ const api = {
         }
       }
       const cleanup = () => {
+        if (isCleanedUp) return
+        isCleanedUp = true
         ipcRenderer.removeListener('credentials:streamLLM:first-token', handleFirstToken)
         ipcRenderer.removeListener('credentials:streamLLM:delta', handleDelta)
         ipcRenderer.removeListener('credentials:streamLLM:done', handleDone)

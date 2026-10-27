@@ -30,11 +30,6 @@ function migrateFromLegacyLocalStorage(): AppSettingsSchema {
     }
 
     // Read scattered legacy keys if available
-    const groqKey = localStorage.getItem(STORAGE_KEYS.GROQ_KEY) || ''
-    const llmKey =
-      localStorage.getItem(STORAGE_KEYS.LLM_KEY) ||
-      localStorage.getItem(STORAGE_KEYS.GEMINI_KEY) ||
-      ''
     const llmProvider = (localStorage.getItem(STORAGE_KEYS.LLM_PROVIDER) as any) || 'Auto'
     const selectedLLM = localStorage.getItem(STORAGE_KEYS.LLM_ENGINE) || DEFAULT_SETTINGS.engines.selectedLLM
     const selectedSTT = localStorage.getItem(STORAGE_KEYS.STT_ENGINE) || DEFAULT_SETTINGS.engines.selectedSTT
@@ -49,8 +44,8 @@ function migrateFromLegacyLocalStorage(): AppSettingsSchema {
     const legacyMerged: AppSettingsSchema = {
       version: 1,
       apiKeys: {
-        groqKey: groqKey.trim(),
-        llmKey: llmKey.trim(),
+        groqKey: '',
+        llmKey: '',
         llmProvider,
       },
       engines: {
@@ -203,9 +198,9 @@ export class SettingsManager {
     const s = this.getSettings()
     switch (key) {
       case 'groqKey':
-        return s.apiKeys.groqKey
+        return ''
       case 'llmKey':
-        return s.apiKeys.llmKey
+        return ''
       case 'llmProvider':
         return s.apiKeys.llmProvider
       case 'selectedLLM':
@@ -245,6 +240,10 @@ export class SettingsManager {
     switch (key) {
       case 'groqKey':
       case 'llmKey':
+        console.warn(
+          `[SettingsManager] Refusing to set plaintext key '${key}'. API keys must be saved via window.api.credentials.saveApiKey.`
+        )
+        return this.getSettings()
       case 'llmProvider':
         return this.updateSettings({ apiKeys: { [key]: value } as any })
       case 'selectedLLM':
@@ -329,6 +328,31 @@ export async function migratePlaintextSecretsToSecureStore(): Promise<{
     const warning =
       'Cảnh báo bảo mật: Hệ thống mã hóa OS Credential Store (DPAPI/Keychain) không khả dụng. Ứng dụng từ chối lưu khóa dạng plaintext.'
     console.warn('[Migration]', warning)
+
+    const legacyGroq =
+      typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.GROQ_KEY) || '' : ''
+    const legacyLlm =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(STORAGE_KEYS.LLM_KEY) ||
+          localStorage.getItem(STORAGE_KEYS.GEMINI_KEY) ||
+          ''
+        : ''
+
+    if (legacyGroq || legacyLlm) {
+      const confirmed =
+        typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm(
+              'Hệ thống mã hóa OS Credential Store (safeStorage) không khả dụng trên môi trường này. Để đảm bảo an toàn, bạn có muốn xóa toàn bộ API key plaintext cũ khỏi bộ nhớ tạm không?'
+            )
+          : true
+
+      if (confirmed && typeof localStorage !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEYS.GROQ_KEY)
+        localStorage.removeItem(STORAGE_KEYS.LLM_KEY)
+        localStorage.removeItem(STORAGE_KEYS.GEMINI_KEY)
+      }
+    }
+
     return { migrated: false, count: 0, warning }
   }
 

@@ -37,6 +37,22 @@ app.whenReady().then(() => {
     const sessionsDir = path.join(app.getPath('userData'), 'sessions')
     registerMediaProtocolHandler(sessionsDir)
 
+    // Enforce strict CSP in Renderer: strictly disallow direct network egress to external LLM/STT APIs
+    const isDev = process.env['NODE_ENV'] === 'development'
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const connectSrc = isDev
+        ? "'self' app-media: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*"
+        : "'self' app-media:"
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: app-media:; media-src 'self' blob: app-media:; connect-src ${connectSrc};`,
+          ],
+        },
+      })
+    })
+
     // Enable system audio loopback capture for navigator.mediaDevices.getDisplayMedia
     session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
       desktopCapturer.getSources({ types: ['window', 'screen'] }).then((sources) => {

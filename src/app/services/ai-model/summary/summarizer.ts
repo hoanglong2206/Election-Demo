@@ -94,7 +94,13 @@ ${conversation}`
       : 'Bạn là AI thư ký cuộc họp xuất sắc. Luôn trả về tóm tắt đúng định dạng chuẩn, không kèm lời chào hỏi thừa.',
   })
 
-  if (llmRes && llmRes.text.trim()) return llmRes.text.trim()
+  if (llmRes && llmRes.text.trim()) {
+    const text = llmRes.text.trim()
+    if (llmRes.truncated) {
+      return `${text}\n\n*(Lưu ý: Tóm tắt chưa hoàn tất do luồng LLM bị ngắt giữa chừng)*`
+    }
+    return text
+  }
 
   return null
 }

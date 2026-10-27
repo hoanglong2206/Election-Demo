@@ -2,8 +2,10 @@ import type { LLMProviderOption } from '../../features/settings/types'
 import type { ResponseLanguage } from '../ai-model/language'
 
 export interface APIKeySettings {
-  groqKey: string
-  llmKey: string
+  /** @deprecated Plaintext storage is disabled. Keys are stored securely in OS Credential Store (safeStorage). */
+  groqKey?: string
+  /** @deprecated Plaintext storage is disabled. Keys are stored securely in OS Credential Store (safeStorage). */
+  llmKey?: string
   llmProvider: LLMProviderOption
 }
 

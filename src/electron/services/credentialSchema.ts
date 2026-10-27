@@ -111,4 +111,8 @@ export function sanitizeLogMessage(message: unknown): string {
     .replace(/sk-[a-zA-Z0-9_-]{16,}/g, (match) => `sk-••••••••${match.slice(-4)}`)
     .replace(/AIza[a-zA-Z0-9_-]{16,}/g, (match) => `AIza••••••••${match.slice(-4)}`)
     .replace(/Bearer\s+[a-zA-Z0-9_.-]{16,}/gi, 'Bearer [REDACTED_TOKEN]')
+    .replace(/(x-goog-api-key\s*[:=]\s*)[^\s"',]+/gi, '$1[REDACTED_KEY]')
+    .replace(/(authorization\s*:\s*)[^\r\n,]+/gi, '$1[REDACTED_HEADER]')
+    .replace(/([?&](?:key|api_key|token)=)[^&\s"'`]+/gi, '$1[REDACTED]')
+    .replace(/(https?:\/\/[^\s"'`?]+)\?[^\s"'`]+/gi, '$1?[REDACTED_QUERY]')
 }

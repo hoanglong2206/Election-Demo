@@ -16,6 +16,8 @@ import {
   sanitizeLogMessage,
 } from './credentialSchema.js'
 import { resolveSafeSessionPath } from './mediaProtocol.js'
+import { SSEStreamParser } from './sseParser.js'
+import { getValidatedModelId } from './modelDefaults.js'
 
 interface StoredCredentialEntry {
   cipher: string
@@ -41,53 +43,35 @@ async function parseJsonSafe(res: Response): Promise<any> {
 async function readStreamingBenchmark(res: Response, provider: CredentialProvider) {
   if (!res.body) throw new Error('Provider không trả về luồng streaming.')
   const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let text = ''
-  let usageTokens: number | undefined
   let firstTokenAt: number | undefined
   const startedAt = performance.now()
-  const consume = (payload: string) => {
-    if (!payload || payload === '[DONE]') return
-    let data: any
-    try { data = JSON.parse(payload) } catch { return }
-    let delta = ''
-    if (provider === 'gemini') {
-      delta = data?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
-      usageTokens = data?.usageMetadata?.candidatesTokenCount ?? usageTokens
-    } else {
-      delta = data?.choices?.[0]?.delta?.content || ''
-      usageTokens = data?.usage?.completion_tokens ?? usageTokens
-    }
-    if (delta) {
-      const now = performance.now()
-      firstTokenAt ??= now
-      text += delta
-    }
-  }
+
+  const parser = new SSEStreamParser(provider, {
+    onDelta: () => {
+      if (firstTokenAt === undefined) {
+        firstTokenAt = performance.now()
+      }
+    },
+  })
+
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
-    const events = buffer.split('\n\n')
-    buffer = events.pop() || ''
-    for (const event of events) {
-      const payload = event.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
-      consume(payload)
-    }
+    parser.feed(value)
   }
-  if (buffer.trim()) {
-    const payload = buffer.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
-    consume(payload)
-  }
+  parser.flush()
+
   const endedAt = performance.now()
-  if (!text.trim()) throw new Error('Model kết thúc streaming nhưng không trả nội dung văn bản.')
+  const text = parser.getAccumulatedText().trim()
+  if (!text) throw new Error('Model kết thúc streaming nhưng không trả nội dung văn bản.')
+  const usage = parser.getUsage()
+
   return {
-    text: text.trim(),
+    text,
     benchmark: {
       ttftMs: Math.round((firstTokenAt ?? endedAt) - startedAt),
       generationMs: Math.max(1, Math.round(endedAt - (firstTokenAt ?? endedAt))),
-      outputTokens: usageTokens,
+      outputTokens: usage.outputTokens,
     },
   }
 }
@@ -530,7 +514,12 @@ export class ElectronCredentialStore {
       if (provider === 'gemini') {
         const pingStart = Date.now()
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`
+          'https://generativelanguage.googleapis.com/v1beta/models',
+          {
+            headers: {
+              'x-goog-api-key': key,
+            },
+          }
         )
         const pingMs = Date.now() - pingStart
         if (!res.ok) {
@@ -594,7 +583,7 @@ export class ElectronCredentialStore {
   }
 
   private async callLLMStreaming(input: CallLLMInput, key: string, provider: CredentialProvider) {
-    const modelId = input.modelId!
+    const modelId = getValidatedModelId(provider, input.modelId)
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     let url = ''
     let body: any
@@ -615,7 +604,8 @@ export class ElectronCredentialStore {
         ...(provider === 'openai' || provider === 'groq' ? { stream_options: { include_usage: true } } : {}),
       }
     } else if (provider === 'gemini') {
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse`
+      headers['x-goog-api-key'] = key
       body = { contents: [{ parts: [{ text: input.prompt }] }], generationConfig: { maxOutputTokens: input.maxTokens ?? 250, temperature: input.temperature ?? 0.2 }, ...(input.systemPrompt ? { systemInstruction: { parts: [{ text: input.systemPrompt }] } } : {}) }
     } else throw new Error(`Provider không được hỗ trợ: ${provider}`)
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
@@ -669,7 +659,7 @@ export class ElectronCredentialStore {
       return
     }
 
-    const modelId = validated.modelId || (targetProvider === 'groq' ? 'llama-3.3-70b-versatile' : targetProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini')
+    const modelId = getValidatedModelId(targetProvider, validated.modelId)
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     let url = ''
     let body: any
@@ -692,7 +682,8 @@ export class ElectronCredentialStore {
       }
     } else if (targetProvider === 'gemini') {
       let cleanModelId = modelId.replace(/^models\//, '')
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModelId)}:streamGenerateContent?alt=sse`
+      headers['x-goog-api-key'] = key
       body = {
         contents: [{ parts: [{ text: validated.prompt }] }],
         generationConfig: {
@@ -709,7 +700,6 @@ export class ElectronCredentialStore {
       return
     }
 
-    let accumulatedText = ''
     let firstTokenAt: number | undefined
     const startedAt = performance.now()
     let batchBuffer = ''
@@ -723,36 +713,8 @@ export class ElectronCredentialStore {
       }
     }
 
-    let usage: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } = {}
-
-    const consumePayload = (payload: string) => {
-      if (!payload || payload === '[DONE]') return
-      let data: any
-      try {
-        data = JSON.parse(payload)
-      } catch {
-        return
-      }
-
-      let delta = ''
-      if (targetProvider === 'gemini') {
-        delta = data?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
-        if (data?.usageMetadata) {
-          usage.inputTokens = data.usageMetadata.promptTokenCount ?? usage.inputTokens
-          usage.outputTokens = data.usageMetadata.candidatesTokenCount ?? usage.outputTokens
-          usage.cachedTokens = data.usageMetadata.cachedContentTokenCount ?? usage.cachedTokens
-        }
-      } else {
-        delta = data?.choices?.[0]?.delta?.content || ''
-        if (data?.usage) {
-          usage.inputTokens = data.usage.prompt_tokens ?? usage.inputTokens
-          usage.outputTokens = data.usage.completion_tokens ?? usage.outputTokens
-          usage.cachedTokens = data.usage.prompt_tokens_details?.cached_tokens ?? usage.cachedTokens
-        }
-      }
-
-      if (delta) {
-        accumulatedText += delta
+    const parser = new SSEStreamParser(targetProvider, {
+      onDelta: (delta) => {
         const now = performance.now()
         if (firstTokenAt === undefined) {
           firstTokenAt = now
@@ -770,8 +732,11 @@ export class ElectronCredentialStore {
             }, 30)
           }
         }
-      }
-    }
+      },
+      onError: (streamErr) => {
+        throw streamErr
+      },
+    })
 
     try {
       const res = await fetch(url, {
@@ -793,8 +758,6 @@ export class ElectronCredentialStore {
       }
 
       const reader = res.body.getReader()
-      const decoder = new TextDecoder('utf-8')
-      let streamBuffer = ''
 
       while (true) {
         if (signal?.aborted) {
@@ -806,29 +769,10 @@ export class ElectronCredentialStore {
         const { value, done } = await reader.read()
         if (done) break
 
-        streamBuffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
-        const events = streamBuffer.split('\n\n')
-        streamBuffer = events.pop() || ''
-
-        for (const event of events) {
-          const lines = event.split('\n')
-          const payload = lines
-            .filter((line) => line.startsWith('data:'))
-            .map((line) => line.slice(5).trim())
-            .join('\n')
-          consumePayload(payload)
-        }
+        parser.feed(value)
       }
 
-      streamBuffer += decoder.decode()
-      if (streamBuffer.trim()) {
-        const lines = streamBuffer.split('\n')
-        const payload = lines
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trim())
-          .join('\n')
-        consumePayload(payload)
-      }
+      parser.flush()
 
       if (batchTimer) {
         clearTimeout(batchTimer)
@@ -837,6 +781,8 @@ export class ElectronCredentialStore {
       flushBatch()
 
       const endedAt = performance.now()
+      const accumulatedText = parser.getAccumulatedText()
+      const usage = parser.getUsage()
       callbacks.onDone({
         text: accumulatedText,
         modelName: modelId,
@@ -854,6 +800,11 @@ export class ElectronCredentialStore {
         batchTimer = null
       }
       flushBatch()
+      const accumulatedText = parser.getAccumulatedText()
+      const usage = parser.getUsage()
+      if (!usage.outputTokens && accumulatedText.length > 0) {
+        usage.outputTokens = Math.max(1, Math.ceil(accumulatedText.length / 4))
+      }
       callbacks.onError({
         error: sanitizeLogMessage(err?.message || err || 'Lỗi không xác định khi stream'),
         partialText: accumulatedText,
@@ -986,12 +937,15 @@ export class ElectronCredentialStore {
     }
 
     if (targetProvider === 'gemini') {
-      const modelId = validated.modelId || 'gemini-1.5-flash'
+      const modelId = getValidatedModelId('gemini', validated.modelId)
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(key)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key,
+          },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { maxOutputTokens: maxTokens, temperature },
@@ -1085,12 +1039,15 @@ export class ElectronCredentialStore {
 
     // 1. Google Gemini Multimodal
     if (targetProvider === 'gemini') {
-      const modelId = validated.modelId || 'gemini-1.5-flash'
+      const modelId = getValidatedModelId('gemini', validated.modelId)
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(key)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key,
+          },
           body: JSON.stringify({
             contents: [
               {
@@ -1282,7 +1239,8 @@ export class ElectronCredentialStore {
     let headers: Record<string, string> = { 'Content-Type': 'application/json' }
     let body: any
     if (provider === 'gemini') {
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(id)}:generateContent?key=${encodeURIComponent(key)}`
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(id)}:generateContent`
+      headers['x-goog-api-key'] = key
       body = { contents: [{ parts: [{ text: 'Reply with OK.' }] }], generationConfig: { maxOutputTokens: 8 } }
     } else {
       url = provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
@@ -1421,7 +1379,12 @@ export class ElectronCredentialStore {
     if (geminiKey) {
       try {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`
+          'https://generativelanguage.googleapis.com/v1beta/models',
+          {
+            headers: {
+              'x-goog-api-key': geminiKey,
+            },
+          }
         )
         if (res.ok) {
           const data = await parseJsonSafe(res)
@@ -1545,11 +1508,12 @@ export class ElectronCredentialStore {
         return { success: true, translations }
       } else {
         // Google Cloud Translation v2 official endpoint
-        const url = `https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(key)}`
+        const url = 'https://translation.googleapis.com/language/translate/v2'
         const res = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'x-goog-api-key': key,
           },
           body: JSON.stringify({
             q: texts,

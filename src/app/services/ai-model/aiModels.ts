@@ -380,94 +380,6 @@ function classifyBenchmarkError(message: string): NonNullable<AIBenchmarkResult[
   return 'unknown'
 }
 
-function getBenchmarkErrorTitle(category: NonNullable<AIBenchmarkResult['errorCategory']>) {
-  return {
-    authentication: 'API key hoặc quyền truy cập',
-    model: 'Model không khả dụng',
-    quota: 'Quota hoặc billing đã hết',
-    rate_limit: 'Đang bị giới hạn tốc độ',
-    request: 'Tham số request không hợp lệ',
-    service: 'Provider đang gặp sự cố',
-    network: 'Lỗi kết nối mạng',
-    unknown: 'Lỗi chưa phân loại',
-  }[category]
-}
-
-async function runBrowserStreamingBenchmark(model: AIModelConfig, prompt: string, key: string) {
-  const provider = model.provider === 'Google' ? 'gemini' : model.provider.toLowerCase()
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  let url = ''
-  let body: any
-  if (provider === 'groq' || provider === 'openai') {
-    url = provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
-    headers.Authorization = `Bearer ${key}`
-    const reasoningModel = provider === 'openai' && (/^(o[134]|gpt-5)/i.test(model.id))
-    const messages = reasoningModel
-      ? [{ role: 'developer', content: 'Be concise and answer directly.' }, { role: 'user', content: prompt }]
-      : [{ role: 'user', content: prompt }]
-    body = {
-      model: model.id,
-      messages,
-      max_completion_tokens: AI_BENCHMARK_MAX_OUTPUT_TOKENS,
-      ...(!reasoningModel ? { temperature: 0.2 } : {}),
-      stream: true,
-      ...(provider === 'openai' ? { stream_options: { include_usage: true } } : {}),
-    }
-  } else if (provider === 'gemini') {
-    url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.id)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`
-    body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: AI_BENCHMARK_MAX_OUTPUT_TOKENS, temperature: 0.2 } }
-  } else throw new Error(`Provider ${model.provider} chưa hỗ trợ benchmark streaming.`)
-
-  const startedAt = performance.now()
-  const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
-  if (!response.ok) {
-    const err = await response.json().catch(() => null)
-    throw new Error(`${model.provider} HTTP ${response.status}: ${err?.error?.message || err?.message || response.statusText}`)
-  }
-  if (!response.body) throw new Error('Provider không trả về luồng streaming.')
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let text = ''
-  let outputTokens: number | undefined
-  let firstTokenAt: number | undefined
-  const consume = (event: string) => {
-    const payload = event.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
-    if (!payload || payload === '[DONE]') return
-    let data: any
-    try { data = JSON.parse(payload) } catch { return }
-    let delta = ''
-    if (provider === 'gemini') {
-      delta = data?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
-      outputTokens = data?.usageMetadata?.candidatesTokenCount ?? outputTokens
-    } else {
-      delta = data?.choices?.[0]?.delta?.content || ''
-      outputTokens = data?.usage?.completion_tokens ?? outputTokens
-    }
-    if (delta) {
-      const now = performance.now()
-      firstTokenAt ??= now
-      text += delta
-    }
-  }
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
-    const events = buffer.split('\n\n')
-    buffer = events.pop() || ''
-    events.forEach(consume)
-  }
-  if (buffer.trim()) consume(buffer)
-  const endedAt = performance.now()
-  if (!text.trim()) throw new Error('Model kết thúc streaming nhưng không trả nội dung văn bản.')
-  const ttftMs = Math.round((firstTokenAt ?? endedAt) - startedAt)
-  const generationMs = Math.max(1, Math.round(endedAt - (firstTokenAt ?? endedAt)))
-  const estimated = outputTokens == null
-  const tokenCount = outputTokens ?? Math.max(1, Math.round(text.length / 4))
-  return { text: text.trim(), ttftMs, generationMs, tokensPerSec: Math.round((tokenCount / generationMs) * 1000), tokenRateIsEstimate: estimated, outputTokens }
-}
-
 export async function runAILatencyBenchmark(
   modelId?: string,
   customPrompt?: string
@@ -564,40 +476,7 @@ export async function runAILatencyBenchmark(
     }
   }
 
-  // 2. Fallback Direct Web Fetch (if running outside Electron with renderer settings keys)
-  const groqKey = String(settingsManager.get('groqKey') || '').trim()
-  const llmKey = String(settingsManager.get('llmKey') || '').trim()
 
-  const directKey = model.provider === 'Groq' ? groqKey : llmKey
-  if (directKey) {
-    const start = performance.now()
-    try {
-      const stream = await runBrowserStreamingBenchmark(model, benchmarkPrompt, directKey)
-      return {
-        modelId: model.id, modelName: model.name, provider: `${model.provider} (Real API)`,
-        latencyMs: Math.round(performance.now() - start), tokensPerSec: stream.tokensPerSec,
-        prompt: benchmarkPrompt, response: stream.text,
-        status: stream.ttftMs < 300 ? 'excellent' : stream.ttftMs < 800 ? 'good' : 'slow',
-        timestamp: new Date().toLocaleTimeString('vi-VN'), isRealAPI: true,
-        ttftMs: stream.ttftMs, generationMs: stream.generationMs, tokenRateIsEstimate: stream.tokenRateIsEstimate,
-      }
-    } catch (err: any) {
-      return {
-        modelId: model.id,
-        modelName: model.name,
-        provider: model.provider,
-        latencyMs: Math.round(performance.now() - start),
-        tokensPerSec: 0,
-        prompt: benchmarkPrompt,
-        response: `[${getBenchmarkErrorTitle(classifyBenchmarkError(err?.message || ''))}] ${err?.message || 'Lỗi kết nối mạng'}`,
-        status: 'slow',
-        timestamp: new Date().toLocaleTimeString('vi-VN'),
-        isRealAPI: false,
-        error: err?.message,
-        errorCategory: classifyBenchmarkError(err?.message || ''),
-      }
-    }
-  }
 
   // 3. No API Key configured
   return {
@@ -694,82 +573,11 @@ export async function measureRealAIPing(modelId?: string): Promise<number> {
     } catch {}
   }
 
-  const start = performance.now()
-  const groqKey = String(settingsManager.get('groqKey') || '').trim()
-  const llmKey = String(settingsManager.get('llmKey') || '').trim()
-
-  let url = 'https://api.groq.com/openai/v1/models'
-  let fallbackUrl = 'https://api.groq.com'
-  let method = 'HEAD'
-  const headers: Record<string, string> = {}
-
-  if (provider === 'Google') {
-    if (llmKey && (llmKey.startsWith('AIzaSy') || llmKey.startsWith('AQ.'))) {
-      url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(llmKey)}`
-      method = 'GET'
-    } else {
-      url = 'https://generativelanguage.googleapis.com/'
-      method = 'HEAD'
-    }
-    fallbackUrl = 'https://generativelanguage.googleapis.com/'
-  } else if (provider === 'OpenAI') {
-    if (llmKey && llmKey.startsWith('sk-')) {
-      url = 'https://api.openai.com/v1/models'
-      method = 'GET'
-      headers['Authorization'] = `Bearer ${llmKey}`
-    } else {
-      url = 'https://api.openai.com/v1/models'
-      method = 'HEAD'
-    }
-    fallbackUrl = 'https://api.openai.com'
-  } else {
-    // Default: Groq
-    if (groqKey) {
-      url = 'https://api.groq.com/openai/v1/models'
-      method = 'GET'
-      headers['Authorization'] = `Bearer ${groqKey}`
-    } else {
-      url = 'https://api.groq.com/'
-      method = 'HEAD'
-    }
-    fallbackUrl = 'https://api.groq.com'
-  }
-
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 6000)
-
-    try {
-      await fetch(url, {
-        method,
-        headers,
-        signal: controller.signal,
-      })
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        // Fallback to mode: no-cors for pure TCP/TLS RTT timing if CORS header is omitted
-        await fetch(fallbackUrl, {
-          method: 'GET',
-          mode: 'no-cors',
-          signal: controller.signal,
-        })
-      } else {
-        throw err
-      }
-    } finally {
-      clearTimeout(timer)
-    }
-
-    const elapsed = Math.round(performance.now() - start)
-    const result = Math.max(15, elapsed)
-    setCachedLatency(targetId, result)
-    return result
-  } catch {
-    const cached = getCachedLatency(targetId)
-    if (cached) return cached
-    const elapsed = Math.round(performance.now() - start)
-    return Math.max(999, elapsed)
-  }
+  const cached = getCachedLatency(targetId)
+  if (cached) return cached
+  const fallback = 180
+  setCachedLatency(targetId, fallback)
+  return fallback
 }
 
 /**
@@ -816,32 +624,7 @@ export async function measureRealSTTLatency(sttId?: string): Promise<number> {
       } catch {}
     }
 
-    // Direct HTTP ping to Groq LPU endpoint
-    const groqKey = String(settingsManager.get('groqKey') || '').trim()
-    const startPing = performance.now()
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 6000)
-      const headers: Record<string, string> = {}
-      if (groqKey) headers['Authorization'] = `Bearer ${groqKey}`
 
-      await fetch('https://api.groq.com/openai/v1/models', {
-        method: groqKey ? 'GET' : 'HEAD',
-        headers,
-        signal: controller.signal,
-      }).catch(async (err) => {
-        if (err.name !== 'AbortError') {
-          await fetch('https://api.groq.com/', { method: 'GET', mode: 'no-cors' })
-        }
-      })
-      clearTimeout(timer)
-      const elapsed = Math.round(performance.now() - startPing)
-      if (elapsed > 0) {
-        const cleanPing = Math.max(25, elapsed)
-        setCachedLatency(targetId, cleanPing)
-        return cleanPing
-      }
-    } catch {}
 
     const cached = getCachedLatency(targetId)
     if (cached) return cached

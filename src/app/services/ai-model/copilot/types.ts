@@ -77,6 +77,14 @@ export interface UniversalLLMResult {
     cacheHitRate?: number
     estimatedCostUsd?: number | null
   }
+  benchmark?: {
+    ttftMs: number
+    generationMs: number
+    outputTokens?: number
+    mainTtftMs?: number
+    ipcLagMs?: number
+    deltasPerSec?: number
+  }
   routing?: RoutingDecision
   failover?: {
     switched: boolean
@@ -84,4 +92,5 @@ export interface UniversalLLMResult {
     toProvider?: string
     reason?: string
   }
+  truncated?: boolean
 }

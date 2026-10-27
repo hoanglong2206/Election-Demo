@@ -2,7 +2,7 @@ import { getAllAIModels, getSavedAIModelId } from '../aiModels'
 import { modelRegistryService } from '../model-registry'
 import { settingsManager } from '../../settings'
 import type { UniversalLLMResult } from './types'
-import type { LLMProvider } from '../types'
+import type { AIModelConfig, LLMProvider } from '../types'
 import { usageTrackerService, type AIUsageFeature } from '../../usage-tracker'
 import { smartModelRouter, type ModelRouterRequest, type SmartModelRouter } from '../model-router'
 import {
@@ -32,17 +32,16 @@ export function getProviderBadgeLabel(provider?: string, modelId?: string): stri
   return `${provider}`
 }
 
-function providerError(message: string, status?: number): Error & { status?: number } {
-  const error = new Error(message) as Error & { status?: number }
-  error.status = status
-  return error
-}
 
 export interface UniversalLLMStreamCallbacks {
   onFirstToken?: (ttftMs: number) => void
   onDelta: (delta: string) => void
   onDone: (result: UniversalLLMResult) => void
-  onError: (error: Error, partialText: string) => void
+  onError: (
+    error: Error,
+    partialText: string,
+    metadata?: { provider?: LLMProvider; modelId?: string; modelName?: string; usage?: any }
+  ) => void
 }
 
 export interface UniversalLLMOptions {
@@ -59,140 +58,41 @@ export interface UniversalLLMOptions {
   signal?: AbortSignal
 }
 
-async function streamDirectFetch(
-  provider: LLMProvider,
-  modelId: string,
-  apiKey: string,
-  prompt: string,
-  maxTokens: number,
-  temperature: number,
-  systemPrompt: string | undefined,
-  callbacks: {
-    onFirstToken?: (ttftMs: number) => void
-    onDelta: (delta: string) => void
-    onDone: (data: { text: string; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }) => void
-    onError: (err: Error) => void
-  },
-  signal?: AbortSignal
-) {
-  let url = ''
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  let body: any
+const apiKeyCache = new Map<string, { hasKey: boolean; timestamp: number }>()
+const API_KEY_CACHE_TTL_MS = 60_000
 
-  if (provider === 'Groq' || provider === 'OpenAI') {
-    url = provider === 'Groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
-    headers.Authorization = `Bearer ${apiKey}`
-    const reasoningModel = provider === 'OpenAI' && /^(o[134]|gpt-5)/i.test(modelId)
-    body = {
-      model: modelId,
-      messages: [
-        ...(systemPrompt ? [{ role: reasoningModel ? 'developer' : 'system', content: systemPrompt }] : []),
-        { role: 'user', content: prompt },
-      ],
-      max_completion_tokens: maxTokens,
-      ...(!reasoningModel ? { temperature } : {}),
-      stream: true,
-      ...(provider === 'OpenAI' || provider === 'Groq' ? { stream_options: { include_usage: true } } : {}),
-    }
-  } else if (provider === 'Google') {
-    let cleanModelId = modelId.replace(/^models\//, '')
-    url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`
-    body = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: maxTokens, temperature },
-      ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+export function invalidateApiKeyCache(provider?: string): void {
+  if (provider) {
+    const p = provider.toLowerCase()
+    apiKeyCache.delete(p)
+    if (p === 'google' || p === 'gemini') {
+      apiKeyCache.delete('google')
+      apiKeyCache.delete('gemini')
     }
   } else {
-    throw new Error(`Direct streaming unsupported for provider: ${provider}`)
+    apiKeyCache.clear()
   }
+}
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal,
+if (typeof window !== 'undefined') {
+  window.addEventListener('credential-store:key-changed', (e: any) => {
+    invalidateApiKeyCache(e?.detail?.provider)
   })
+}
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw providerError(err?.error?.message || `Provider ${provider} error status: ${res.status}`, res.status)
+export async function checkCachedHasApiKey(provider: string): Promise<boolean> {
+  const norm = provider.toLowerCase() === 'google' ? 'gemini' : provider.toLowerCase()
+  const cached = apiKeyCache.get(norm)
+  const now = Date.now()
+  if (cached && now - cached.timestamp < API_KEY_CACHE_TTL_MS) {
+    return cached.hasKey
   }
-
-  if (!res.body) {
-    throw new Error(`No response body from ${provider}`)
+  if (typeof window !== 'undefined' && window.api?.credentials?.hasApiKey) {
+    const hasKey = await window.api.credentials.hasApiKey(norm)
+    apiKeyCache.set(norm, { hasKey, timestamp: now })
+    return hasKey
   }
-
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder('utf-8')
-  let streamBuffer = ''
-  let accumulated = ''
-  let firstTokenAt: number | undefined
-  const startedAt = performance.now()
-  const usage: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } = {}
-
-  const consume = (payload: string) => {
-    if (!payload || payload === '[DONE]') return
-    let data: any
-    try { data = JSON.parse(payload) } catch { return }
-
-    let delta = ''
-    if (provider === 'Google') {
-      delta = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''
-      if (data?.usageMetadata) {
-        usage.inputTokens = data.usageMetadata.promptTokenCount ?? usage.inputTokens
-        usage.outputTokens = data.usageMetadata.candidatesTokenCount ?? usage.outputTokens
-        usage.cachedTokens = data.usageMetadata.cachedContentTokenCount ?? usage.cachedTokens
-      }
-    } else {
-      delta = data?.choices?.[0]?.delta?.content || ''
-      if (data?.usage) {
-        usage.inputTokens = data.usage.prompt_tokens ?? usage.inputTokens
-        usage.outputTokens = data.usage.completion_tokens ?? usage.outputTokens
-        usage.cachedTokens = data.usage.prompt_tokens_details?.cached_tokens ?? usage.cachedTokens
-      }
-    }
-
-    if (delta) {
-      accumulated += delta
-      if (firstTokenAt === undefined) {
-        firstTokenAt = performance.now()
-        callbacks.onFirstToken?.(Math.round(firstTokenAt - startedAt))
-      }
-      callbacks.onDelta(delta)
-    }
-  }
-
-  while (true) {
-    if (signal?.aborted) {
-      reader.cancel().catch(() => {})
-      throw new Error('Streaming cancelled')
-    }
-    const { value, done } = await reader.read()
-    if (done) break
-    streamBuffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
-    const events = streamBuffer.split('\n\n')
-    streamBuffer = events.pop() || ''
-    for (const event of events) {
-      const payload = event
-        .split('\n')
-        .filter((l) => l.startsWith('data:'))
-        .map((l) => l.slice(5).trim())
-        .join('\n')
-      consume(payload)
-    }
-  }
-
-  streamBuffer += decoder.decode()
-  if (streamBuffer.trim()) {
-    const payload = streamBuffer
-      .split('\n')
-      .filter((l) => l.startsWith('data:'))
-      .map((l) => l.slice(5).trim())
-      .join('\n')
-    consume(payload)
-  }
-
-  callbacks.onDone({ text: accumulated, usage })
+  return false
 }
 
 /**
@@ -207,6 +107,15 @@ export async function callUniversalLLMStream(
   callbacks: UniversalLLMStreamCallbacks,
   options?: UniversalLLMOptions
 ): Promise<() => void> {
+  const hasIPC = typeof window !== 'undefined' && Boolean(window.api?.credentials?.streamLLM)
+  if (!hasIPC) {
+    const err = new Error(
+      'Electron IPC streaming API (window.api.credentials.streamLLM) không khả dụng. Ứng dụng từ chối gọi LLM trực tiếp từ Renderer để bảo vệ API key.'
+    )
+    callbacks.onError(err, '')
+    return () => {}
+  }
+
   const maxTokens = options?.maxTokens ?? 600
   const temperature = options?.temperature ?? 0.3
   const systemPrompt = options?.systemPrompt
@@ -224,26 +133,37 @@ export async function callUniversalLLMStream(
       })
   const selectedModelId =
     options?.modelId?.trim() || routingDecision?.selectedModelId || explicitlySavedModelId || getSavedAIModelId()
-  const hasDiscoveredModels = modelRegistryService.getModels().length > 0
-  const registryModel = modelRegistryService.getModelById(selectedModelId)
-  const selectedModel = getAllAIModels().find((model) => model.id === selectedModelId)
 
-  if (!hasDiscoveredModels || selectedModelId === 'no-model-configured') {
-    const err = new Error(
-      'Chưa có mô hình LLM khả dụng. Vào Cài đặt, nhập API key, đồng bộ model từ API rồi chọn một model trước khi gọi AI.'
-    )
-    callbacks.onError(err, '')
-    return () => {}
+  const fallbackModelConfig: AIModelConfig = {
+    id: selectedModelId,
+    name: selectedModelId.includes('70b')
+      ? 'Llama 3.3 70B'
+      : selectedModelId.includes('gemini')
+      ? 'Google Gemini Flash'
+      : selectedModelId.includes('gpt')
+      ? 'OpenAI GPT-4o Mini'
+      : selectedModelId,
+    provider: (selectedModelId.includes('gemini')
+      ? 'Google'
+      : selectedModelId.includes('gpt')
+      ? 'OpenAI'
+      : 'Groq') as LLMProvider,
+    contextWindow: '128k',
+    tier: 'Free',
+    badgeColor: '#10B981',
+    pingMs: 0,
+    description: '',
+    recommendedFor: '',
+    isLiveFromAPI: true,
   }
 
-  if (
-    !registryModel ||
-    !selectedModel ||
-    !registryModel.isLiveFromAPI ||
-    !registryModel.capabilities.includes('text')
-  ) {
+  const selectedModel: AIModelConfig =
+    getAllAIModels().find((model) => model.id === selectedModelId) ||
+    fallbackModelConfig
+
+  if (selectedModelId === 'no-model-configured') {
     const err = new Error(
-      `Model "${selectedModelId}" không có trong danh sách model đã đồng bộ. Vào Cài đặt, đồng bộ lại danh sách và chọn một model hiện có.`
+      'Chưa có mô hình LLM khả dụng. Vào Cài đặt, nhập API key, đồng bộ model từ API rồi chọn một model trước khi gọi AI.'
     )
     callbacks.onError(err, '')
     return () => {}
@@ -253,16 +173,22 @@ export async function callUniversalLLMStream(
     model.isLiveFromAPI &&
     modelRegistryService.getModelById(model.id)?.capabilities.includes('text')
   )
-  const providerCandidates = [
-    ...(routingDecision?.fallbackChain
-      ?.map((item) => validModels.find((model) => model.id === item.modelId))
-      .filter((model): model is typeof selectedModel => Boolean(model)) || [selectedModel]),
-    ...validModels.filter((model) =>
-      model.provider === selectedModel.provider &&
-      model.id !== selectedModel.id &&
-      !routingDecision?.fallbackChain?.some((item) => item.modelId === model.id)
-    ),
-  ]
+  const fallbackCandidates: AIModelConfig[] = routingDecision?.fallbackChain
+    ? routingDecision.fallbackChain
+        .map((item) => validModels.find((model) => model.id === item.modelId))
+        .filter((model): model is AIModelConfig => Boolean(model))
+    : [selectedModel]
+
+  const providerCandidates: AIModelConfig[] = validModels.length > 0
+    ? [
+        ...(fallbackCandidates.length > 0 ? fallbackCandidates : [selectedModel]),
+        ...validModels.filter((model) =>
+          model.provider === selectedModel.provider &&
+          model.id !== selectedModel.id &&
+          !routingDecision?.fallbackChain?.some((item) => item.modelId === model.id)
+        ),
+      ]
+    : [selectedModel]
 
   const FIRST_TOKEN_TIMEOUT_MS = 1200
   const tagFilter = createStreamingTagFilter()
@@ -286,10 +212,12 @@ export async function callUniversalLLMStream(
   }
 
   const handleStreamCompletion = (
-    candidate: (typeof providerCandidates)[0],
+    candidate: AIModelConfig,
     resText: string,
     usage: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } | undefined,
-    attemptStartedAt: number
+    attemptStartedAt: number,
+    benchmarkData?: { ttftMs: number; generationMs: number; outputTokens?: number },
+    deltaCount = 0
   ) => {
     if (isStreamDone) return
     isStreamDone = true
@@ -323,6 +251,14 @@ export async function callUniversalLLMStream(
     const uncachedTok = Math.max(0, inTok - cachedTok)
     const cacheHitRate = inTok > 0 && cachedTok > 0 ? Math.round((cachedTok / inTok) * 100) : 0
 
+    const now = performance.now()
+    const rendererTtftMs = Math.round(now - attemptStartedAt)
+    const genMs = benchmarkData?.generationMs ?? Math.max(1, Math.round(now - attemptStartedAt))
+    const mainTtft = benchmarkData?.ttftMs
+    const ipcLag = mainTtft !== undefined ? Math.max(0, rendererTtftMs - mainTtft) : undefined
+    const deltasPerSec =
+      genMs > 0 && deltaCount > 0 ? Math.round((deltaCount / (genMs / 1000)) * 10) / 10 : undefined
+
     callbacks.onDone({
       text: accumulatedCleanedText || resText.trim(),
       modelId: candidate.id,
@@ -336,6 +272,14 @@ export async function callUniversalLLMStream(
         cacheHitRate,
         estimatedCostUsd: usageRecord.estimatedCostUsd,
       },
+      benchmark: {
+        ttftMs: rendererTtftMs,
+        generationMs: genMs,
+        outputTokens: usageRecord.outputTokens,
+        mainTtftMs: mainTtft,
+        ipcLagMs: ipcLag,
+        deltasPerSec,
+      },
       routing: routingDecision,
       failover: {
         switched: Boolean(failoverFromProvider),
@@ -348,6 +292,20 @@ export async function callUniversalLLMStream(
 
   // Execute candidate sequence with failover ONLY before first token
   const runSequence = async () => {
+    const hasIPC = typeof window !== 'undefined' && Boolean(window.api?.credentials?.streamLLM)
+    if (!hasIPC) {
+      isStreamDone = true
+      callbacks.onError(
+        new Error(
+          'Electron IPC streaming API (window.api.credentials.streamLLM) không khả dụng. Ứng dụng từ chối gọi LLM trực tiếp từ Renderer để bảo vệ API key.'
+        ),
+        ''
+      )
+      return
+    }
+
+    const skippedDueToMissingKey = new Set<string>()
+
     for (const candidateModel of providerCandidates) {
       if (hasEmittedFirstToken || isStreamDone || options?.signal?.aborted) {
         break
@@ -361,18 +319,18 @@ export async function callUniversalLLMStream(
       let targetProvider = candidateModel.provider.toLowerCase()
       if (targetProvider === 'google') targetProvider = 'gemini'
 
-      // Check if Electron IPC is available
-      const hasIPC = typeof window !== 'undefined' && Boolean(window.api?.credentials?.streamLLM)
+      const hasKey = await checkCachedHasApiKey(targetProvider)
+      if (!hasKey) {
+        skippedDueToMissingKey.add(candidateModel.provider)
+        continue
+      }
 
-      if (hasIPC) {
-        const hasKey = await window.api!.credentials!.hasApiKey(targetProvider)
-        if (!hasKey) continue
-
-        const attemptStartedAt = Date.now()
-        const requestId = `stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const attemptStartedAt = Date.now()
+      const requestId = `stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
         let candidateFailedBeforeFirstToken = false
         let firstTokenTimer: ReturnType<typeof setTimeout> | null = null
+        let ipcDeltaCount = 0
 
         await new Promise<void>((resolve) => {
           let cancelIpc: (() => void) | null = null
@@ -425,11 +383,19 @@ export async function callUniversalLLMStream(
               },
               onDelta: ({ delta }) => {
                 cleanupAttempt()
+                ipcDeltaCount++
                 handleFilteredDelta(delta)
               },
               onDone: (data) => {
                 cleanupAttempt()
-                handleStreamCompletion(candidateModel, data.text, data.usage, attemptStartedAt)
+                handleStreamCompletion(
+                  candidateModel,
+                  data.text,
+                  data.usage,
+                  attemptStartedAt,
+                  data.benchmark,
+                  ipcDeltaCount
+                )
                 resolve()
               },
               onError: ({ error, partialText }) => {
@@ -453,7 +419,18 @@ export async function callUniversalLLMStream(
                     isStreamDone = true
                     const tail = tagFilter.flush()
                     if (tail) accumulatedCleanedText += tail
-                    callbacks.onError(err, accumulatedCleanedText || partialText)
+                    const partialOutput = accumulatedCleanedText || partialText
+                    const partialTokens = Math.max(1, Math.ceil(partialOutput.length / 4))
+                    callbacks.onError(err, partialOutput, {
+                      provider: candidateModel.provider as LLMProvider,
+                      modelId: candidateModel.id,
+                      modelName: candidateModel.name,
+                      usage: {
+                        promptTokens: 0,
+                        outputTokens: partialTokens,
+                        totalTokens: partialTokens,
+                      },
+                    })
                   }
                   resolve()
                 }
@@ -470,84 +447,15 @@ export async function callUniversalLLMStream(
         if (!candidateFailedBeforeFirstToken && (hasEmittedFirstToken || isStreamDone)) {
           return
         }
-      } else {
-        // Fallback: Direct browser fetch
-        const groqKey = String(settingsManager.get('groqKey') || '').trim()
-        const llmKey = String(settingsManager.get('llmKey') || '').trim()
-        const key = candidateModel.provider === 'Groq' ? groqKey : llmKey
-        if (!key) continue
-
-        const attemptStartedAt = Date.now()
-        const directController = new AbortController()
-
-        let firstTokenTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
-          if (!hasEmittedFirstToken && !isStreamDone) {
-            failoverFromProvider = provider
-            failoverReason = 'first_token_timeout'
-            directController.abort()
-          }
-        }, FIRST_TOKEN_TIMEOUT_MS)
-
-        cancelCurrent = () => directController.abort()
-
-        try {
-          await streamDirectFetch(
-            candidateModel.provider as LLMProvider,
-            candidateModel.id,
-            key,
-            prompt,
-            maxTokens,
-            temperature,
-            systemPrompt,
-            {
-              onFirstToken: (ttftMs) => {
-                if (firstTokenTimer) clearTimeout(firstTokenTimer)
-                hasEmittedFirstToken = true
-                callbacks.onFirstToken?.(ttftMs)
-              },
-              onDelta: (delta) => {
-                if (firstTokenTimer) clearTimeout(firstTokenTimer)
-                handleFilteredDelta(delta)
-              },
-              onDone: (data) => {
-                if (firstTokenTimer) clearTimeout(firstTokenTimer)
-                handleStreamCompletion(candidateModel, data.text, data.usage, attemptStartedAt)
-              },
-              onError: (err) => {
-                if (firstTokenTimer) clearTimeout(firstTokenTimer)
-                throw err
-              },
-            },
-            directController.signal
-          )
-          return
-        } catch (err: any) {
-          if (firstTokenTimer) clearTimeout(firstTokenTimer)
-          if (!hasEmittedFirstToken) {
-            failoverFromProvider = provider
-            failoverReason = err?.message || 'direct_fetch_failed'
-            providerCircuitBreaker.recordFailure(
-              provider,
-              classifyProviderError(err, provider),
-              Date.now() - attemptStartedAt
-            )
-            router.recordResult(candidateModel.id, Date.now() - attemptStartedAt, false)
-          } else {
-            if (!isStreamDone) {
-              isStreamDone = true
-              const tail = tagFilter.flush()
-              if (tail) accumulatedCleanedText += tail
-              callbacks.onError(err, accumulatedCleanedText)
-            }
-            return
-          }
-        }
-      }
     }
 
     if (!isStreamDone && !hasEmittedFirstToken) {
       isStreamDone = true
-      callbacks.onError(new Error('Tất cả provider LLM đều thất bại hoặc quá thời gian phản hồi.'), '')
+      const errorMsg =
+        skippedDueToMissingKey.size > 0 && skippedDueToMissingKey.size === providerCandidates.length
+          ? `Chưa có API key cho ${Array.from(skippedDueToMissingKey).join(', ')}.`
+          : 'Tất cả provider LLM đều thất bại hoặc quá thời gian phản hồi.'
+      callbacks.onError(new Error(errorMsg), '')
     }
   }
 
@@ -584,14 +492,16 @@ export async function callUniversalLLM(
         onDone: (result) => {
           resolve(result)
         },
-        onError: (error, partialText) => {
+        onError: (error, partialText, metadata) => {
           const fallbackText = accumulatedText || partialText
-          if (fallbackText.trim()) {
+          if (fallbackText.trim() && metadata?.provider) {
             resolve({
               text: fallbackText.trim(),
-              provider: (options?.modelId ? 'Groq' : 'AI') as LLMProvider,
-              modelId: options?.modelId || 'fallback',
-              modelName: 'Partial Output',
+              provider: metadata.provider,
+              modelId: metadata.modelId || options?.modelId || 'fallback',
+              modelName: metadata.modelName || 'Partial Output',
+              usage: metadata.usage,
+              truncated: true,
             })
           } else {
             reject(error)

@@ -9,7 +9,6 @@ import type {
 import { GoogleProvider } from './providers/googleProvider'
 import { OpenAIProvider } from './providers/openaiProvider'
 import { GroqProvider } from './providers/groqProvider'
-import { settingsManager } from '../../settings'
 import { pricingRegistry } from '../../usage-tracker/pricingRegistry'
 
 export const REGISTRY_STORAGE_KEYS = {
@@ -801,34 +800,8 @@ export class ModelRegistryService {
   }
 
   private async resolveApiKeys(): Promise<Record<string, string>> {
-    const keys: Record<string, string> = {}
-
-    // Fallback to settingsManager in web/browser mode
-    try {
-      const groqKey = String(settingsManager.get('groqKey') || '').trim()
-      if (groqKey && !keys['groq']) keys['groq'] = groqKey
-
-      const llmKey = String(settingsManager.get('llmKey') || '').trim()
-      const llmProvider = String(settingsManager.get('llmProvider') || 'Auto')
-
-      if (llmKey) {
-        if (llmKey.startsWith('AIzaSy') || llmKey.startsWith('AQ.')) {
-          keys['gemini'] = llmKey
-          keys['Google'] = llmKey
-        } else if (llmKey.startsWith('sk-')) {
-          keys['openai'] = llmKey
-          keys['OpenAI'] = llmKey
-        } else if (llmProvider === 'Google') {
-          keys['gemini'] = llmKey
-          keys['Google'] = llmKey
-        } else if (llmProvider === 'OpenAI') {
-          keys['openai'] = llmKey
-          keys['OpenAI'] = llmKey
-        }
-      }
-    } catch {}
-
-    return keys
+    // Plaintext keys are deprecated in Renderer. Model sync is performed securely via Main Process IPC.
+    return {}
   }
 
   private normalizeModel(raw: any): DiscoveredModel {

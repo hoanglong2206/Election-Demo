@@ -186,7 +186,10 @@ Hãy đánh giá khách quan độ tương thích và trả về ĐÚNG ĐỊNH 
       systemPrompt: 'You are an expert technical recruiter analyzing CV vs JD compatibility. Always return clean JSON without markdown code fences if possible.',
     })
 
-    if (!res || !res.text || !res.text.trim()) {
+    if (!res || !res.text || !res.text.trim() || res.truncated) {
+      if (res?.truncated) {
+        console.warn('[cvJdMatcher] LLM response was truncated mid-stream; falling back to heuristic')
+      }
       return heuristic
     }
 

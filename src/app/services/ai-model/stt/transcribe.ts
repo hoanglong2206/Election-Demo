@@ -1,5 +1,4 @@
 import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
-import { settingsManager } from '../../settings'
 import type { TranscribeResult } from './types'
 import { base64ToBlob, blobToBase64 } from './audioUtils'
 import { usageTrackerService } from '../../usage-tracker'
@@ -177,96 +176,16 @@ export async function transcribeAudio(
       }
     }
 
-    const groqKey = String(settingsManager.get('groqKey') || '').trim()
-    if (!groqKey) {
-      return {
-        success: false,
-        text: 'Vui lòng nhập Groq API Key trong tab Cài Đặt để sử dụng mô hình Whisper LPU.',
-        translatedVi: 'Chưa có Groq API Key.',
-        latencyMs: 0,
-        engineId,
-        engineName: engine.name,
-        provider: 'Groq',
-        confidence: 0,
-        error: 'Groq API Key is missing',
-      }
-    }
-
-    try {
-      let blob: Blob
-      if (audioData instanceof Blob) {
-        blob = audioData
-      } else if (typeof audioData === 'string') {
-        blob = base64ToBlob(audioData)
-      } else {
-        blob = new Blob([audioData as any], { type: 'audio/wav' })
-      }
-
-      const formData = new FormData()
-      formData.append('file', blob, 'audio.wav')
-      formData.append('model', engineId)
-      formData.append('response_format', 'json')
-      formData.append('temperature', '0')
-      if (language && language !== 'auto') {
-        formData.append('language', language)
-      }
-      if (prompt && prompt.trim()) {
-        formData.append('prompt', prompt.trim())
-      }
-
-      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${groqKey}`,
-        },
-        body: formData,
-      })
-
-      const elapsed = Math.round(performance.now() - startTime)
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}))
-        throw new Error(errJson?.error?.message || `Lỗi Groq STT (${res.status})`)
-      }
-
-      const data = await res.json()
-      const text = data.text || ''
-
-      try {
-        usageTrackerService.trackUsage({
-          sessionId,
-          provider: 'Groq',
-          model: engineId,
-          feature: 'stt',
-          audioDurationSeconds: durationSec,
-        })
-      } catch {}
-
-      // Translation is handled asynchronously by TranslationService on transcript commit
-      const translatedVi = ''
-
-      return {
-        success: true,
-        text,
-        translatedVi,
-        latencyMs: elapsed,
-        engineId,
-        engineName: engine.name,
-        provider: 'Groq',
-        confidence: 99,
-      }
-    } catch (err) {
-      return {
-        success: false,
-        text: '',
-        translatedVi: '',
-        latencyMs: Math.round(performance.now() - startTime),
-        engineId,
-        engineName: engine.name,
-        provider: 'Groq',
-        confidence: 0,
-        error: (err as Error).message,
-      }
+    return {
+      success: false,
+      text: '',
+      translatedVi: '',
+      latencyMs: 0,
+      engineId,
+      engineName: engine.name,
+      provider: 'Groq',
+      confidence: 0,
+      error: 'Dịch vụ Groq STT yêu cầu Electron IPC và khóa an toàn trong OS Credential Store.',
     }
   }
 

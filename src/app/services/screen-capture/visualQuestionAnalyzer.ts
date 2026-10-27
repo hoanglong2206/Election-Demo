@@ -141,22 +141,10 @@ Nếu không có mã nguồn trong ảnh, extractedCode phải là null. solutio
       }
     }
 
-    // ── Path 2: Direct Frontend Web Fallback using Settings API Key ───────────
     if (!rawTextResponse) {
-      const direct = await this.callDirectWebProvider(
-        provider,
-        targetModelId,
-        cleanBase64,
-        mimeType,
-        userPrompt
-      )
-      rawTextResponse = direct.text
-      if (direct.usage) {
-        usageInfo = direct.usage
-      }
+      throw new Error('Dịch vụ phân tích màn hình yêu cầu Electron IPC và khóa an toàn trong OS Credential Store.')
     }
 
-    // ── Track Usage & Cost ──────────────────────────────────────────────────
     try {
       usageTrackerService.trackUsage({
         sessionId,
@@ -173,114 +161,6 @@ Nếu không có mã nguồn trong ảnh, extractedCode phải là null. solutio
 
     const elapsed = Math.round(performance.now() - startTime)
     return this.parseModelResponse(rawTextResponse, thumbnailUrl, provider, targetModelId, elapsed)
-  }
-
-  /**
-   * Direct Web API request when running outside Electron or testing.
-   */
-  private async callDirectWebProvider(
-    provider: string,
-    modelId: string,
-    cleanBase64: string,
-    mimeType: string,
-    prompt: string
-  ): Promise<{ text: string; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }> {
-    if (provider === 'Google') {
-      const geminiKey = String(settingsManager.get('llmKey') || '').trim()
-      if (!geminiKey) {
-        throw new Error('Chưa cấu hình Google Gemini API Key trong Cài đặt.')
-      }
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(geminiKey)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: prompt },
-                  { inline_data: { mime_type: mimeType, data: cleanBase64 } },
-                ],
-              },
-            ],
-            systemInstruction: { parts: [{ text: VISUAL_ANALYSIS_SYSTEM_PROMPT }] },
-            generationConfig: { maxOutputTokens: 3000, temperature: 0.2 },
-          }),
-        }
-      )
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(`Google Vision API (${res.status}): ${err?.error?.message || 'Lỗi gọi Gemini'}`)
-      }
-
-      const data = await res.json()
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-      const usageMeta = data?.usageMetadata
-      const usage = usageMeta
-        ? {
-            inputTokens: usageMeta.promptTokenCount,
-            outputTokens: usageMeta.candidatesTokenCount,
-            cachedTokens: usageMeta.cachedContentTokenCount,
-          }
-        : undefined
-
-      return { text, usage }
-    }
-
-    if (provider === 'OpenAI') {
-      const openAiKey = String(settingsManager.get('llmKey') || '').trim()
-      if (!openAiKey) {
-        throw new Error('Chưa cấu hình OpenAI API Key trong Cài đặt.')
-      }
-
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${openAiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [
-            { role: 'system', content: VISUAL_ANALYSIS_SYSTEM_PROMPT },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:${mimeType};base64,${cleanBase64}`, detail: 'high' },
-                },
-              ],
-            },
-          ],
-          max_tokens: 1800,
-          temperature: 0.2,
-        }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(`OpenAI Vision API (${res.status}): ${err?.error?.message || 'Lỗi gọi GPT-4o'}`)
-      }
-
-      const data = await res.json()
-      const text = data?.choices?.[0]?.message?.content || ''
-      const usage = data?.usage
-        ? {
-            inputTokens: data.usage.prompt_tokens,
-            outputTokens: data.usage.completion_tokens,
-            cachedTokens: data.usage.prompt_tokens_details?.cached_tokens,
-          }
-        : undefined
-
-      return { text, usage }
-    }
-
-    throw new Error(`Chưa có API key được cấu hình cho provider ${provider}. Hãy kiểm tra tab Cài đặt.`)
   }
 
   /**
