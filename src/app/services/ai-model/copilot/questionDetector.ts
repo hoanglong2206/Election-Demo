@@ -71,7 +71,17 @@ export interface QuestionDetectorConfig {
 export function getAdaptiveDebounceMs(
   text: string,
   configuredMs = 500,
+  closeReason?: 'silence' | 'max-length' | 'flush'
 ): number {
+  // When segment closed by natural silence (sentence boundary),
+  // speech has completed and waited for SILENCE_END_MS, so debounce can be reduced safely.
+  if (closeReason === 'silence') {
+    if (isIncompleteSpeechFragment(text)) {
+      return Math.max(300, Math.min(configuredMs, 450))
+    }
+    return Math.max(150, Math.min(configuredMs, 250))
+  }
+
   if (isIncompleteSpeechFragment(text)) return Math.max(700, configuredMs + 200)
   if (text.trim().split(/\s+/).length <= 4) return Math.min(700, configuredMs + 100)
   return Math.max(300, Math.min(700, configuredMs))

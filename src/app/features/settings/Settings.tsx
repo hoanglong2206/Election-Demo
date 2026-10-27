@@ -97,6 +97,15 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
   const [selectedDevice, setSelectedDevice] = useState(getSavedAudioDeviceId)
   const [vadThreshold, setVadThreshold] = useState(getSavedVADThreshold)
   const [responseLang, setResponseLang] = useState(getSavedResponseLanguage)
+  const [segmentationMode, setSegmentationMode] = useState<"sentence" | "fixed">(
+    () => (settingsManager.get('segmentationMode') as 'sentence' | 'fixed') || 'sentence'
+  )
+  const [silenceEndMs, setSilenceEndMs] = useState<number>(
+    () => (settingsManager.get('silenceEndMs') as number) || 400
+  )
+  const [maxSegmentMs, setMaxSegmentMs] = useState<number>(
+    () => (settingsManager.get('maxSegmentMs') as number) || 4500
+  )
 
   // ── Sync & Feedback State ──────────────────────────────────────────────────
   const [syncMeta, setSyncMeta] = useState(() => modelRegistryService.getSyncState())
@@ -741,6 +750,21 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
           onModelRouterPolicyChange={(policy) => {
             setModelRouterPolicy(policy)
             settingsManager.updateSettings({ modelRouter: { enabled: true, policy } })
+          }}
+          segmentationMode={segmentationMode}
+          onSegmentationModeChange={(mode) => {
+            setSegmentationMode(mode)
+            settingsManager.set('segmentationMode', mode)
+          }}
+          silenceEndMs={silenceEndMs}
+          onSilenceEndMsChange={(ms) => {
+            setSilenceEndMs(ms)
+            settingsManager.set('silenceEndMs', ms)
+          }}
+          maxSegmentMs={maxSegmentMs}
+          onMaxSegmentMsChange={(ms) => {
+            setMaxSegmentMs(ms)
+            settingsManager.set('maxSegmentMs', ms)
           }}
         />
 

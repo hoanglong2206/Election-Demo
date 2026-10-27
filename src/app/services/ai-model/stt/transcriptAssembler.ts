@@ -10,6 +10,10 @@ interface AssemblerItem {
   timestampStr?: string
   sourceType?: 'system' | 'mic'
   arrivedAt: number
+  closeReason?: STTJob['closeReason']
+  continuation?: boolean
+  durationMs?: number
+  endOfSpeechTimestampMs?: number
 }
 
 /**
@@ -60,7 +64,18 @@ export class TranscriptAssembler {
   public receiveResult(
     sequenceId: number,
     result: TranscribeResult,
-    jobMeta: Pick<STTJob, 'jobId' | 'sessionId' | 'speakerLabel' | 'timestampStr' | 'sourceType'>
+    jobMeta: Pick<
+      STTJob,
+      | 'jobId'
+      | 'sessionId'
+      | 'speakerLabel'
+      | 'timestampStr'
+      | 'sourceType'
+      | 'closeReason'
+      | 'continuation'
+      | 'durationMs'
+      | 'endOfSpeechTimestampMs'
+    >
   ): void {
     // Drop results from past or mismatched sessions to prevent cross-session transcript pollution
     if (jobMeta.sessionId && this.sessionId !== 'default' && jobMeta.sessionId !== this.sessionId) {
@@ -82,6 +97,10 @@ export class TranscriptAssembler {
       timestampStr: jobMeta.timestampStr,
       sourceType: jobMeta.sourceType,
       arrivedAt: Date.now(),
+      closeReason: jobMeta.closeReason,
+      continuation: jobMeta.continuation,
+      durationMs: jobMeta.durationMs,
+      endOfSpeechTimestampMs: jobMeta.endOfSpeechTimestampMs,
     })
 
     this.tryCommit()
@@ -130,6 +149,10 @@ export class TranscriptAssembler {
           speakerLabel: item.speakerLabel,
           timestampStr: item.timestampStr,
           sourceType: item.sourceType,
+          closeReason: item.closeReason,
+          continuation: item.continuation,
+          durationMs: item.durationMs,
+          endOfSpeechTimestampMs: item.endOfSpeechTimestampMs,
         }
 
         for (const listener of this.listeners) {

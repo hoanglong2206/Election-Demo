@@ -47,6 +47,14 @@ export function useAudioPipeline() {
   const presenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastStatsUpdateRef = useRef<number>(0)
   const isStartingRef = useRef(false)
+  const audioFrameListenersRef = useRef<Set<(pcm16: Int16Array, totalSamples: number) => void>>(new Set())
+
+  const subscribeAudioFrames = useCallback((listener: (pcm16: Int16Array, totalSamples: number) => void) => {
+    audioFrameListenersRef.current.add(listener)
+    return () => {
+      audioFrameListenersRef.current.delete(listener)
+    }
+  }, [])
 
   // ── High-performance direct access to audio metrics & analyser (outside React state) ─
   const getAudioMetrics = useCallback((): AudioMetrics => {
@@ -115,6 +123,7 @@ export function useAudioPipeline() {
       await captureService.start(
         sourceType,
         (pcm16) => {
+          const currentTotal = bufferManager.totalSamples
           const readyChunk = bufferManager.appendSamples(pcm16)
 
           if (readyChunk) {
@@ -122,6 +131,15 @@ export function useAudioPipeline() {
           }
 
           syncBufferStats(false)
+
+          // Immediately notify real-time frame consumers (e.g. SpeechSegmenter in MeetingMode)
+          for (const listener of audioFrameListenersRef.current) {
+            try {
+              listener(pcm16, currentTotal)
+            } catch (err) {
+              console.error('[AudioPipeline] Frame listener error:', err)
+            }
+          }
         },
         { deviceId: savedDeviceId }
       )
@@ -231,6 +249,14 @@ export function useAudioPipeline() {
   const getAudioSegmentSince = useCallback(
     (fromSample = 0, minDurationSec = 1.8): AudioSegment | null => {
       return bufferManager.getAudioSegmentSince(fromSample, minDurationSec)
+    },
+    [bufferManager]
+  )
+
+  // ── Get Raw PCM Samples Since sample offset ──────────────────────────────────
+  const getRawSamplesSince = useCallback(
+    (fromSample = 0) => {
+      return bufferManager.getRawSamplesSince(fromSample)
     },
     [bufferManager]
   )
@@ -383,6 +409,8 @@ export function useAudioPipeline() {
     getRecentAudioBlob,
     getRecentPcmSamples,
     getAudioSegmentSince,
+    getRawSamplesSince,
+    subscribeAudioFrames,
     pruneBefore,
     getLifecycleStats,
     pipelineStages,

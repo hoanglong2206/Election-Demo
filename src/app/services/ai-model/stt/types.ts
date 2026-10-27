@@ -1,4 +1,6 @@
-import type { AudioChunkLifecycleState } from '../../../core/audio/types'
+import type { AudioChunkLifecycleState, SpeechSegmentCloseReason } from '../../../core/audio/types'
+
+export type { SpeechSegmentCloseReason }
 
 export interface TranscribeResult {
   success: boolean
@@ -39,6 +41,14 @@ export interface STTJob {
   timestampStr?: string
   retryCount?: number
   maxRetries?: number
+
+  // Speech boundary segmentation fields (optional)
+  startSample?: number
+  endSample?: number
+  durationMs?: number
+  closeReason?: SpeechSegmentCloseReason
+  continuation?: boolean
+  endOfSpeechTimestampMs?: number
 }
 
 /**
@@ -99,4 +109,10 @@ export interface AssemblerCommit {
   speakerLabel?: string
   timestampStr?: string
   sourceType?: 'system' | 'mic'
+
+  // Sentence boundary metadata for downstream stitching and latency tracking
+  closeReason?: SpeechSegmentCloseReason
+  continuation?: boolean
+  durationMs?: number
+  endOfSpeechTimestampMs?: number
 }

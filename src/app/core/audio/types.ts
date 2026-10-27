@@ -39,6 +39,34 @@ export interface AudioSegment {
   hasAudio: boolean
 }
 
+export type SpeechSegmentCloseReason = 'silence' | 'max-length' | 'flush'
+
+export interface SpeechSegment {
+  samples: Int16Array
+  blob: Blob
+  startSample: number
+  endSample: number
+  durationMs: number
+  speechDurationMs: number
+  closeReason: SpeechSegmentCloseReason
+  continuation: boolean
+  hasSpeech: boolean
+  endOfSpeechTimestampMs: number
+}
+
+export interface SpeechSegmenterConfig {
+  sampleRate: number
+  frameSizeSamples: number
+  vadThresholdRms: number
+  hysteresisFactor: number
+  silenceEndMs: number
+  maxSegmentMs: number
+  minSpeechMs: number
+  preRollMs: number
+  postRollMs: number
+  valleyWindowMs: number
+}
+
 export interface PipelineStageInfo {
   stage: number
   name: string

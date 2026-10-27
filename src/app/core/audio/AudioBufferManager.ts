@@ -424,6 +424,44 @@ export class AudioBufferManager implements IAudioBufferManager {
   }
 
   /**
+   * Slices raw PCM samples since given sample offset from the ring buffer.
+   */
+  public getRawSamplesSince(fromSample = 0): {
+    samples: Int16Array
+    startSample: number
+    endSample: number
+  } | null {
+    if (this._totalSamples === 0 || this._totalSamples <= fromSample) {
+      return null
+    }
+
+    const effectiveFromSample = Math.max(fromSample, this._baseSampleIndex)
+    const sampleCount = this._totalSamples - effectiveFromSample
+    if (sampleCount <= 0) return null
+
+    const merged = new Int16Array(sampleCount)
+    let writeOffset = 0
+
+    for (const item of this.buffers) {
+      const bufEnd = item.startSample + item.data.length
+      if (bufEnd <= effectiveFromSample) continue
+
+      const sliceStart = Math.max(0, effectiveFromSample - item.startSample)
+      const sliceEnd = item.data.length
+
+      for (let i = sliceStart; i < sliceEnd && writeOffset < sampleCount; i++) {
+        merged[writeOffset++] = item.data[i]
+      }
+    }
+
+    return {
+      samples: merged.subarray(0, writeOffset),
+      startSample: effectiveFromSample,
+      endSample: this._totalSamples,
+    }
+  }
+
+  /**
    * Resets all buffers, indices, and lifecycle tracking.
    */
   public clear(): void {

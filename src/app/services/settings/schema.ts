@@ -14,11 +14,16 @@ export interface EngineSettings {
   selectedMultimodal?: string
 }
 
+export type SegmentationMode = 'sentence' | 'fixed'
+
 export interface AudioSettings {
   audioDeviceId: string
   vadThreshold: number
   responseLang: ResponseLanguage
   autoPersonalize: boolean
+  segmentationMode?: SegmentationMode
+  silenceEndMs?: number
+  maxSegmentMs?: number
 }
 
 export type TriggerMode = 'manual' | 'semi-auto' | 'auto'
@@ -63,6 +68,9 @@ export const DEFAULT_SETTINGS: AppSettingsSchema = {
     vadThreshold: 0.8,
     responseLang: 'bilingual',
     autoPersonalize: true,
+    segmentationMode: 'sentence',
+    silenceEndMs: 400,
+    maxSegmentMs: 4500,
   },
   copilot: {
     triggerMode: 'auto',
@@ -87,6 +95,9 @@ export type FlatSettingsKey =
   | 'vadThreshold'
   | 'responseLang'
   | 'autoPersonalize'
+  | 'segmentationMode'
+  | 'silenceEndMs'
+  | 'maxSegmentMs'
   | 'triggerMode'
   | 'confidenceThreshold'
   | 'debounceMs'
@@ -198,6 +209,18 @@ export function validateSettings(raw: unknown): AppSettingsSchema {
       vadThreshold,
       responseLang,
       autoPersonalize,
+      segmentationMode:
+        obj.audio?.segmentationMode === 'fixed' || obj.segmentationMode === 'fixed'
+          ? 'fixed'
+          : 'sentence',
+      silenceEndMs:
+        typeof (obj.audio?.silenceEndMs ?? obj.silenceEndMs) === 'number'
+          ? Math.max(200, Math.min(1500, obj.audio?.silenceEndMs ?? obj.silenceEndMs))
+          : 400,
+      maxSegmentMs:
+        typeof (obj.audio?.maxSegmentMs ?? obj.maxSegmentMs) === 'number'
+          ? Math.max(2000, Math.min(10000, obj.audio?.maxSegmentMs ?? obj.maxSegmentMs))
+          : 4500,
     },
     copilot: {
       triggerMode,

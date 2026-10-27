@@ -78,6 +78,14 @@ import {
 import { settingsManager } from '../../services/settings/settingsManager'
 import { usageTrackerService } from '../../services/usage-tracker'
 import { useStreamingAnswer } from '@/hooks/useStreamingAnswer'
+import {
+  SpeechSegmenter,
+  type SpeechSegment,
+  type SpeechSegmentCloseReason,
+  speechSegmentationTelemetry,
+} from '../../core/audio'
+import { stitchFragments } from '../../services/ai-model/copilot/scanLatestExchange'
+
 
 export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
@@ -102,6 +110,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     startCapture,
     stopCapture,
     getAudioSegmentSince,
+    subscribeAudioFrames,
     clearBuffer,
     switchDevice,
     setVadEnergyThreshold,
@@ -292,6 +301,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const [isRecoveryOpen, setIsRecoveryOpen] = useState(true)
   const lastProcessedSampleRef = useRef(0)
   const lastTranscriptTextRef = useRef<string>('')
+  const speechSegmenterRef = useRef<SpeechSegmenter | null>(null)
+  const lastCloseReasonRef = useRef<SpeechSegmentCloseReason | undefined>(undefined)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // STT Input Audio Language (Default to 'vi' for Vietnamese speech accuracy)
@@ -469,9 +480,23 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     })
 
     const unsubCommit = sttJobQueue.assembler.onCommit((commit) => {
-      const { result, speakerLabel, timestampStr } = commit
+      const {
+        result,
+        speakerLabel,
+        timestampStr,
+        closeReason,
+        continuation,
+        endOfSpeechTimestampMs,
+      } = commit
+
       if (result.success && result.text.trim()) {
         lastTranscriptTextRef.current = result.text.trim()
+        lastCloseReasonRef.current = closeReason
+
+        // Telemetry: measure utterance-end to UI transcript commit latency
+        if (endOfSpeechTimestampMs) {
+          speechSegmentationTelemetry.recordCommitLatency(endOfSpeechTimestampMs)
+        }
 
         const newLine: TranscriptLine = {
           id: Date.now() + Math.random(),
@@ -482,10 +507,32 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         }
 
         setTranscriptLines((prev) => {
+          if (prev.length === 0) return [newLine]
+
+          const lastLine = prev[prev.length - 1]
+
+          // ── Continuation Stitching ──────────────────────────────────────────
+          // Segment with continuation=true (split at energy valley) is stitched with
+          // the previous segment instead of deduplicating or treating as an isolated line!
+          if (continuation && lastLine.speaker === newLine.speaker) {
+            targetLineId = lastLine.id
+            const combinedOriginal = stitchFragments([lastLine.original, result.text])
+            const combinedTranslated = stitchFragments([
+              lastLine.translated,
+              result.translatedVi || result.text,
+            ])
+            const updatedLine: TranscriptLine = {
+              ...lastLine,
+              original: combinedOriginal,
+              translated: combinedTranslated,
+            }
+            return [...prev.slice(0, -1), updatedLine]
+          }
+
           if (
-            prev.length > 0 &&
-            prev[prev.length - 1].original.trim().toLowerCase() === result.text.trim().toLowerCase()
+            lastLine.original.trim().toLowerCase() === result.text.trim().toLowerCase()
           ) {
+            targetLineId = 0
             return prev
           }
           return [...prev, newLine]
@@ -499,21 +546,113 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     }
   }, [])
 
-  // ── 3. Real-time Audio Chunk Producer Loop (Audio → VAD → STTJobQueue) ──────
+  // ── 3. Real-time Audio Chunk Producer Loop (Audio → SpeechSegmenter / VAD → STTJobQueue) ──────
   useEffect(() => {
+    // Helper to dispatch completed speech segment to STTJobQueue
+    const dispatchSegmentToSTT = (segment: SpeechSegment) => {
+      speechSegmentationTelemetry.recordSegmentClosed(segment)
+
+      const seqId = sequenceIdRef.current++
+      const now = new Date()
+      const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+
+      const speakerLabel =
+        mode === 'interview'
+          ? sourceType === 'system'
+            ? 'Interviewer'
+            : 'You'
+          : sourceType === 'system'
+          ? 'Cuộc họp'
+          : 'You'
+
+      const dynamicPrompt =
+        whisperPromptBuilder.buildPrompt(activeKeywords || [], {
+          contextType: mode,
+          previousTranscript: lastTranscriptTextRef.current,
+        }) || whisperPrompt || undefined
+
+      const job: STTJob = {
+        jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
+        sessionId: sessionIdRef.current,
+        sequenceId: seqId,
+        audioBuffer: segment.blob,
+        hasSpeech: segment.hasSpeech,
+        createdAt: Date.now(),
+        priority: segment.hasSpeech ? 1 : 0,
+        engineId: getSavedSTTEngineId(),
+        language: sttLang,
+        sourceType,
+        speakerLabel,
+        timestampStr: timeStr,
+        prompt: dynamicPrompt,
+        startSample: segment.startSample,
+        endSample: segment.endSample,
+        durationMs: segment.durationMs,
+        closeReason: segment.closeReason,
+        continuation: segment.continuation,
+        endOfSpeechTimestampMs: segment.endOfSpeechTimestampMs,
+      }
+
+      sttJobQueue.enqueue(job)
+    }
+
     if (!isCapturing || !isListening) {
       sttJobQueue.pause()
+      // Flush in-progress speech segment before pausing so trailing words aren't lost
+      if (speechSegmenterRef.current) {
+        const flushed = speechSegmenterRef.current.flush()
+        if (flushed && flushed.hasSpeech) {
+          dispatchSegmentToSTT(flushed)
+        }
+      }
       return
     }
 
     sttJobQueue.resume()
 
+    const currentSettings = settingsManager.getSettings()
+    const segmentationMode = currentSettings.audio.segmentationMode || 'sentence'
+    const silenceEndMs = currentSettings.audio.silenceEndMs || 400
+    const maxSegmentMs = currentSettings.audio.maxSegmentMs || 4500
+    const effectiveVadRms = getEffectiveVadEnergyThreshold(selectedDeviceId)
+
+    if (segmentationMode === 'sentence') {
+      // ── Pure Sentence Boundary Segmentation Mode (SpeechSegmenter) ───────
+      speechSegmenterRef.current = new SpeechSegmenter({
+        sampleRate: 16000,
+        silenceEndMs,
+        maxSegmentMs,
+        vadThresholdRms: effectiveVadRms,
+      })
+
+      // Frame loop from real-time WebAudio capture: zero timer overhead, event-driven
+      const unsubFrames = subscribeAudioFrames((pcm16, totalSamples) => {
+        if (!isMountedRef.current || !isCapturing || !isListening) return
+        if (!speechSegmenterRef.current) return
+
+        const closedSegments = speechSegmenterRef.current.feed(pcm16, totalSamples)
+        for (const seg of closedSegments) {
+          dispatchSegmentToSTT(seg)
+        }
+      })
+
+      return () => {
+        unsubFrames()
+        if (speechSegmenterRef.current) {
+          const flushed = speechSegmenterRef.current.flush()
+          if (flushed && flushed.hasSpeech) {
+            dispatchSegmentToSTT(flushed)
+          }
+          speechSegmenterRef.current.reset()
+        }
+        sttJobQueue.pause()
+      }
+    } else {
+      // ── Rollback / Fallback: Legacy Fixed 1.0s Interval Slicing ──────────
     const intervalTimer = setInterval(() => {
-      // Slice phrase segment from high-performance PCM ring buffer (1.2s minimum)
       const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 1.2)
       if (!segment) return
 
-      // Advance sample pointer
       lastProcessedSampleRef.current = segment.endSample
 
       const seqId = sequenceIdRef.current++
@@ -540,7 +679,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         sessionId: sessionIdRef.current,
         sequenceId: seqId,
         audioBuffer: segment.blob,
-        hasSpeech: segment.hasAudio, // VAD flag: silence chunks dropped early by queue to save STT compute
+          hasSpeech: segment.hasAudio,
         createdAt: Date.now(),
         priority: segment.hasAudio ? 1 : 0,
         engineId: getSavedSTTEngineId(),
@@ -549,6 +688,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
         speakerLabel,
         timestampStr: timeStr,
         prompt: dynamicPrompt,
+          closeReason: 'silence',
       }
 
       sttJobQueue.enqueue(job)
@@ -558,7 +698,19 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       clearInterval(intervalTimer)
       sttJobQueue.pause()
     }
-  }, [isCapturing, isListening, getAudioSegmentSince, mode, sourceType, sttLang, whisperPrompt, activeKeywords])
+    }
+  }, [
+    isCapturing,
+    isListening,
+    getAudioSegmentSince,
+    subscribeAudioFrames,
+    mode,
+    sourceType,
+    sttLang,
+    whisperPrompt,
+    activeKeywords,
+    selectedDeviceId,
+  ])
 
   // ── Meeting Lifecycle & Component Unmount Cleanup (Streams, Workers, Timers, Buffers) ──
   useEffect(() => {
@@ -1011,9 +1163,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       // Auto Mode: Only trigger if shouldTriggerCopilot is true (Question/Command/Discussion in discussion mode)
       // Small talk ("Okay", "I see", "Right", "Thank you") sets shouldTriggerCopilot = false -> LLM call skipped!
       if (intentRes?.shouldTriggerCopilot && targetExchange) {
-        // Keep the original debounce behavior, extending it for incomplete STT fragments.
+        // When segment closed by natural silence, debounce can be reduced for instant answers
         if (copilotDebounceTimerRef.current) clearTimeout(copilotDebounceTimerRef.current)
-        const debounceMs = getAdaptiveDebounceMs(targetExchange.original)
+        const debounceMs = getAdaptiveDebounceMs(targetExchange.original, 500, lastCloseReasonRef.current)
         copilotDebounceTimerRef.current = setTimeout(async () => {
           if (!isMountedRef.current) return
           // Câu hỏi mới: hủy stream cũ nếu đang chạy và bắt đầu stream mới ngay
@@ -1114,6 +1266,41 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       clearTimeout(switchSourceTimerRef.current)
       switchSourceTimerRef.current = null
     }
+
+    // Flush any pending utterance before changing source
+    if (speechSegmenterRef.current) {
+      const flushed = speechSegmenterRef.current.flush()
+      if (flushed && flushed.hasSpeech) {
+        const seqId = sequenceIdRef.current++
+        const now = new Date()
+        const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+        sttJobQueue.enqueue({
+          jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
+          sessionId: sessionIdRef.current,
+          sequenceId: seqId,
+          audioBuffer: flushed.blob,
+          hasSpeech: true,
+          createdAt: Date.now(),
+          priority: 1,
+          engineId: getSavedSTTEngineId(),
+          language: sttLang,
+          sourceType,
+          speakerLabel:
+            mode === 'interview'
+              ? sourceType === 'system'
+                ? 'Interviewer'
+                : 'You'
+              : sourceType === 'system'
+              ? 'Cuộc họp'
+              : 'You',
+          timestampStr: timeStr,
+          closeReason: 'flush',
+        })
+      }
+      speechSegmenterRef.current.reset()
+    }
+    lastProcessedSampleRef.current = 0
+
     setSourceType(newType)
     if (isCapturing) {
       stopCapture()
@@ -1128,6 +1315,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const handleClearTranscript = () => {
     setTranscriptLines([])
     clearBuffer()
+    speechSegmenterRef.current?.reset()
+    speechSegmentationTelemetry.reset()
+    lastCloseReasonRef.current = undefined
     lastProcessedSampleRef.current = 0
     sequenceIdRef.current = 1
     sessionIdRef.current = `session_${Date.now()}`
