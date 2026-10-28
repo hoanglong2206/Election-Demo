@@ -34,16 +34,23 @@ export function DetailHeaderMeta({
   const [editTitle, setEditTitle] = useState(currentSession.title)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    setEditTitle(currentSession.title)
-  }, [currentSession.title])
+  const [prevSessionId, setPrevSessionId] = useState(currentSession.id)
+  const [prevSessionTitle, setPrevSessionTitle] = useState(currentSession.title)
+  const [prevExternalEdit, setPrevExternalEdit] = useState(isEditingTitleExternal)
 
-  useEffect(() => {
+  if (currentSession.id !== prevSessionId || currentSession.title !== prevSessionTitle) {
+    setPrevSessionId(currentSession.id)
+    setPrevSessionTitle(currentSession.title)
+    setEditTitle(currentSession.title)
+  }
+
+  if (isEditingTitleExternal !== prevExternalEdit) {
+    setPrevExternalEdit(isEditingTitleExternal)
     if (isEditingTitleExternal) {
       setIsEditingTitle(true)
       setEditTitle(currentSession.title)
     }
-  }, [isEditingTitleExternal, currentSession.title])
+  }
 
   useEffect(() => {
     if (isEditingTitle && inputRef.current) {

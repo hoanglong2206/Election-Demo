@@ -46,13 +46,18 @@ export function CustomSelect({
   const containerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
+    if (!isOpen) {
+      setSearchQuery('')
+    }
+  }
+
   // Focus search input on open
   useEffect(() => {
     if (isOpen && searchable && searchInputRef.current) {
       searchInputRef.current.focus()
-    }
-    if (!isOpen) {
-      setSearchQuery('')
     }
   }, [isOpen, searchable])
 

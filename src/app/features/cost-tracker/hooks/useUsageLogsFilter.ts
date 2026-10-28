@@ -32,13 +32,18 @@ export function useUsageLogsFilter({
     initialRecords ? initialRecords.length : records.length
   )
 
-  // Query initial page on mount or when provider changes (if initialRecords not provided)
-  useEffect(() => {
+  const [prevInitial, setPrevInitial] = useState(initialRecords)
+  if (initialRecords !== prevInitial) {
+    setPrevInitial(initialRecords)
     if (initialRecords) {
       setRecords(initialRecords)
       setTotalCount(initialRecords.length)
-      return
     }
+  }
+
+  // Query initial page on mount or when provider changes (if initialRecords not provided)
+  useEffect(() => {
+    if (initialRecords) return
 
     let isCancelled = false
     void (async () => {

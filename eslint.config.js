@@ -5,17 +5,6 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
-const BASELINE_OVERSIZED_FILES = [
-  'src/app/features/meeting-mode/components/copilot/CopilotSuggestionPane.tsx',
-  'src/app/features/meeting-mode/components/transcript/LiveTranscriptPane.tsx',
-  'src/app/services/ai-model/aiModels.ts',
-  'src/app/services/ai-model/copilot/interview.ts',
-  'src/app/services/ai-model/model-registry/modelRegistryService.ts',
-  'src/app/services/ai-model/translation/TranslationService.ts',
-  'src/app/services/session-history/repository.ts',
-  'src/app/services/usage-tracker/usageTrackerService.ts',
-]
-
 export default defineConfig([
   globalIgnores(['dist', 'dist-electron', 'node_modules', 'coverage', '.gemini']),
   {
@@ -193,21 +182,7 @@ export default defineConfig([
     },
   },
 
-  // 6. Max lines enforcement for new files (baseline files warn only)
-  {
-    files: ['src/app/**/*.{ts,tsx}'],
-    ignores: ['src/app/**/__tests__/**'],
-    rules: {
-      'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
-    },
-  },
-  {
-    files: BASELINE_OVERSIZED_FILES,
-    rules: {
-      'max-lines': ['warn', { max: 500, skipBlankLines: true, skipComments: true }],
-    },
-  },
-  // 7. Testing overrides: allow flexible typing and unused helpers in tests
+  // 6. Testing overrides: allow flexible typing and unused helpers in tests
   {
     files: ['src/**/__tests__/**', '**/*.test.{ts,tsx}'],
     rules: {

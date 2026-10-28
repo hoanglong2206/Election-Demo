@@ -44,13 +44,13 @@ export function useAudioDeviceSelection({
     }
   }, [])
 
-  // Sync calibrated record when selectedDeviceId changes
-  useEffect(() => {
+  const [prevDeviceId, setPrevDeviceId] = useState(selectedDeviceId)
+  if (selectedDeviceId !== prevDeviceId) {
+    setPrevDeviceId(selectedDeviceId)
     if (selectedDeviceId) {
-      const rec = getVADCalibration(selectedDeviceId)
-      setCalibratedRecord(rec)
+      setCalibratedRecord(getVADCalibration(selectedDeviceId))
     }
-  }, [selectedDeviceId])
+  }
 
   const handleSelectDevice = useCallback(
     async (newDeviceId: string) => {

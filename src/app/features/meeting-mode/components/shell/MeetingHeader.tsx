@@ -50,9 +50,11 @@ export function MeetingHeader({
   const [editedTitle, setEditedTitle] = useState(sessionTitle || '')
   const titleInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  const [prevSessionTitle, setPrevSessionTitle] = useState(sessionTitle)
+  if (sessionTitle !== prevSessionTitle) {
+    setPrevSessionTitle(sessionTitle)
     setEditedTitle(sessionTitle || '')
-  }, [sessionTitle])
+  }
 
   useEffect(() => {
     if (isEditingTitle) {
