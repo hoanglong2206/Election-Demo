@@ -69,6 +69,17 @@ export function LLMProviderKeySection({
     detectedProvider !== 'Unknown' &&
     detectedProvider !== llmProvider
 
+  const mergePreviewModels = (models: any[] = [], previous: PreviewModelItem[] = []): PreviewModelItem[] => {
+    const previousMap = new Map(previous.map((model) => [model.id, model]))
+    return models.map((model: any) => {
+      const previousModel = previousMap.get(model.id)
+      return {
+        ...model,
+        availability: previousModel?.availability ?? 'unchecked',
+      }
+    })
+  }
+
   const handleCheckLlm = async () => {
     if (!inputLlmKey.trim()) return
     setLlmStep('checking')
@@ -79,7 +90,7 @@ export function LLMProviderKeySection({
         setLlmStep('verified')
         setLlmPreview({
           provider: res.provider || targetProvider,
-          models: (res.models || []).map((model: any) => ({ ...model, availability: 'unchecked' })),
+          models: mergePreviewModels(res.models || [], llmPreview?.models || []),
           message: res.message,
         })
       } else {
@@ -96,11 +107,11 @@ export function LLMProviderKeySection({
     try {
       const result = await onVerifyRawKey(targetProvider, inputLlmKey.trim())
       if (!result.valid) throw new Error(result.message || 'Không thể tải lại danh sách model.')
-      setLlmPreview({
+      setLlmPreview((prev) => ({
         provider: result.provider || targetProvider,
-        models: (result.models || []).map((model: any) => ({ ...model, availability: 'unchecked' })),
+        models: mergePreviewModels(result.models || [], prev?.models || []),
         message: result.message,
-      })
+      }))
       setLlmStep('synced')
     } catch {
       setLlmStep('verified')
@@ -293,9 +304,10 @@ export function LLMProviderKeySection({
                 size="sm"
                 onClick={handleSyncLlm}
                 disabled={llmStep === 'syncing'}
+                title="Lấy danh sách model thực tế từ nhà cung cấp bằng key vừa nhập, rồi bạn có thể lưu key và chọn model phù hợp"
                 className="h-8 text-[11px] px-3 bg-violet-600 hover:bg-violet-500 text-white font-medium shrink-0"
               >
-                {llmStep === 'syncing' ? <><RotateCcw className="w-3 h-3 animate-spin mr-1" /><span>Đang nạp...</span></> : <><Sparkles className="w-3 h-3 mr-1" /><span>Đồng bộ</span></>}
+                {llmStep === 'syncing' ? <><RotateCcw className="w-3 h-3 animate-spin mr-1" /><span>Đang nạp...</span></> : <><Sparkles className="w-3 h-3 mr-1" /><span>Đồng bộ model</span></>}
               </Button>
             )}
 

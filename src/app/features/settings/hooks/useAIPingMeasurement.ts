@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   measureRealAIPing,
+  measureRealSTTLatency,
   getAllAIModels,
   getSavedAIModelId,
   getAvailableSTTEngines,
@@ -14,6 +15,11 @@ interface UseAIPingMeasurementProps {
   selectedSTT: string
   modelsList: AIModelConfig[]
   sttEnginesList: STTEngineConfig[]
+}
+
+function isLikelyLLMModelId(value?: string): boolean {
+  if (!value || !value.trim()) return false
+  return !/(whisper|tts|transcribe|speech|audio)/i.test(value)
 }
 
 export function useAIPingMeasurement({
@@ -60,7 +66,7 @@ export function useAIPingMeasurement({
   const handleTestLLMPing = useCallback(
     async (targetModelId?: string) => {
       const idToTest = targetModelId || selectedLLM
-      if (!idToTest) return
+      if (!idToTest || !isLikelyLLMModelId(idToTest)) return
       const reqId = ++llmPingReqRef.current
       setIsPingingLLM(true)
       try {
@@ -88,7 +94,7 @@ export function useAIPingMeasurement({
       const reqId = ++groqPingReqRef.current
       setIsCheckingGroqSTT(true)
       try {
-        const ping = await measureRealAIPing(idToTest)
+        const ping = await measureRealSTTLatency(idToTest)
         if (isMountedRef.current && reqId === groqPingReqRef.current) {
           setGroqSTTTestResult({
             latencyMs: ping,
@@ -112,15 +118,16 @@ export function useAIPingMeasurement({
     [selectedSTT, sttEnginesList]
   )
 
-  // Auto-ping when selected LLM changes
+  // Auto-ping only when the selected LLM actually changes.
+  // Do not trigger when STT changes, even if the parent re-renders.
   useEffect(() => {
-    if (selectedLLM) {
+    if (selectedLLM && isLikelyLLMModelId(selectedLLM)) {
       const timer = setTimeout(() => {
         void handleTestLLMPing(selectedLLM)
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [selectedLLM, handleTestLLMPing])
+  }, [selectedLLM])
 
   // Auto-ping when selected STT changes
   useEffect(() => {

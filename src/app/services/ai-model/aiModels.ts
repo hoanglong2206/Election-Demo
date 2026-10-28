@@ -555,7 +555,18 @@ export function setCachedLatency(id: string, latencyMs: number): void {
  */
 export async function measureRealAIPing(modelId?: string): Promise<number> {
   const targetId = modelId || getSavedAIModelId()
-  const model = getSelectedModelConfig(targetId)
+  const model = getAllAIModels().find((candidate) => candidate.id === targetId)
+
+  // Safety guard: LLM latency measurement should only use actual LLM IDs.
+  // An STT model ID (for example Groq Whisper) must never be treated as an LLM target.
+  if (!model) {
+    const cached = getCachedLatency(targetId)
+    if (cached) return cached
+    const fallback = 180
+    setCachedLatency(targetId, fallback)
+    return fallback
+  }
+
   const provider = model.provider
 
   // 1. Prefer Electron main process verifyApiKey if available (accurate, uses OS Credential Store, bypasses CORS)
