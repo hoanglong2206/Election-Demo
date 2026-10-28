@@ -1,4 +1,4 @@
-import { encodeWavBlob } from '../../lib/audioPipeline'
+import { encodeWavBlob } from './dsp'
 import type {
   AudioChunkLifecycleState,
   AudioChunkMeta,

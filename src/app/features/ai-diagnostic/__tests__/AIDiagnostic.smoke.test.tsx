@@ -1,6 +1,6 @@
 import '@/test/setupDom'
-import { describe, it, expect, mock } from 'bun:test'
-import { render, fireEvent, act } from '@testing-library/react'
+import { describe, it, expect, mock, afterEach } from 'bun:test'
+import { render, fireEvent, act, cleanup } from '@testing-library/react'
 import { AIDiagnostic } from '../AIDiagnostic'
 
 // Ensure minimal mock window.api
@@ -27,6 +27,9 @@ if (typeof window !== 'undefined') {
 }
 
 describe('AIDiagnostic Smoke Test', () => {
+  afterEach(() => {
+    cleanup()
+  })
   it('renders LLM benchmark dashboard tab by default without crashing', async () => {
     let result: any
     await act(async () => {

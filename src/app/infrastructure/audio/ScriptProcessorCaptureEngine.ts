@@ -6,7 +6,7 @@ import type {
   AudioEngineType,
 } from '../../core/audio/types'
 import { TARGET_SAMPLE_RATE } from '../../core/audio/AudioBufferManager'
-import { downsampleTo16kHz, float32ToInt16 } from '../../lib/audioPipeline'
+import { downsampleTo16kHz, float32ToInt16 } from '../../core/audio/dsp'
 
 /**
  * ScriptProcessorCaptureEngine

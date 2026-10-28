@@ -1,7 +1,7 @@
 import type { STTJob, STTQueueConfig, STTQueueMetrics, TranscribeResult } from './types'
 import { TranscriptAssembler } from './transcriptAssembler'
 import { transcribeAudio } from './transcribe'
-import { encodeWavBlob } from '../../../lib/audioPipeline'
+import { encodeWavBlob } from '@/core/audio'
 import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
 import { whisperPort } from '@/infrastructure/ipc'
 

@@ -10,7 +10,7 @@ import {
   type CopilotState,
   transitionCopilotState,
 } from '../machines/copilotStateMachine'
-import { useStreamingAnswer } from '@/hooks/useStreamingAnswer'
+import { useStreamingAnswer } from './useStreamingAnswer'
 import {
   generateDiscussionOptions,
   type ScannedExchangeResult,

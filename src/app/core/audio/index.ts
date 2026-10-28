@@ -1,4 +1,5 @@
 export * from './types'
+export * from './dsp'
 export * from './AudioBufferManager'
 export * from './SpeechSegmenter'
 export * from './SpeechSegmentationTelemetry'

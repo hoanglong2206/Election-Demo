@@ -20,7 +20,6 @@ const BASELINE_OVERSIZED_FILES = [
   'src/app/features/meeting-mode/components/transcript/LiveTranscriptPane.tsx',
   'src/app/features/meeting-mode/components/ScreenshotCropOverlay.tsx',
   'src/app/features/meeting-mode/MeetingMode.tsx',
-  'src/app/hooks/useAudioPipeline.ts',
   'src/app/services/ai-model/aiModels.ts',
   'src/app/services/ai-model/copilot/answerGrounding.ts',
   'src/app/services/ai-model/copilot/contextManager.ts',
