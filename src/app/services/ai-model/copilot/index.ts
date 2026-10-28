@@ -1,4 +1,18 @@
 export * from './types'
+export type {
+  NormalizedIntent,
+  UniversalLLMResult,
+  DocumentSourceType,
+  RetrievalCitation,
+  RetrievalDiagnostics,
+  AnswerStrategyId,
+  ClaimClassification,
+  ClaimType,
+  GroundingClaim,
+  GroundingEvidence,
+  GroundingResult,
+  GroundingRisk,
+} from './types'
 export * from './cache'
 export * from './transcript'
 export * from './parseOptions'
@@ -35,4 +49,3 @@ export {
   type AssembledExchange,
 } from './exchangeAssembler'
 export * from './intentGate'
-
