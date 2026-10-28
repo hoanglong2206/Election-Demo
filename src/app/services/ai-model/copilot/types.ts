@@ -1,7 +1,82 @@
 import type { LLMProvider } from '../types'
-import type { AnswerStrategyId } from './answerStrategyRouter'
-import type { GroundingResult } from './answerGrounding'
-import type { RetrievalDiagnostics, RetrievalCitation } from './localRag'
+export type AnswerStrategyId =
+  | 'behavioral'
+  | 'leadership'
+  | 'coding'
+  | 'system_design'
+  | 'database'
+  | 'debugging'
+  | 'architecture'
+  | 'conceptual'
+  | 'general'
+export type NormalizedIntent =
+  | 'direct_question'
+  | 'implicit_question'
+  | 'coding_problem'
+  | 'system_design_problem'
+  | 'behavioral_question'
+  | 'clarification_request'
+  | 'follow_up_question'
+  | 'challenge_or_objection'
+  | 'normal_conversation'
+
+export type ClaimClassification = 'SUPPORTED' | 'INFERRED' | 'UNSUPPORTED' | 'CONTRADICTED' | 'GENERAL_KNOWLEDGE'
+export type ClaimType = 'personal_experience' | 'metric' | 'general_technical' | 'opinion_approach'
+export type GroundingRisk = 'low' | 'medium' | 'high'
+
+export interface GroundingEvidence {
+  id: string
+  source: 'cv' | 'profile' | 'jd' | 'transcript' | 'session'
+  excerpt: string
+  isCandidateSource: boolean
+}
+
+export interface GroundingClaim {
+  id: string
+  text: string
+  classification: ClaimClassification
+  confidence: number
+  evidenceRefs: string[]
+  priority: 'high' | 'normal'
+  claimType?: ClaimType
+  reason?: string
+}
+
+export interface GroundingResult {
+  claims: GroundingClaim[]
+  evidence: GroundingEvidence[]
+  confidence: number
+  overallRisk: GroundingRisk
+  correctedAnswer: string
+  originalAnswer?: string
+  hasDiscrepancies?: boolean
+  warning?: string
+  degraded?: boolean
+}
+export type DocumentSourceType =
+  | 'cv'
+  | 'job_description'
+  | 'project'
+  | 'portfolio_note'
+  | 'company_research'
+  | 'interview_note'
+
+export interface RetrievalCitation {
+  citationId: string
+  chunkId: string
+  documentId: string
+  sourceType: DocumentSourceType
+  section?: string
+  source?: string
+  text: string
+  score: number
+}
+
+export interface RetrievalDiagnostics {
+  query: string
+  topResults: Array<{ chunkId: string; score: number; sourceType: DocumentSourceType }>
+  selectedTokenCount: number
+}
 import type { RoutingDecision } from '../model-router'
 export type { ResponseLanguage } from '../language'
 

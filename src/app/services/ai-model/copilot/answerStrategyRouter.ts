@@ -1,15 +1,8 @@
-import type { IntentDetectionResult, NormalizedIntent } from './questionDetector'
+import type { IntentDetectionResult } from './questionDetector'
+import type { AnswerStrategyId, NormalizedIntent } from './types'
 
-export type AnswerStrategyId =
-  | 'behavioral'
-  | 'leadership'
-  | 'coding'
-  | 'system_design'
-  | 'database'
-  | 'debugging'
-  | 'architecture'
-  | 'conceptual'
-  | 'general'
+export type { AnswerStrategyId }
+
 
 export interface AnswerStrategyContext {
   question: string

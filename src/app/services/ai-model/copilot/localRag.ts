@@ -1,12 +1,6 @@
 import { estimateTokenCount, truncateToTokenLimit } from './contextManager'
+import type { DocumentSourceType, RetrievalCitation, RetrievalDiagnostics } from './types'
 
-export type DocumentSourceType =
-  | 'cv'
-  | 'job_description'
-  | 'project'
-  | 'portfolio_note'
-  | 'company_research'
-  | 'interview_note'
 
 export interface SourceDocument {
   documentId: string
@@ -39,22 +33,6 @@ export interface VectorStore {
   all(): DocumentChunk[]
 }
 
-export interface RetrievalCitation {
-  citationId: string
-  chunkId: string
-  documentId: string
-  sourceType: DocumentSourceType
-  section?: string
-  source?: string
-  text: string
-  score: number
-}
-
-export interface RetrievalDiagnostics {
-  query: string
-  topResults: Array<{ chunkId: string; score: number; sourceType: DocumentSourceType }>
-  selectedTokenCount: number
-}
 
 export interface RetrievalResult {
   context: string

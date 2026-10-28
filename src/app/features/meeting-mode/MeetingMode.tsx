@@ -20,6 +20,7 @@ import {
   type HistorySuggestion,
 } from '../../services/sessionHistory'
 import { useAudioPipeline } from '../../hooks/useAudioPipeline'
+import { useLatest } from '@/hooks/useLatest'
 import {
   sttJobQueue,
   type STTJob,
@@ -1758,11 +1759,11 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const [customSessionTitle, setCustomSessionTitle] = useState<string>('')
   const currentSessionTitle = customSessionTitle || defaultSessionTitle
 
-  const currentSessionTitleRef = useRef(currentSessionTitle)
-  currentSessionTitleRef.current = currentSessionTitle
+  const currentSessionTitleRef = useLatest(currentSessionTitle)
 
-  const modeRef = useRef(mode)
-  modeRef.current = mode
+
+  const modeRef = useLatest(mode)
+
 
   const recordedLineIdsRef = useRef<Set<string | number>>(new Set())
   const recordedTranslationsRef = useRef<Map<string | number, string>>(new Map())

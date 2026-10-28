@@ -1,4 +1,4 @@
-import type { LLMProviderOption } from '../../features/settings/types'
+export type LLMProviderOption = 'Auto' | 'Google' | 'OpenAI'
 import type { ResponseLanguage } from '../ai-model/language'
 
 export interface APIKeySettings {

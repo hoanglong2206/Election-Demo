@@ -1,6 +1,7 @@
 import { BaseAIProvider } from './base'
 import type { DiscoveredModel } from '../types'
 import { cleanAndFormatDisplayName } from '../../modelHeuristics'
+import { credentialsPort } from '@/infrastructure/ipc'
 
 export class OpenAIProvider extends BaseAIProvider {
   readonly id = 'OpenAI'
@@ -12,9 +13,9 @@ export class OpenAIProvider extends BaseAIProvider {
       return []
     }
 
-    if (typeof window !== 'undefined' && window.api?.credentials?.verifyApiKey) {
+    if (credentialsPort.isSupported) {
       try {
-        const verifyRes = await window.api.credentials.verifyApiKey('openai', trimmed)
+        const verifyRes = await credentialsPort.verifyApiKey('openai', trimmed)
         if (!verifyRes.valid || !Array.isArray(verifyRes.models)) return []
         return verifyRes.models.map((m: any) => ({
           id: m.id,

@@ -10,6 +10,7 @@ import {
   providerCircuitBreaker,
 } from '../model-router'
 import { createStreamingTagFilter } from './streamingTagFilter'
+import { credentialsPort } from '@/infrastructure/ipc'
 
 /**
  * Format provider badge label for display
@@ -87,8 +88,8 @@ export async function checkCachedHasApiKey(provider: string): Promise<boolean> {
   if (cached && now - cached.timestamp < API_KEY_CACHE_TTL_MS) {
     return cached.hasKey
   }
-  if (typeof window !== 'undefined' && window.api?.credentials?.hasApiKey) {
-    const hasKey = await window.api.credentials.hasApiKey(norm)
+  if (credentialsPort.isSupported) {
+    const hasKey = await credentialsPort.hasApiKey(norm)
     apiKeyCache.set(norm, { hasKey, timestamp: now })
     return hasKey
   }
@@ -107,10 +108,10 @@ export async function callUniversalLLMStream(
   callbacks: UniversalLLMStreamCallbacks,
   options?: UniversalLLMOptions
 ): Promise<() => void> {
-  const hasIPC = typeof window !== 'undefined' && Boolean(window.api?.credentials?.streamLLM)
+  const hasIPC = credentialsPort.isSupported
   if (!hasIPC) {
     const err = new Error(
-      'Electron IPC streaming API (window.api.credentials.streamLLM) không khả dụng. Ứng dụng từ chối gọi LLM trực tiếp từ Renderer để bảo vệ API key.'
+      'Electron IPC streaming API (credentialsPort.streamLLM) không khả dụng. Ứng dụng từ chối gọi LLM trực tiếp từ Renderer để bảo vệ API key.'
     )
     callbacks.onError(err, '')
     return () => {}
@@ -292,12 +293,12 @@ export async function callUniversalLLMStream(
 
   // Execute candidate sequence with failover ONLY before first token
   const runSequence = async () => {
-    const hasIPC = typeof window !== 'undefined' && Boolean(window.api?.credentials?.streamLLM)
+    const hasIPC = credentialsPort.isSupported
     if (!hasIPC) {
       isStreamDone = true
       callbacks.onError(
         new Error(
-          'Electron IPC streaming API (window.api.credentials.streamLLM) không khả dụng. Ứng dụng từ chối gọi LLM trực tiếp từ Renderer để bảo vệ API key.'
+          'Electron IPC streaming API (credentialsPort.streamLLM) không khả dụng. Ứng dụng từ chối gọi LLM trực tiếp từ Renderer để bảo vệ API key.'
         ),
         ''
       )
@@ -362,7 +363,7 @@ export async function callUniversalLLMStream(
             }
           }, FIRST_TOKEN_TIMEOUT_MS)
 
-          cancelIpc = window.api!.credentials!.streamLLM!(
+          cancelIpc = credentialsPort.streamLLM(
             {
               requestId,
               input: {

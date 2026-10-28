@@ -1,6 +1,7 @@
 import { BaseAIProvider } from './base'
 import type { DiscoveredModel } from '../types'
 import { cleanAndFormatDisplayName } from '../../modelHeuristics'
+import { credentialsPort } from '@/infrastructure/ipc'
 
 export interface GroqRawModel {
   id: string
@@ -26,9 +27,9 @@ export class GroqProvider extends BaseAIProvider {
       return []
     }
 
-    if (typeof window !== 'undefined' && window.api?.credentials?.verifyApiKey) {
+    if (credentialsPort.isSupported) {
       try {
-        const verifyRes = await window.api.credentials.verifyApiKey('groq', trimmed)
+        const verifyRes = await credentialsPort.verifyApiKey('groq', trimmed)
         if (!verifyRes.valid || !Array.isArray(verifyRes.models)) return []
         return verifyRes.models.map((m: any) => ({
           id: m.id,

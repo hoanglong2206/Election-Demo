@@ -7,6 +7,7 @@ import type {
   UsageRecord,
 } from './types'
 import { pricingRegistry } from './pricingRegistry'
+import { usagePort } from '@/infrastructure/ipc'
 
 export const USAGE_STORAGE_KEYS = {
   RECORDS: 'meeting_copilot_usage_records',
@@ -163,9 +164,9 @@ export class UsageTrackerService {
    * verifies record count, then deletes the localStorage key.
    */
   private async runMigration(records: UsageRecord[]): Promise<void> {
-    if (typeof window === 'undefined' || !window.api?.usage?.migrate) return
+    if (!usagePort.isAvailable) return
     try {
-      const res = await window.api.usage.migrate(records)
+      const res = await usagePort.migrate(records)
       if (res && res.success) {
         localStorage.removeItem(USAGE_STORAGE_KEYS.RECORDS)
         localStorage.setItem(USAGE_STORAGE_KEYS.MIGRATED, 'true')
@@ -182,11 +183,11 @@ export class UsageTrackerService {
    * Loads current month records and recent logs from Main process NDJSON files.
    */
   private async loadStateFromMain(): Promise<void> {
-    if (typeof window === 'undefined' || !window.api?.usage?.loadCurrentMonth) return
+    if (!usagePort.isAvailable) return
     try {
       const [currentMonthRecs, recentRecs] = await Promise.all([
-        window.api.usage.loadCurrentMonth(),
-        window.api.usage.getRecent?.(MAX_RECENT_LOGS) || Promise.resolve([]),
+        usagePort.loadCurrentMonth(),
+        usagePort.getRecent(MAX_RECENT_LOGS),
       ])
 
       const combinedMap = new Map<string, UsageRecord>()
@@ -353,9 +354,9 @@ export class UsageTrackerService {
     const batch = [...this.pendingBatch]
     this.pendingBatch = []
 
-    if (typeof window !== 'undefined' && window.api?.usage?.append) {
+    if (usagePort.isAvailable) {
       try {
-        const count = await window.api.usage.append(batch)
+        const count = await usagePort.append(batch)
         return count
       } catch (err) {
         console.error('[UsageTrackerService] Failed sending usage batch to Main Process:', err)
@@ -784,8 +785,8 @@ export class UsageTrackerService {
 
     // Send demo records to Main in batch
     void this.flushBatch()
-    if (typeof window !== 'undefined' && window.api?.usage?.append) {
-      void window.api.usage.append(newRecords)
+    if (usagePort.isAvailable) {
+      void usagePort.append(newRecords)
     }
 
     this.notifySubscribers()
@@ -802,9 +803,9 @@ export class UsageTrackerService {
    * Paged query delegating to Main process NDJSON storage without loading entire history.
    */
   public async queryPagedRecords(params: UsageQueryParams): Promise<UsageQueryResult> {
-    if (typeof window !== 'undefined' && window.api?.usage?.query) {
+    if (usagePort.isAvailable) {
       try {
-        return await window.api.usage.query(params)
+        return await usagePort.query(params)
       } catch (err) {
         console.warn('[UsageTrackerService] Main query failed, falling back to in-memory:', err)
       }
@@ -859,8 +860,8 @@ export class UsageTrackerService {
       } catch {}
     }
 
-    if (typeof window !== 'undefined' && window.api?.usage?.reset) {
-      void window.api.usage.reset()
+    if (usagePort.isAvailable) {
+      void usagePort.reset()
     }
 
     this.notifySubscribers()

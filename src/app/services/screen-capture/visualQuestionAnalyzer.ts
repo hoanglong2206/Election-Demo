@@ -4,6 +4,7 @@ import { modelRegistryService } from '../ai-model/model-registry'
 import { smartModelRouter } from '../ai-model/model-router'
 import { usageTrackerService } from '../usage-tracker'
 import { languageInstruction, type ResponseLanguage } from '../ai-model/language'
+import { credentialsPort } from '@/infrastructure/ipc'
 
 export const VISUAL_ANALYSIS_SYSTEM_PROMPT = `Bạn là Trợ lý AI Cố vấn Kỹ thuật và Phỏng vấn Cấp cao.
 Nhiệm vụ của bạn là xem ảnh chụp màn hình chứa câu hỏi phỏng vấn kỹ thuật, bài toán coding (LeetCode/HackerRank/Codeforces), thông báo lỗi, sơ đồ kiến trúc hệ thống, hoặc câu hỏi tình huống công nghệ.
@@ -112,10 +113,10 @@ Nếu không có mã nguồn trong ảnh, extractedCode phải là null. solutio
     let usageInfo: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } | undefined
 
     // ── Path 1: Secure Electron Main Process OS Credential Store ──────────────
-    if (typeof window !== 'undefined' && window.api?.credentials?.callMultimodalLLM) {
+    if (credentialsPort.isSupported) {
       try {
         const ipcProvider = provider.toLowerCase()
-        const res = await window.api.credentials.callMultimodalLLM({
+        const res = await credentialsPort.callMultimodalLLM({
           provider: ipcProvider,
           modelId: targetModelId,
           prompt: userPrompt,

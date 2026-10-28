@@ -5,6 +5,7 @@ import {
   validateSettings,
 } from './schema'
 import { STORAGE_KEYS } from '../ai-model/storageKeys'
+import { credentialsPort } from '@/infrastructure/ipc'
 
 export const SETTINGS_STORAGE_KEY = 'meeting_copilot_app_settings'
 const AUDIO_DEVICE_STORAGE_KEY = 'meeting_copilot_audio_device'
@@ -241,7 +242,7 @@ export class SettingsManager {
       case 'groqKey':
       case 'llmKey':
         console.warn(
-          `[SettingsManager] Refusing to set plaintext key '${key}'. API keys must be saved via window.api.credentials.saveApiKey.`
+          `[SettingsManager] Refusing to set plaintext key '${key}'. API keys must be saved via credentialsPort.saveApiKey.`
         )
         return this.getSettings()
       case 'llmProvider':
@@ -319,11 +320,11 @@ export async function migratePlaintextSecretsToSecureStore(): Promise<{
   count: number
   warning?: string
 }> {
-  if (typeof window === 'undefined' || !window.api?.credentials) {
+  if (!credentialsPort.isSupported) {
     return { migrated: false, count: 0 }
   }
 
-  const isAvailable = await window.api.credentials.isAvailable()
+  const isAvailable = await credentialsPort.isAvailable()
   if (!isAvailable) {
     const warning =
       'Cảnh báo bảo mật: Hệ thống mã hóa OS Credential Store (DPAPI/Keychain) không khả dụng. Ứng dụng từ chối lưu khóa dạng plaintext.'
@@ -377,7 +378,7 @@ export async function migratePlaintextSecretsToSecureStore(): Promise<{
   const llmToMigrate = (legacyLlm || schemaLlm).trim()
 
   if (groqToMigrate) {
-    const res = await window.api.credentials.saveApiKey('groq', groqToMigrate)
+    const res = await credentialsPort.saveApiKey('groq', groqToMigrate)
     if (res.success) {
       migratedCount++
     }
@@ -391,7 +392,7 @@ export async function migratePlaintextSecretsToSecureStore(): Promise<{
       targetProvider = current.apiKeys.llmProvider.toLowerCase()
     }
 
-    const res = await window.api.credentials.saveApiKey(targetProvider, llmToMigrate)
+    const res = await credentialsPort.saveApiKey(targetProvider, llmToMigrate)
     if (res.success) {
       migratedCount++
     }

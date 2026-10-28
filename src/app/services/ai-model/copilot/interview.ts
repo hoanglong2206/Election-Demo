@@ -489,7 +489,7 @@ export async function generateInterviewAnswer(
     breakdown: assembled.estimatedTokens,
   }
 
-  const lines = (grounding.correctedAnswer || text).split('\n').map((l) => l.trim()).filter(Boolean)
+  const lines = (grounding.correctedAnswer || text).split('\n').map((l: string) => l.trim()).filter(Boolean)
   const shortContent = lines.slice(0, 3).join('\n')
 
   return {

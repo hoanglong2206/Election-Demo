@@ -15,6 +15,7 @@ import { STORAGE_KEYS } from './storageKeys'
 import { settingsManager } from '../settings'
 export * from './model-registry'
 import { modelRegistryService, type DiscoveredModel } from './model-registry'
+import { credentialsPort, whisperPort } from '@/infrastructure/ipc'
 
 /**
  * Synchronize and cache local STT models scanned dynamically from resources/models
@@ -404,10 +405,10 @@ export async function runAILatencyBenchmark(
   const modelToUse = model.id
 
   // 1. Electron Secure Main Process Path (uses OS Credential Store decrypted keys)
-  if (typeof window !== 'undefined' && window.api?.credentials?.callLLM) {
+  if (credentialsPort.isSupported) {
     const start = performance.now()
     try {
-      const res = await window.api.credentials.callLLM({
+      const res = await credentialsPort.callLLM({
         provider: targetProvider as any,
         modelId: modelToUse,
         prompt: benchmarkPrompt,
@@ -558,14 +559,14 @@ export async function measureRealAIPing(modelId?: string): Promise<number> {
   const provider = model.provider
 
   // 1. Prefer Electron main process verifyApiKey if available (accurate, uses OS Credential Store, bypasses CORS)
-  if (typeof window !== 'undefined' && window.api?.credentials?.verifyApiKey) {
+  if (credentialsPort.isSupported) {
     try {
       let targetProvider = 'gemini'
       if (provider === 'OpenAI') targetProvider = 'openai'
       else if (provider === 'Groq') targetProvider = 'groq'
       else if (provider === 'Google') targetProvider = 'gemini'
 
-      const res = await window.api.credentials.verifyApiKey(targetProvider)
+      const res = await credentialsPort.verifyApiKey(targetProvider)
       if (res && typeof res.pingMs === 'number' && res.pingMs > 0) {
         setCachedLatency(targetId, res.pingMs)
         return res.pingMs
@@ -591,9 +592,9 @@ export async function measureRealSTTLatency(sttId?: string): Promise<number> {
 
   // 1. LOCAL C++ WHISPER ENGINE
   if (engine?.provider === 'Local') {
-    if (typeof window !== 'undefined' && window.api?.nativeWhisper) {
+    if (whisperPort.isAvailable) {
       try {
-        const testRes = await window.api.nativeWhisper.transcribe(
+        const testRes = await whisperPort.transcribe(
           'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=',
           { modelId: targetId }
         )
@@ -614,9 +615,9 @@ export async function measureRealSTTLatency(sttId?: string): Promise<number> {
 
   // 2. GROQ CLOUD LPU WHISPER ENGINE
   if (engine?.provider === 'Groq') {
-    if (typeof window !== 'undefined' && window.api?.credentials?.verifyApiKey) {
+    if (credentialsPort.isSupported) {
       try {
-        const res = await window.api.credentials.verifyApiKey('groq')
+        const res = await credentialsPort.verifyApiKey('groq')
         if (res && typeof res.pingMs === 'number' && res.pingMs > 0) {
           setCachedLatency(targetId, res.pingMs)
           return res.pingMs

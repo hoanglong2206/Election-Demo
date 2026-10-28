@@ -1,14 +1,12 @@
 import type { CapturedImageInfo, CroppedImageInfo, CropRect } from './types'
+import { capturePort } from '@/infrastructure/ipc'
 
 export class ScreenCaptureService {
   /**
    * Checks whether native Electron desktop capture is available.
    */
   public isNativeAvailable(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      Boolean(window.api && typeof window.api.captureScreen === 'function')
-    )
+    return capturePort.isAvailable
   }
 
   /**
@@ -35,7 +33,7 @@ export class ScreenCaptureService {
         const nativeTimeout = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Native capture timeout sau 4.5s')), 4500)
         )
-        const res = await Promise.race([window.api.captureScreen!(options), nativeTimeout])
+        const res = await Promise.race([capturePort.captureScreen(options), nativeTimeout])
         if (
           res &&
           res.success &&

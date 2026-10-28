@@ -6,6 +6,7 @@ import {
 } from './types'
 import { SEED_SESSIONS } from './seeds'
 import { IndexedDbSessionRepository } from './indexedDbRepository'
+import { sessionsPort } from '@/infrastructure/ipc'
 
 const STORAGE_KEY = 'meeting_copilot_session_history'
 const BACKUP_STORAGE_KEY = 'meeting_copilot_session_backup'
@@ -39,7 +40,7 @@ function notifyListeners(): void {
 }
 
 function isElectronIpcAvailable(): boolean {
-  return typeof window !== 'undefined' && !!window.api?.sessions
+  return sessionsPort.isAvailable
 }
 
 
@@ -248,8 +249,8 @@ function cleanupSessionArtifacts(sessionId: string): void {
 }
 
 function markFirstRunCompleted(): void {
-  if (isElectronIpcAvailable() && window.api?.sessions?.setFirstRunCompleted) {
-    window.api.sessions.setFirstRunCompleted(true).catch(console.error)
+  if (isElectronIpcAvailable()) {
+    sessionsPort.setFirstRunCompleted(true).catch(console.error)
   }
   if (typeof localStorage !== 'undefined') {
     try {
@@ -311,7 +312,7 @@ export class HybridSessionRepository implements ISessionRepository {
 
         if (isElectronIpcAvailable()) {
           // 1. Try loading from Electron IPC (userData/sessions/*.json)
-          const electronSessions = await window.api.sessions!.getAll()
+          const electronSessions = await sessionsPort.getAll()
           if (Array.isArray(electronSessions) && electronSessions.length > 0) {
             loaded = electronSessions.map(normalizeSession)
           }
@@ -342,7 +343,7 @@ export class HybridSessionRepository implements ISessionRepository {
                 for (const session of toMigrate) {
                   loaded.push(session)
                   if (isElectronIpcAvailable()) {
-                    window.api.sessions!.save(session).catch(console.error)
+                    sessionsPort.save(session).catch(console.error)
                   } else {
                     this.indexedDbRepo.save(session).catch(console.error)
                   }
@@ -375,9 +376,9 @@ export class HybridSessionRepository implements ISessionRepository {
         // 5. Fallback to seed sessions ONLY on genuine first run
         if (loaded.length === 0 && (!sessionsCache || sessionsCache.length === 0) && initRevision === sessionMutationRevision) {
           let isFirstRun = false
-          if (isElectronIpcAvailable() && window.api?.sessions?.isFirstRun) {
+          if (isElectronIpcAvailable()) {
             try {
-              isFirstRun = await window.api.sessions.isFirstRun()
+              isFirstRun = await sessionsPort.isFirstRun()
             } catch {
               isFirstRun = false
             }
@@ -460,7 +461,7 @@ export class HybridSessionRepository implements ISessionRepository {
     if (!id) return null
     if (isElectronIpcAvailable()) {
       try {
-        const full = await window.api.sessions!.getById(id)
+        const full = await sessionsPort.getById(id)
         if (full) {
           const normalized = normalizeSession({ ...full, _isFullyLoaded: true })
           if (sessionsCache) {
@@ -498,7 +499,7 @@ export class HybridSessionRepository implements ISessionRepository {
 
     // Persist asynchronously
     if (isElectronIpcAvailable()) {
-      window.api.sessions!.save(normalized).catch((err) => {
+      sessionsPort.save(normalized).catch((err) => {
         console.error('[SessionStorage] Electron save error:', err)
       })
     } else {
@@ -524,7 +525,7 @@ export class HybridSessionRepository implements ISessionRepository {
 
     if (isElectronIpcAvailable()) {
       try {
-        const res = await window.api.sessions!.save(normalized)
+        const res = await sessionsPort.save(normalized)
         if (typeof res === 'object' && res !== null) {
           return { success: (res as any).success !== false, id: normalized.id, error: (res as any).error }
         }
@@ -555,7 +556,7 @@ export class HybridSessionRepository implements ISessionRepository {
 
     // Persist asynchronously
     if (isElectronIpcAvailable()) {
-      window.api.sessions!.delete(sessionId).catch((err) => {
+      sessionsPort.delete(sessionId).catch((err) => {
         console.error('[SessionStorage] Electron delete error:', err)
       })
     } else {
@@ -583,7 +584,7 @@ export class HybridSessionRepository implements ISessionRepository {
 
     // Persist asynchronously
     if (isElectronIpcAvailable()) {
-      window.api.sessions!.deleteMany(sessionIds).catch((err) => {
+      sessionsPort.deleteMany(sessionIds).catch((err) => {
         console.error('[SessionStorage] Electron deleteMany error:', err)
       })
     } else {
@@ -609,7 +610,7 @@ export class HybridSessionRepository implements ISessionRepository {
 
     // Persist asynchronously
     if (isElectronIpcAvailable()) {
-      window.api.sessions!.deleteAll().catch((err) => {
+      sessionsPort.deleteAll().catch((err) => {
         console.error('[SessionStorage] Electron deleteAll error:', err)
       })
     } else {
@@ -634,7 +635,7 @@ export class HybridSessionRepository implements ISessionRepository {
 
     // Persist asynchronously
     if (isElectronIpcAvailable()) {
-      window.api.sessions!.rename(sessionId, trimmed).catch((err) => {
+      sessionsPort.rename(sessionId, trimmed).catch((err) => {
         console.error('[SessionStorage] Electron rename error:', err)
       })
     } else {

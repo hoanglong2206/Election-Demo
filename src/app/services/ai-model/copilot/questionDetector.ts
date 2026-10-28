@@ -23,16 +23,8 @@ export type CopilotIntent =
   | 'SMALL_TALK'
   | 'UNKNOWN'
 
-export type NormalizedIntent =
-  | 'direct_question'
-  | 'implicit_question'
-  | 'coding_problem'
-  | 'system_design_problem'
-  | 'behavioral_question'
-  | 'clarification_request'
-  | 'follow_up_question'
-  | 'challenge_or_objection'
-  | 'normal_conversation'
+import type { NormalizedIntent } from './types'
+export type { NormalizedIntent }
 
 export interface IntentClassifier {
   classify(input: {

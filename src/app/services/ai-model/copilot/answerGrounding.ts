@@ -14,39 +14,16 @@ import {
 import { callUniversalLLM } from './universalLlm'
 
 export type GroundingMode = 'strict' | 'balanced'
-export type ClaimClassification = 'SUPPORTED' | 'INFERRED' | 'UNSUPPORTED' | 'CONTRADICTED' | 'GENERAL_KNOWLEDGE'
-export type ClaimType = 'personal_experience' | 'metric' | 'general_technical' | 'opinion_approach'
-export type GroundingRisk = 'low' | 'medium' | 'high'
+import type {
+  ClaimClassification,
+  ClaimType,
+  GroundingRisk,
+  GroundingEvidence,
+  GroundingClaim,
+  GroundingResult,
+} from './types'
 
-export interface GroundingEvidence {
-  id: string
-  source: 'cv' | 'profile' | 'jd' | 'transcript' | 'session'
-  excerpt: string
-  isCandidateSource: boolean
-}
-
-export interface GroundingClaim {
-  id: string
-  text: string
-  classification: ClaimClassification
-  confidence: number
-  evidenceRefs: string[]
-  priority: 'high' | 'normal'
-  claimType?: ClaimType
-  reason?: string
-}
-
-export interface GroundingResult {
-  claims: GroundingClaim[]
-  evidence: GroundingEvidence[]
-  confidence: number
-  overallRisk: GroundingRisk
-  correctedAnswer: string
-  originalAnswer?: string
-  hasDiscrepancies?: boolean
-  warning?: string
-  degraded?: boolean
-}
+export type { ClaimClassification, ClaimType, GroundingRisk, GroundingEvidence, GroundingClaim, GroundingResult }
 
 export interface EvidenceIndex {
   hash: string

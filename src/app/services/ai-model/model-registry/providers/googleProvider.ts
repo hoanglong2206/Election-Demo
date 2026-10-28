@@ -1,6 +1,7 @@
 import { BaseAIProvider } from './base'
 import type { DiscoveredModel } from '../types'
 import { cleanAndFormatDisplayName } from '../../modelHeuristics'
+import { credentialsPort } from '@/infrastructure/ipc'
 
 export interface GoogleRawModel {
   name: string
@@ -27,9 +28,9 @@ export class GoogleProvider extends BaseAIProvider {
       return []
     }
 
-    if (typeof window !== 'undefined' && window.api?.credentials?.verifyApiKey) {
+    if (credentialsPort.isSupported) {
       try {
-        const verifyRes = await window.api.credentials.verifyApiKey('gemini', trimmed)
+        const verifyRes = await credentialsPort.verifyApiKey('gemini', trimmed)
         if (!verifyRes.valid || !Array.isArray(verifyRes.models)) return []
         return verifyRes.models.map((m: any) => ({
           id: m.id,

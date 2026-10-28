@@ -11,8 +11,7 @@
  * followed by a newline and the actual response content.
  */
 
-import type { NormalizedIntent } from './questionDetector'
-import type { AnswerStrategyId } from './answerStrategyRouter'
+import type { NormalizedIntent, AnswerStrategyId } from './types'
 
 export const CONFIDENCE_HIGH = 0.65
 export const CONFIDENCE_LOW = 0.35

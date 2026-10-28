@@ -1,7 +1,7 @@
 import { Home, MessageSquare, Headphones, Zap, FileText, Coins, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { ViewState } from './Layout'
+import type { ViewState } from './types'
 
 interface SidebarProps {
   currentView: ViewState

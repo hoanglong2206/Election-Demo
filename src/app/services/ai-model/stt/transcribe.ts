@@ -2,6 +2,7 @@ import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
 import type { TranscribeResult } from './types'
 import { base64ToBlob, blobToBase64 } from './audioUtils'
 import { usageTrackerService } from '../../usage-tracker'
+import { whisperPort, credentialsPort } from '@/infrastructure/ipc'
 
 /**
  * Estimate audio duration in seconds based on 16kHz 16-bit mono PCM bytes.
@@ -53,14 +54,14 @@ export async function transcribeAudio(
 
   // ── 1. LOCAL WHISPER C++ ENGINE ──────────────────────────────────────────
   if (engine?.provider === 'Local') {
-    if (window.api?.nativeWhisper) {
+    if (whisperPort.isAvailable) {
       // Pass ArrayBuffer directly across IPC to avoid base64 serialization overhead and disk I/O
       let rawData: any = audioData
       if (audioData instanceof Blob) {
         rawData = await audioData.arrayBuffer()
       }
 
-      const res = await window.api.nativeWhisper.transcribe(rawData, {
+      const res = await whisperPort.transcribe(rawData, {
         modelId: engineId,
         language: language || 'auto',
         prompt,
@@ -123,7 +124,7 @@ export async function transcribeAudio(
   // ── 2. GROQ WHISPER CLOUD LPU ENGINE ──────────────────────────────────────
   if (engine?.provider === 'Groq') {
     // High security path: Transcribe via Electron Main Process (no plaintext key in renderer!)
-    if (typeof window !== 'undefined' && window.api?.credentials?.transcribeGroq) {
+    if (credentialsPort.isSupported) {
       try {
         let blob: Blob
         if (audioData instanceof Blob) {
@@ -134,7 +135,7 @@ export async function transcribeAudio(
           blob = new Blob([audioData as any], { type: 'audio/wav' })
         }
         const audioBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(blob)
-        const res = await window.api.credentials.transcribeGroq(audioBase64, engineId, language, prompt)
+        const res = await credentialsPort.transcribeGroq(audioBase64, engineId, language, prompt)
         if (res && res.text) {
           try {
             usageTrackerService.trackUsage({

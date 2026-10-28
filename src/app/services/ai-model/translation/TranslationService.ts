@@ -22,6 +22,7 @@ import { TranslationRateLimiter } from './RateLimiter'
 import { TranslationCircuitBreaker } from './CircuitBreaker'
 import { detectLanguage } from './languageDetector'
 import { technicalGlossary } from './glossary'
+import { credentialsPort } from '@/infrastructure/ipc'
 import type {
   TranslationProvider,
   TranslationStatus,
@@ -440,8 +441,8 @@ export class TranslationService {
 
     // 2. Official Google Cloud Translation or DeepL via Main IPC
     if (provider === 'google_translate' || provider === 'deepl') {
-      if (typeof window !== 'undefined' && window.api?.credentials?.translateText) {
-        return window.api.credentials.translateText({
+      if (credentialsPort.isSupported) {
+        return credentialsPort.translateText({
           texts,
           sourceLang,
           targetLang,

@@ -10,6 +10,7 @@ import { GoogleProvider } from './providers/googleProvider'
 import { OpenAIProvider } from './providers/openaiProvider'
 import { GroqProvider } from './providers/groqProvider'
 import { pricingRegistry } from '../../usage-tracker/pricingRegistry'
+import { credentialsPort } from '@/infrastructure/ipc'
 
 export const REGISTRY_STORAGE_KEYS = {
   MODELS_CACHE: 'meeting_copilot_discovered_models',
@@ -267,9 +268,9 @@ export class ModelRegistryService {
     this.notifySubscribers()
 
     // 1. In Electron, sync directly via secure Main Process IPC (which holds decrypted credentials)
-    if (!options?.apiKeyMap && typeof window !== 'undefined' && window.api?.credentials?.syncModels) {
+    if (!options?.apiKeyMap && credentialsPort.isSupported) {
       try {
-        const res = await window.api.credentials.syncModels()
+        const res = await credentialsPort.syncModels()
         if (res && Array.isArray(res.models)) {
           return this.populateFromElectronSync(res)
         }

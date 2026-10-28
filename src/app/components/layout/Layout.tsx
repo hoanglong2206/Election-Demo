@@ -3,15 +3,7 @@ import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 import { ToastHost } from '@/components/ui/toast'
-
-export type ViewState =
-  | 'home'
-  | 'meeting'
-  | 'audio-test'
-  | 'ai-diagnostic'
-  | 'history'
-  | 'cost-tracker'
-  | 'settings'
+import type { ViewState } from './types'
 
 interface LayoutProps {
   children: ReactNode

@@ -3,6 +3,7 @@ import { TranscriptAssembler } from './transcriptAssembler'
 import { transcribeAudio } from './transcribe'
 import { encodeWavBlob } from '../../../lib/audioPipeline'
 import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
+import { whisperPort } from '@/infrastructure/ipc'
 
 /**
  * STTJobQueue
@@ -69,8 +70,8 @@ export class STTJobQueue {
   }
 
   private initNativeWorkerListener(): void {
-    if (typeof window !== 'undefined' && window.api?.nativeWhisper?.onStateChange) {
-      window.api.nativeWhisper.onStateChange((data) => {
+    if (whisperPort.isAvailable) {
+      whisperPort.onStateChange((data) => {
         this.workerState = data.state
         if (data.telemetry) {
           this.nativeTelemetry = {
@@ -83,7 +84,7 @@ export class STTJobQueue {
         this.emitMetrics()
       })
 
-      window.api.nativeWhisper.getProcessState?.().then((res) => {
+      whisperPort.getProcessState().then((res) => {
         if (res) {
           this.workerState = res.state
           if (res.telemetry) {
