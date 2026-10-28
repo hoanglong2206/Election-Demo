@@ -36,7 +36,7 @@ const BASELINE_OVERSIZED_FILES = [
 ]
 
 export default defineConfig([
-  globalIgnores(['dist', 'dist-electron', 'node_modules', '_ui-verify', 'coverage', '.gemini']),
+  globalIgnores(['dist', 'dist-electron', 'node_modules', 'coverage', '.gemini']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

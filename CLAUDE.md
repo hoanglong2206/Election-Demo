@@ -36,6 +36,6 @@ Trước khi kết thúc lát cắt, bắt buộc chạy và xác nhận 0 lỗi
 3. `bun run build:electron`
 4. `bun x tsc -p tsconfig.app.json --noEmit`
 5. `bun x tsc -p tsconfig.node.json --noEmit`
-6. `bun test src/` và `bun test _ui-verify/`
+6. `bun test src/`
 7. `bun run build:vite`
 
