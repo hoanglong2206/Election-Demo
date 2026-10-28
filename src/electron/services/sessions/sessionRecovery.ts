@@ -57,7 +57,7 @@ function atomicWriteWithFsync(filePath: string, content: string): void {
         }
       }
       const start = Date.now()
-      while (Date.now() - start < 15 * attempt) {}
+      while (Date.now() - start < 15 * attempt) { /* busy-wait backoff */ }
     }
   }
 }
@@ -345,7 +345,7 @@ export class SessionRecoveryService {
     this.flushSync()
 
     const directory = this.getDirectory()
-    let filesInDir: string[] = []
+    let filesInDir: string[]
     try {
       filesInDir = fs.readdirSync(directory)
     } catch (err) {
@@ -545,7 +545,7 @@ export class SessionRecoveryService {
     const file = this.files(sessionId).journal
     if (!fs.existsSync(file)) return []
 
-    let raw = ''
+    let raw: string
     try {
       raw = fs.readFileSync(file, 'utf8')
     } catch {

@@ -91,11 +91,8 @@ export function analyzeCvJdMatchHeuristic(cvText: string, jdText: string): CvJdM
     score = Math.min(96, Math.max(20, score))
   }
 
-  let level: CvJdMatchResult['level'] = 'moderate'
-  if (score >= 80) level = 'excellent'
-  else if (score >= 65) level = 'good'
-  else if (score >= 45) level = 'moderate'
-  else level = 'low'
+  const level: CvJdMatchResult['level'] =
+    score >= 80 ? 'excellent' : score >= 65 ? 'good' : score >= 45 ? 'moderate' : 'low'
 
   const strengths: string[] = []
   if (matchedKeywords.length > 0) {

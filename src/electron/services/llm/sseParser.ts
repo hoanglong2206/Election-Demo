@@ -105,7 +105,7 @@ export class SSEStreamParser {
       return
     }
 
-    let delta = ''
+    let delta: string
     if (this.provider === 'gemini') {
       delta = data?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
       if (data?.usageMetadata) {

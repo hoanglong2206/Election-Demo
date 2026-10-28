@@ -47,7 +47,7 @@ export function createStreamingTagFilter(): StreamingTagFilter {
 
   const process = (chunk: string): string => {
     if (!chunk) return ''
-    let text = pendingBuffer + chunk
+    const text = pendingBuffer + chunk
     pendingBuffer = ''
     let output = ''
 

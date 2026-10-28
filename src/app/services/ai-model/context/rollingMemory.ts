@@ -161,13 +161,9 @@ Trả về kết quả duy nhất ở định dạng JSON hợp lệ:
   "importantStatements": ["phát biểu đáng chú ý của các bên"]
 }`
 
-  let responseText: string | null = null
-  if (customCaller) {
-    responseText = await customCaller(prompt)
-  } else {
-    const res = await callUniversalLLM(prompt, { maxTokens: 600, temperature: 0.2 })
-    responseText = res?.text || null
-  }
+  const responseText = customCaller
+    ? await customCaller(prompt)
+    : (await callUniversalLLM(prompt, { maxTokens: 600, temperature: 0.2 }))?.text || null
 
   if (!responseText) {
     return null

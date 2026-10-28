@@ -205,7 +205,7 @@ export function cleanAndFormatDisplayName(
   }
 
   // Tách bỏ namespace (e.g., openai/gpt-oss-120b -> gpt-oss-120b, models/gemini-2.5 -> gemini-2.5)
-  const unnamespaced = id.replace(/^[^\/]+\//, '')
+  const unnamespaced = id.replace(/^[^/]+\//, '')
 
   // Tách ngày snapshot ở đuôi nếu có (-2026-03-05)
   const isDated = /-\d{4}(-\d{2})*(-\d{2})*$/.test(unnamespaced)

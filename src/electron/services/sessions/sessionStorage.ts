@@ -499,7 +499,7 @@ export class ElectronSessionStorage {
 
       // 3. Atomically update index.json
       const newItem = this.toIndexItem(session)
-      let index = await this.readIndex()
+      const index = await this.readIndex()
       let sessions = index ? index.sessions : await this.rebuildIndex()
 
       sessions = [newItem, ...sessions.filter((s) => s.id !== sessionId)]

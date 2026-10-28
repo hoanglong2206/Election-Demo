@@ -355,11 +355,11 @@ export function useCredentialManagement({
         isError: true,
       })
     } finally {
-      if (isMountedRef.current) {
-        setIsSyncing(false)
+        if (isMountedRef.current) {
+          setIsSyncing(false)
+        }
       }
-    }
-  }, [selectedLLM])
+    }, [syncModelsSelection])
 
   return {
     credentialStatuses,

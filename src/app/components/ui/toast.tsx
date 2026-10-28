@@ -7,6 +7,7 @@ type ToastMessage = { id: number; type: ToastType; message: string }
 const TOAST_EVENT = 'app:toast'
 let nextToastId = 0
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function showToast(message: string, type: ToastType = 'info') {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: { id: ++nextToastId, type, message } }))

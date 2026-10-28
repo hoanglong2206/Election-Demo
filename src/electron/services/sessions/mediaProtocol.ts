@@ -69,7 +69,7 @@ export function resolveSafeSessionPath(sessionsDir: string, requestUrl: string):
     }
 
     // Enforce safe segment characters (no control chars, slashes, or special symbols)
-    const safeSegmentRegex = /^[a-zA-Z0-9_\-\.]+$/
+    const safeSegmentRegex = /^[a-zA-Z0-9_\-.]+$/
     if (!safeSegmentRegex.test(parts[0]) || !safeSegmentRegex.test(parts[2])) {
       return null
     }

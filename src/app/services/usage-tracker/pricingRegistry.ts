@@ -189,14 +189,14 @@ export class PricingRegistry {
       audioDurationSeconds?: number
     }
   ): CostCalculationResult {
-    let provider = ''
-    let model = ''
+    let provider: string
+    let model: string
     let usage: {
       inputTokens?: number
       outputTokens?: number
       cachedTokens?: number
       audioDurationSeconds?: number
-    } = {}
+    }
 
     if (typeof providerOrParams === 'object' && providerOrParams !== null) {
       provider = providerOrParams.provider || ''

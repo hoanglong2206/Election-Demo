@@ -56,18 +56,22 @@ export function assembleMultiTierContext(params: AssembleContextParams): Assembl
       : visualQuestionsBlock
   }
 
-  let { text: shortTermBlock, truncated: shortTermTruncated } = truncateToTokenLimit(
+  const stRes = truncateToTokenLimit(
     recentFormatted || '(chưa có thoại)',
     budget.shortTerm
   )
+  let shortTermBlock = stRes.text
+  const shortTermTruncated = stRes.truncated
   if (shortTermTruncated) isTruncated = true
   let shortTermTokens = estimateTokenCount(shortTermBlock)
 
   // Tier 2: Session Memory (Priority 3: Rolling Summary)
-  let { text: sessionMemoryBlock, truncated: sessionTruncated } = truncateToTokenLimit(
+  const smRes = truncateToTokenLimit(
     rawSessionMemory,
     budget.sessionMemory
   )
+  let sessionMemoryBlock = smRes.text
+  const sessionTruncated = smRes.truncated
   if (sessionTruncated) isTruncated = true
   let sessionMemoryTokens = estimateTokenCount(sessionMemoryBlock)
 
@@ -121,10 +125,12 @@ export function assembleMultiTierContext(params: AssembleContextParams): Assembl
   }
 
   const rawPermanent = options?.permanentOverride ?? permParts.join('\n\n')
-  let { text: permanentBlock, truncated: permanentTruncated } = truncateToTokenLimit(
+  const permRes = truncateToTokenLimit(
     rawPermanent || '(không có)',
     budget.permanent
   )
+  let permanentBlock = permRes.text
+  const permanentTruncated = permRes.truncated
   if (permanentTruncated) isTruncated = true
   let permanentTokens = estimateTokenCount(permanentBlock)
 
@@ -165,7 +171,6 @@ export function assembleMultiTierContext(params: AssembleContextParams): Assembl
       const allowed = Math.max(40, shortTermTokens - toTrim)
       shortTermBlock = truncateToTokenLimit(shortTermBlock, allowed).text
       const newTokens = estimateTokenCount(shortTermBlock)
-      excess = Math.max(0, excess - (shortTermTokens - newTokens))
       shortTermTokens = newTokens
       isTruncated = true
     }

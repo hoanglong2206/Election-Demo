@@ -54,7 +54,7 @@ export class ScreenCaptureService {
           throw new Error(res.error)
         }
         throw new Error('Dữ liệu ảnh chụp từ Native Electron rỗng hoặc không hợp lệ.')
-      } catch (nativeErr: any) {
+      } catch (_nativeErr: any) {
         // Fall back to browser getDisplayMedia if in dev browser environment
       }
     }

@@ -124,7 +124,7 @@ export class UsageStorageService {
     const filePath = this.getFilePathForYearMonth(yearMonth)
     if (!fs.existsSync(filePath)) return []
 
-    let raw = ''
+    let raw: string
     try {
       raw = fs.readFileSync(filePath, 'utf8')
     } catch {
@@ -176,7 +176,7 @@ export class UsageStorageService {
    */
   public getRecentRecords(limit = 200): UsageRecord[] {
     const dir = this.getDirectory()
-    let files: string[] = []
+    let files: string[]
     try {
       files = fs.readdirSync(dir)
     } catch {
@@ -217,7 +217,7 @@ export class UsageStorageService {
     const to = params.to ?? Date.now()
 
     const dir = this.getDirectory()
-    let files: string[] = []
+    let files: string[]
     try {
       files = fs.readdirSync(dir)
     } catch {
@@ -297,7 +297,7 @@ export class UsageStorageService {
    */
   public async pruneOldMonths(maxMonthsRetention = 12): Promise<number> {
     const dir = this.getDirectory()
-    let files: string[] = []
+    let files: string[]
     try {
       files = await fs.promises.readdir(dir)
     } catch {

@@ -255,7 +255,7 @@ export class ElectronLlmService {
   private async callLLMStreaming(input: CallLLMInput, key: string, provider: CredentialProvider) {
     const modelId = getValidatedModelId(provider, input.modelId)
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    let url = ''
+    let url: string
     let body: any
     if (provider === 'groq' || provider === 'openai') {
       url = provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
@@ -329,7 +329,7 @@ export class ElectronLlmService {
 
     const modelId = getValidatedModelId(targetProvider, validated.modelId)
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    let url = ''
+    let url: string
     let body: any
 
     if (targetProvider === 'groq' || targetProvider === 'openai') {
@@ -349,7 +349,7 @@ export class ElectronLlmService {
         stream_options: { include_usage: true },
       }
     } else if (targetProvider === 'gemini') {
-      let cleanModelId = modelId.replace(/^models\//, '')
+      const cleanModelId = modelId.replace(/^models\//, '')
       url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModelId)}:streamGenerateContent?alt=sse`
       headers['x-goog-api-key'] = key
       body = {
@@ -900,7 +900,7 @@ export class ElectronLlmService {
     if (!id) return { available: false, message: 'Thiếu model ID.' }
 
     let url: string
-    let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     let body: any
     if (provider === 'gemini') {
       url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(id)}:generateContent`

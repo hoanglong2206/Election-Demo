@@ -224,7 +224,7 @@ export function extractSentences(text: string): string[] {
       // 5. Must be followed by whitespace, end of string, or East Asian char/quote
       const nextChar = cleaned[i + 1]
       const isEastAsianPunct = /[。\uff01\uff1f]/.test(char)
-      if (nextChar === undefined || /\s/.test(nextChar) || isEastAsianPunct || /['"”’\)]/.test(nextChar)) {
+      if (nextChar === undefined || /\s/.test(nextChar) || isEastAsianPunct || /['"”’)]/.test(nextChar)) {
         const trimmed = current.trim()
         if (trimmed) {
           sentences.push(trimmed)

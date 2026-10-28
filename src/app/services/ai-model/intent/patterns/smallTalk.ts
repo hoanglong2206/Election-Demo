@@ -8,7 +8,7 @@ export const AUDIO_TAGS_REGEX =
  * Leading filler words, conversational openers, or symbols
  */
 export const LEADING_FILLER_REGEX =
-  /^(?:[\s\-_–—•*~,.;:!?()\[\]"']|so|well|okay|ok|hey|hi|hello|um|uh|yeah|yes|no|now|and|or|but|please|by the way|anyway|à|ừ|ừm|vâng|dạ|thế|vậy|cho hỏi|em cho anh hỏi|anh cho em hỏi|nhân tiện|ủa)+\s*[,:;-]*\s*/i
+  /^(?:[\s\-_–—•*~,.;:!?()[\]"']|so|well|okay|ok|hey|hi|hello|um|uh|yeah|yes|no|now|and|or|but|please|by the way|anyway|à|ừ|ừm|vâng|dạ|thế|vậy|cho hỏi|em cho anh hỏi|anh cho em hỏi|nhân tiện|ủa)+\s*[,:;-]*\s*/i
 
 /**
  * Pure small-talk phrases in English and Vietnamese that should NEVER trigger LLM Copilot.
@@ -50,7 +50,7 @@ export function isSmallTalkUtterance(cleaned: string): boolean {
 
   const normalized = cleaned
     .toLowerCase()
-    .replace(/[.,!?;:…\-_'"()\[\]]/g, ' ')
+    .replace(/[.,!?;:…\-_'"()[\]]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 

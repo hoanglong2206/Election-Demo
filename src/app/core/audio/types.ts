@@ -151,7 +151,7 @@ export interface IAudioCaptureEngine {
 /**
  * Backwards compatible alias for capture service
  */
-export interface IAudioCaptureService extends IAudioCaptureEngine {}
+export type IAudioCaptureService = IAudioCaptureEngine
 
 /**
  * Audio playback service abstraction
