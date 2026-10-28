@@ -17,3 +17,17 @@ if (typeof globalThis.window === 'undefined') {
   ;(globalThis as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0)
   ;(globalThis as any).cancelAnimationFrame = (id: number) => clearTimeout(id)
 }
+
+if (!globalThis.localStorage || typeof (globalThis.localStorage as any).clear !== 'function') {
+  const storage = new Map<string, string>()
+  ;(globalThis as any).localStorage = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, val: string) => storage.set(key, String(val)),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+    key: (i: number) => Array.from(storage.keys())[i] ?? null,
+    get length() {
+      return storage.size
+    },
+  }
+}

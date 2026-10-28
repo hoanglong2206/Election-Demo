@@ -288,6 +288,9 @@ describe('UsageTrackerService (Batching, Running Accumulators, Durability & Perf
       removeItem: (key: string) => {
         delete storageMock[key]
       },
+      clear: () => {
+        for (const k in storageMock) delete storageMock[k]
+      },
     }
 
     // Call init on a fresh instance or run migration
