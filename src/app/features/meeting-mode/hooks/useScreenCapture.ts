@@ -33,6 +33,7 @@ export interface UseScreenCaptureReturn {
   activeVisualQuestion: VisualQuestionItem | null
   visualQuestionsHistory: VisualQuestionItem[]
   setIsScreenSourcePickerOpen: (open: boolean) => void
+  handleCancelPicker: () => void
   handleTriggerScreenCapture: () => void
   handleStartScreenCapture: (source: { sourceType: 'screen' | 'window'; sourceId?: string }) => Promise<void>
   handleConfirmCrop: (cropRect: CropRect) => Promise<void>
@@ -203,6 +204,11 @@ export function useScreenCapture({
     [capturedImageInfo, sessionId, mode, activeJD, activeCV, discussionTopic, responseLang, setAiError]
   )
 
+  const handleCancelPicker = useCallback(() => {
+    setIsScreenSourcePickerOpen(false)
+    setCaptureState((prev) => transitionCaptureState(prev, { type: 'CANCEL' }))
+  }, [])
+
   const handleCancelCrop = useCallback(() => {
     if (capturedImageInfo) {
       screenCaptureService.releaseMemory(capturedImageInfo.dataUrl)
@@ -277,6 +283,7 @@ export function useScreenCapture({
     activeVisualQuestion,
     visualQuestionsHistory,
     setIsScreenSourcePickerOpen,
+    handleCancelPicker,
     handleTriggerScreenCapture,
     handleStartScreenCapture,
     handleConfirmCrop,

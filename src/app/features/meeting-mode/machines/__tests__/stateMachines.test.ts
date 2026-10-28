@@ -92,5 +92,13 @@ describe('Meeting Mode State Machines', () => {
       state = transitionCaptureState(state, { type: 'RETAKE' })
       expect(state).toBe('capturing')
     })
+
+    it('handles picker cancellation cleanly (Bug 1 fix): idle -> picking -> CANCEL -> idle', () => {
+      let state: CaptureState = 'idle'
+      state = transitionCaptureState(state, { type: 'OPEN_PICKER' })
+      expect(state).toBe('picking')
+      state = transitionCaptureState(state, { type: 'CANCEL' })
+      expect(state).toBe('idle')
+    })
   })
 })

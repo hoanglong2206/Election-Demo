@@ -1,5 +1,6 @@
 import { AppWindow, Monitor, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { capturePort } from '@/infrastructure/ipc'
 
 export interface DesktopSource {
@@ -16,6 +17,14 @@ export function ScreenCaptureSourcePicker({ onSelect, onCancel }: ScreenCaptureS
   const [windows, setWindows] = useState<DesktopSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onCancel])
 
   useEffect(() => {
     let mounted = true
@@ -36,8 +45,13 @@ export function ScreenCaptureSourcePicker({ onSelect, onCancel }: ScreenCaptureS
     }
   }, [])
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+  const content = (
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 backdrop-blur-md animate-fade-in select-none"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel()
+      }}
+    >
       <div className="w-[min(560px,calc(100vw-32px))] rounded-2xl border border-white/10 bg-[#16161d] p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -92,4 +106,7 @@ export function ScreenCaptureSourcePicker({ onSelect, onCancel }: ScreenCaptureS
       </div>
     </div>
   )
+
+  const portalTarget = typeof document !== 'undefined' ? document.body : null
+  return portalTarget ? createPortal(content, portalTarget) : content
 }
