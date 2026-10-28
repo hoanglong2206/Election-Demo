@@ -26,8 +26,6 @@ const BASELINE_OVERSIZED_FILES = [
   'src/app/features/meeting-mode/components/transcript/LiveTranscriptPane.tsx',
   'src/app/features/meeting-mode/components/ScreenshotCropOverlay.tsx',
   'src/app/features/meeting-mode/MeetingMode.tsx',
-  'src/app/features/session-history/components/SessionDetailView.tsx',
-  'src/app/features/session-history/components/SessionSidebar.tsx',
   'src/app/features/settings/components/APIKeysCard.tsx',
   'src/app/features/settings/components/LLMEngineCard.tsx',
   'src/app/features/settings/components/MeetingAudioConfigCard.tsx',

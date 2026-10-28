@@ -1,252 +1,69 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState } from 'react'
+import type { DetailTab } from './types'
+import { SessionHeader } from './components/header'
+import { SessionSidebar } from './components/sidebar'
+import { SessionDetailView } from './components/detail'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
-  getSavedSessions,
-  initSessionStorage,
-  loadFullSession,
-  subscribeSessions,
-  deleteSessionFromHistory,
-  deleteMultipleSessionsFromHistory,
-  clearAllSessionsFromHistory,
-  renameSessionInHistory,
-  searchAndFilterSessions,
-  getSavedRetentionDays,
-  saveRetentionDays,
-  applySessionRetention,
-  type MeetingSession,
-  type SessionDateFilter,
-} from '../../services/sessionHistory'
-import { profilePresetRepository } from '../../services/profile-preset'
-import type { DetailTab, ModeFilter } from './types'
-import { SessionHeader } from './components/SessionHeader'
-import { SessionSidebar } from './components/SessionSidebar'
-import { SessionDetailView } from './components/SessionDetailView'
-import { ConfirmDialog } from '../../components/ui/confirm-dialog'
-
-type DeleteTarget =
-  | { type: 'single'; session: MeetingSession }
-  | { type: 'bulk'; ids: string[] }
-  | { type: 'all'; count: number }
-  | null
+  useSessionHistoryData,
+  useSessionFilter,
+  useSessionHistoryActions,
+} from './hooks'
 
 export function SessionHistory() {
-  const [sessions, setSessions] = useState<MeetingSession[]>(() => getSavedSessions())
-  const [selectedSessionId, setSelectedSessionId] = useState<string>(() => {
-    const list = getSavedSessions()
-    return list.length > 0 ? list[0].id : ''
-  })
-
-  // Search & Multi-filters
-  const [searchTerm, setSearchTerm] = useState('')
-  const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
-  const [dateFilter, setDateFilter] = useState<SessionDateFilter>('all')
-  const [profileFilter, setProfileFilter] = useState<string>('all')
-
-  // Available profiles for filtering
-  const [availableProfiles] = useState<{ id: string; name: string }[]>(() =>
-    profilePresetRepository.getAll().map((p) => ({ id: p.id, name: p.name }))
-  )
-
-  // Local storage retention setting
-  const [retentionDays, setRetentionDays] = useState<number>(() => getSavedRetentionDays())
-
-  // Detail View
   const [detailTab, setDetailTab] = useState<DetailTab>('timeline')
-  const [copiedId, setCopiedId] = useState<number | null>(null)
-  const [isEditingTitle, setIsEditingTitle] = useState(false)
-  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Bulk selection state
-  const [isSelectMode, setIsSelectMode] = useState(false)
-  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set())
+  // 1. Data Loading & Persistence
+  const {
+    sessions,
+    setSessions,
+    selectedSessionId,
+    setSelectedSessionId,
+    currentSession,
+    retentionDays,
+    handleRetentionChange,
+  } = useSessionHistoryData()
 
-  // Unified delete target (single / bulk / all)
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
+  // 2. Multi-Filter & Search
+  const {
+    searchTerm,
+    setSearchTerm,
+    modeFilter,
+    setModeFilter,
+    dateFilter,
+    setDateFilter,
+    profileFilter,
+    setProfileFilter,
+    availableProfiles,
+    filteredSessions,
+  } = useSessionFilter(sessions)
 
-  useEffect(() => {
-    let isSubscribed = true
-
-    const unsubscribe = subscribeSessions((updated) => {
-      if (!isSubscribed) return
-      setSessions([...updated])
-      if (updated.length > 0) {
-        setSelectedSessionId((curr) => {
-          if (!curr || !updated.some((s) => s.id === curr)) {
-            return updated[0].id
-          }
-          return curr
-        })
-      } else {
-        setSelectedSessionId('')
-      }
-    })
-
-    initSessionStorage().then((loaded) => {
-      if (!isSubscribed) return
-      setSessions(loaded)
-      if (loaded.length > 0) {
-        setSelectedSessionId((curr) => {
-          if (!curr || !loaded.some((s) => s.id === curr)) {
-            return loaded[0].id
-          }
-          return curr
-        })
-      }
-    })
-
-    return () => {
-      isSubscribed = false
-      unsubscribe()
-      if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  // Multi-attribute filtering & Full-text search
-  const filteredSessions = useMemo(() => {
-    void sessions.length
-    return searchAndFilterSessions({
-      searchTerm,
-      mode: modeFilter,
-      profileId: profileFilter,
-      dateRange: dateFilter,
-    })
-  }, [sessions, searchTerm, modeFilter, profileFilter, dateFilter])
-
-  const currentSession = useMemo(() => {
-    const selected = sessions.find((s) => s.id === selectedSessionId)
-    if (selected) return selected
-    return selectedSessionId ? null : filteredSessions[0] || null
-  }, [sessions, selectedSessionId, filteredSessions])
-
-  // Lazy-load full session details (transcripts & suggestions) on demand
-  useEffect(() => {
-    if (!selectedSessionId) return
-    const current = sessions.find((s) => s.id === selectedSessionId)
-    if (current && !current._isFullyLoaded) {
-      loadFullSession(selectedSessionId).then((full) => {
-        if (full) {
-          setSessions((prev) => prev.map((s) => (s.id === full.id ? full : s)))
-        }
-      })
-    }
-  }, [selectedSessionId, sessions])
-
-  const handleDeleteSingle = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    const session = sessions.find((s) => s.id === id)
-    if (session) {
-      setDeleteTarget({ type: 'single', session })
-    }
-  }
-
-  const handleDeleteSelected = () => {
-    if (selectedSessionIds.size === 0) return
-    setDeleteTarget({ type: 'bulk', ids: Array.from(selectedSessionIds) })
-  }
-
-  const handleClearAll = () => {
-    if (sessions.length === 0) return
-    setDeleteTarget({ type: 'all', count: sessions.length })
-  }
-
-  const handleToggleSelectMode = () => {
-    setIsSelectMode((prev) => {
-      const next = !prev
-      if (!next) {
-        setSelectedSessionIds(new Set())
-      }
-      return next
-    })
-  }
-
-  const handleToggleSelectSession = (id: string) => {
-    setSelectedSessionIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const handleToggleSelectAll = () => {
-    if (selectedSessionIds.size === filteredSessions.length) {
-      setSelectedSessionIds(new Set())
-    } else {
-      setSelectedSessionIds(new Set(filteredSessions.map((s) => s.id)))
-    }
-  }
-
-  const handleConfirmDelete = () => {
-    if (!deleteTarget) return
-    setIsEditingTitle(false)
-
-    if (deleteTarget.type === 'single') {
-      const updated = deleteSessionFromHistory(deleteTarget.session.id)
-      setSessions(updated)
-      if (selectedSessionId === deleteTarget.session.id) {
-        setSelectedSessionId(updated.length > 0 ? updated[0].id : '')
-      }
-      if (selectedSessionIds.has(deleteTarget.session.id)) {
-        setSelectedSessionIds((prev) => {
-          const next = new Set(prev)
-          next.delete(deleteTarget.session.id)
-          return next
-        })
-      }
-    } else if (deleteTarget.type === 'bulk') {
-      const updated = deleteMultipleSessionsFromHistory(deleteTarget.ids)
-      setSessions(updated)
-      setSelectedSessionIds(new Set())
-      setIsSelectMode(false)
-      if (deleteTarget.ids.includes(selectedSessionId)) {
-        setSelectedSessionId(updated.length > 0 ? updated[0].id : '')
-      }
-    } else if (deleteTarget.type === 'all') {
-      const updated = clearAllSessionsFromHistory()
-      setSessions(updated)
-      setSelectedSessionId('')
-      setSelectedSessionIds(new Set())
-      setIsSelectMode(false)
-    }
-
-    setDeleteTarget(null)
-  }
-
-  const handleCancelDelete = () => {
-    setDeleteTarget(null)
-  }
-
-  const handleCopyText = (text: string, id: number) => {
-    navigator.clipboard?.writeText(text)
-    setCopiedId(id)
-    if (copyTimeoutRef.current) {
-      clearTimeout(copyTimeoutRef.current)
-    }
-    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 1500)
-  }
-
-  const handleRenameSession = (id: string, newTitle: string) => {
-    const updated = renameSessionInHistory(id, newTitle)
-    setSessions(updated)
-  }
-
-  const handleStartRename = (id: string) => {
-    setSelectedSessionId(id)
-    setIsEditingTitle(true)
-  }
-
-  const handleRetentionChange = (days: number) => {
-    setRetentionDays(days)
-    saveRetentionDays(days)
-    if (days > 0) {
-      const res = applySessionRetention(days)
-      setSessions([...res.remainingSessions])
-    }
-  }
+  // 3. Selection, Deletion, and Actions
+  const {
+    isSelectMode,
+    selectedSessionIds,
+    deleteTarget,
+    copiedId,
+    isEditingTitle,
+    setIsEditingTitle,
+    handleDeleteSingle,
+    handleDeleteSelected,
+    handleClearAll,
+    handleToggleSelectMode,
+    handleToggleSelectSession,
+    handleToggleSelectAll,
+    handleConfirmDelete,
+    handleCancelDelete,
+    handleCopyText,
+    handleRenameSession,
+    handleStartRename,
+  } = useSessionHistoryActions({
+    sessions,
+    setSessions,
+    selectedSessionId,
+    setSelectedSessionId,
+    filteredSessions,
+  })
 
   return (
     <div className="flex flex-col h-full p-3.5 overflow-hidden gap-2.5 animate-fade-in select-none">
