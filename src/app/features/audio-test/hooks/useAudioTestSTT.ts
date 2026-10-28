@@ -14,18 +14,22 @@ import { getSavedMeetingContext } from '@/services/meeting-context'
 import { YOUTUBE_STT_SAMPLES } from '../constants'
 import type { STTLang, STTPreviewLine } from '../types'
 import type { AudioSegment } from '@/core/audio/types'
+import type { AudioCaptureOwner } from '@/hooks/useAudioPipeline'
 
 export interface UseAudioTestSTTParams {
   isCapturing: boolean
+  captureOwner?: AudioCaptureOwner
   sourceType: 'mic' | 'system'
   getAudioSegmentSince: (sinceSample: number, minDurationSec?: number) => AudioSegment | null
 }
 
 export function useAudioTestSTT({
   isCapturing,
+  captureOwner,
   sourceType,
   getAudioSegmentSince,
 }: UseAudioTestSTTParams) {
+  const isTestingActive = isCapturing && (captureOwner === 'audio-test' || captureOwner === undefined)
   const [selectedSTT, setSelectedSTT] = useState<string>(getSavedSTTEngineId)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [sttLines, setSttLines] = useState<STTPreviewLine[]>([])
@@ -56,10 +60,10 @@ export function useAudioTestSTT({
 
   // Reset sample pointer when capture state toggles
   useEffect(() => {
-    if (isCapturing) {
+    if (isTestingActive) {
       lastProcessedSampleRef.current = 0
     }
-  }, [isCapturing])
+  }, [isTestingActive])
 
   // Revert sttJobQueue provider back to settings configuration when unmounting
   useEffect(() => {
@@ -115,7 +119,7 @@ export function useAudioTestSTT({
 
   // Real-Time Automatic Speech-to-Text Queue Producer Loop
   useEffect(() => {
-    if (!isCapturing) {
+    if (!isTestingActive) {
       sttJobQueue.pause()
       return
     }
@@ -158,7 +162,7 @@ export function useAudioTestSTT({
       clearInterval(intervalTimer)
       sttJobQueue.pause()
     }
-  }, [isCapturing, getAudioSegmentSince])
+  }, [isTestingActive, getAudioSegmentSince])
 
   const handleSimulateSTT = useCallback(() => {
     setIsSimulatingSTT(true)

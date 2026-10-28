@@ -4,6 +4,7 @@ import type { AppMode } from './types/electron.d'
 import { modelRegistryService } from './services/ai-model/model-registry'
 import { windowPort } from '@/infrastructure/ipc'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { cn } from './lib/utils'
 
 const Home = lazy(() =>
   import('./features/home/Home').then((m) => ({ default: m.Home }))
@@ -30,6 +31,7 @@ const CostTracker = lazy(() =>
 function App() {
   const [view, setView] = useState<ViewState>('home')
   const [mode, setMode] = useState<AppMode>('interview')
+  const [hasVisitedMeeting, setHasVisitedMeeting] = useState(false)
 
   // Background model sync on startup without blocking UI
   useEffect(() => {
@@ -42,6 +44,9 @@ function App() {
   }
 
   const handleViewChange = (newView: ViewState) => {
+    if (newView === 'meeting') {
+      setHasVisitedMeeting(true)
+    }
     setView(newView)
   }
 
@@ -55,26 +60,58 @@ function App() {
             </div>
           }
         >
-          <div key={view} className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
+          <div className="w-full h-full flex flex-col flex-1 min-h-0">
             {view === 'home' && (
-              <Home
-                onViewChange={handleViewChange}
-                mode={mode}
-                onModeChange={handleModeChange}
-              />
+              <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
+                <Home
+                  onViewChange={handleViewChange}
+                  mode={mode}
+                  onModeChange={handleModeChange}
+                />
+              </div>
             )}
-            {view === 'meeting' && (
-              <MeetingMode
-                mode={mode}
-                onModeChange={handleModeChange}
-                onViewChange={handleViewChange}
-              />
+
+            {/* Keep-Alive MeetingMode: Giữ component mounted trong background để tiếp tục thu âm và không mất dữ liệu phiên khi chuyển trang */}
+            {hasVisitedMeeting && (
+              <div
+                className={cn(
+                  'w-full h-full flex flex-col flex-1 min-h-0',
+                  view !== 'meeting' && 'hidden'
+                )}
+              >
+                <MeetingMode
+                  mode={mode}
+                  onModeChange={handleModeChange}
+                  onViewChange={handleViewChange}
+                />
+              </div>
             )}
-            {view === 'audio-test' && <AudioTest onViewChange={handleViewChange} />}
-            {view === 'ai-diagnostic' && <AIDiagnostic onViewChange={handleViewChange} />}
-            {view === 'history' && <SessionHistory />}
-            {view === 'cost-tracker' && <CostTracker />}
-            {view === 'settings' && <Settings onViewChange={handleViewChange} />}
+
+            {view === 'audio-test' && (
+              <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
+                <AudioTest onViewChange={handleViewChange} />
+              </div>
+            )}
+            {view === 'ai-diagnostic' && (
+              <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
+                <AIDiagnostic onViewChange={handleViewChange} />
+              </div>
+            )}
+            {view === 'history' && (
+              <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
+                <SessionHistory />
+              </div>
+            )}
+            {view === 'cost-tracker' && (
+              <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
+                <CostTracker />
+              </div>
+            )}
+            {view === 'settings' && (
+              <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
+                <Settings onViewChange={handleViewChange} />
+              </div>
+            )}
           </div>
         </Suspense>
       </ErrorBoundary>

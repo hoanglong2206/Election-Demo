@@ -16,6 +16,7 @@ import type {
 import type {
   AudioPipelineState,
   AudioPipelineControllerDeps,
+  AudioCaptureOwner,
 } from './types'
 import { computePipelineStages } from './pipelineStages'
 
@@ -51,6 +52,7 @@ export class AudioPipelineController {
       isCapturing: false,
       isStarting: false,
       sourceType: 'system',
+      captureOwner: null,
       volume: 0,
       db: -60,
       frequencyBands: new Array(16).fill(0),
@@ -138,7 +140,7 @@ export class AudioPipelineController {
 
   public async start(
     sourceType?: AudioSourceType,
-    options?: { deviceId?: string }
+    options?: { deviceId?: string; owner?: AudioCaptureOwner }
   ): Promise<void> {
     if (this.state.isStarting) return
 
@@ -146,10 +148,13 @@ export class AudioPipelineController {
       this.setSourceType(sourceType)
     }
 
+    const targetOwner = options?.owner ?? this.state.captureOwner ?? null
+
     this.state = {
       ...this.state,
       lifecycleState: 'starting',
       isStarting: true,
+      captureOwner: targetOwner,
       error: null,
     }
     this.emitState()
@@ -216,6 +221,7 @@ export class AudioPipelineController {
         lifecycleState: 'capturing',
         isCapturing: true,
         isStarting: false,
+        captureOwner: targetOwner,
         engineType: this.captureService.engineType,
         inputSampleRateHz: this.captureService.sampleRate,
         vadEnergyThreshold: effectiveVad,
@@ -276,6 +282,7 @@ export class AudioPipelineController {
       lifecycleState: 'idle',
       isCapturing: false,
       isStarting: false,
+      captureOwner: null,
       isAudioDetected: false,
       volume: 0,
       db: -60,

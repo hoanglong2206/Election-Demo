@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { useAudioPipeline } from '@/hooks/useAudioPipeline'
 import type { AudioTestProps } from './types'
@@ -12,6 +12,7 @@ import { useAudioDeviceSelection, useAudioTestSTT } from './hooks'
 export function AudioTest({ onViewChange }: AudioTestProps = {}) {
   const {
     isCapturing,
+    captureOwner,
     isStarting,
     sourceType,
     setSourceType,
@@ -41,6 +42,10 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
     setVadEnergyThreshold,
   } = useAudioPipeline()
 
+  // Phân quyền thu âm: AudioTest chỉ kích hoạt khi captureOwner là 'audio-test'
+  const isAudioTestRecording = isCapturing && captureOwner === 'audio-test'
+  const isMeetingRecording = isCapturing && captureOwner === 'meeting'
+
   // ── UI States ──
   const [showTip, setShowTip] = useState(true)
   const [isCalibrating, setIsCalibrating] = useState(false)
@@ -56,11 +61,15 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
     handleSelectDevice,
     setCalibratedRecord,
   } = useAudioDeviceSelection({
-    isCapturing,
+    isCapturing: isAudioTestRecording,
     sourceType,
     switchDevice,
     setVadEnergyThreshold,
   })
+
+  const handleStartAudioTestCapture = useCallback(async () => {
+    await startCapture(sourceType, { owner: 'audio-test', deviceId: selectedDeviceId })
+  }, [startCapture, sourceType, selectedDeviceId])
 
   // ── Speech-to-Text Integration Hook ──
   const {
@@ -77,7 +86,8 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
     handleSimulateSTT,
     handleClearSTT,
   } = useAudioTestSTT({
-    isCapturing,
+    isCapturing: isAudioTestRecording,
+    captureOwner,
     sourceType,
     getAudioSegmentSince,
   })
@@ -126,14 +136,40 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
         </div>
       )}
 
+      {/* Meeting Recording Active Notice */}
+      {isMeetingRecording && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center justify-between gap-3 text-amber-200 animate-fade-in">
+          <div className="flex items-center gap-2.5 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <div>
+              <span className="font-semibold text-amber-300 block">
+                Phiên họp đang thu âm trong nền (Meeting Copilot)
+              </span>
+              <p className="text-amber-200/80 text-[11px]">
+                Audio Test đang ở chế độ chờ để không can thiệp vào cuộc họp. Bấm &quot;Bắt đầu thu âm&quot; bên dưới nếu bạn muốn chuyển mic sang Audio Test.
+              </p>
+            </div>
+          </div>
+          {onViewChange && (
+            <button
+              type="button"
+              onClick={() => onViewChange('meeting')}
+              className="rounded-lg bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/30 px-3 py-1.5 text-xs text-amber-100 font-medium transition-colors shrink-0 cursor-pointer"
+            >
+              Quay lại cuộc họp
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Unified Studio Audio Console (Controls & Integrated Real-time Signal Monitor) */}
       <AudioControlsToolbar
         sourceType={sourceType}
         setSourceType={setSourceType}
-        isCapturing={isCapturing}
+        isCapturing={isAudioTestRecording}
         isStarting={isStarting}
-        isAudioDetected={isAudioDetected}
-        startCapture={startCapture}
+        isAudioDetected={isAudioTestRecording ? isAudioDetected : false}
+        startCapture={handleStartAudioTestCapture}
         stopCapture={stopCapture}
         isPlaying={isPlaying}
         playBuffer={playBuffer}
@@ -148,9 +184,9 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
         selectedDeviceId={selectedDeviceId}
         onSelectDevice={handleSelectDevice}
         onEnterMeeting={onViewChange ? () => onViewChange('meeting') : undefined}
-        volume={volume}
-        db={db}
-        frequencyBands={frequencyBands}
+        volume={isAudioTestRecording ? volume : 0}
+        db={isAudioTestRecording ? db : -60}
+        frequencyBands={isAudioTestRecording ? frequencyBands : new Array(16).fill(0)}
         getAudioMetrics={getAudioMetrics}
       />
 
@@ -158,7 +194,7 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
         <div className="lg:col-span-7">
           <STTPreviewPanel
-            isCapturing={isCapturing}
+            isCapturing={isAudioTestRecording}
             isSimulatingSTT={isSimulatingSTT}
             isTranscribing={isTranscribing}
             queueMetrics={queueMetrics}

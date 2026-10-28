@@ -13,7 +13,9 @@ import type {
   PipelineStageInfo,
 } from '@/core/audio/types'
 
-export type { AudioSourceType, PipelineStageInfo, AudioEngineType, AudioPipelineState }
+import type { AudioCaptureOwner } from '@/infrastructure/audio/types'
+
+export type { AudioSourceType, PipelineStageInfo, AudioEngineType, AudioPipelineState, AudioCaptureOwner }
 
 /**
  * Shared application-level audio pipeline controller singleton.
@@ -26,7 +28,10 @@ export const audioPipelineController = new AudioPipelineController({
 
 export interface AudioPipelineActions {
   setSourceType: (type: AudioSourceType) => void
-  startCapture: (sourceType?: AudioSourceType, options?: { deviceId?: string }) => Promise<void>
+  startCapture: (
+    sourceType?: AudioSourceType,
+    options?: { deviceId?: string; owner?: AudioCaptureOwner }
+  ) => Promise<void>
   stopCapture: () => void
   switchDevice: (deviceId: string) => Promise<void>
   playBuffer: () => Promise<void>
@@ -68,8 +73,10 @@ export function useAudioPipeline(
   const actions: AudioPipelineActions = useMemo(
     () => ({
       setSourceType: (type: AudioSourceType) => controller.setSourceType(type),
-      startCapture: (sourceType?: AudioSourceType, options?: { deviceId?: string }) =>
-        controller.start(sourceType, options),
+      startCapture: (
+        sourceType?: AudioSourceType,
+        options?: { deviceId?: string; owner?: AudioCaptureOwner }
+      ) => controller.start(sourceType, options),
       stopCapture: () => controller.stop(),
       switchDevice: (deviceId: string) => controller.switchDevice(deviceId),
       playBuffer: () => controller.playBuffer(),

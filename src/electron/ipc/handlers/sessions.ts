@@ -36,11 +36,15 @@ export function registerSessionHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.SESSIONS.DELETE, (_event, sessionId: string) => {
     getAppStateManager().setFirstRunCompleted(true)
+    sessionRecoveryService.complete(sessionId, 'discarded')
     return sessionStorage.delete(sessionId)
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSIONS.DELETE_MANY, (_event, sessionIds: string[]) => {
     getAppStateManager().setFirstRunCompleted(true)
+    for (const sid of sessionIds) {
+      sessionRecoveryService.complete(sid, 'discarded')
+    }
     return sessionStorage.deleteMany(sessionIds)
   })
 

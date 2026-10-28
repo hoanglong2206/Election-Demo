@@ -48,6 +48,7 @@ import {
   ScreenCaptureSourcePicker,
   ScreenshotCropOverlay,
 } from '@/components/shared'
+import { sessionsPort } from '@/infrastructure/ipc'
 
 export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
@@ -237,6 +238,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     meetingStartTime: session.meetingStartTime,
     validLines: transcript.validLines,
     visualQuestionsHistory: capture.visualQuestionsHistory,
+    isSavedToHistory: session.isSavedToHistory,
     onSessionRestored: session.setSessionId,
   })
 
@@ -247,6 +249,10 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
 
   // Master Clear Transcript & Reset
   const handleMasterClearTranscript = useCallback(() => {
+    const activeSessionId = session.sessionId
+    if (activeSessionId) {
+      void sessionsPort.recovery.complete(activeSessionId, 'discarded')
+    }
     transcript.handleClearTranscript()
     exchange.resetExchange()
     summary.resetSummary()
@@ -254,7 +260,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     capture.clearVisuals()
     session.resetSession()
     trigger.setContextUsage(null)
-  }, [transcript, exchange, summary, copilot, capture, session, trigger])
+  }, [session, transcript, exchange, summary, copilot, capture, trigger])
 
   // Master Save to History
   const handleMasterSaveToHistory = useCallback(async () => {

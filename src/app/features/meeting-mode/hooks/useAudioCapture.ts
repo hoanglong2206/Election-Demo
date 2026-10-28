@@ -50,6 +50,7 @@ export function useAudioCapture({
 
   const {
     isCapturing,
+    captureOwner,
     sourceType,
     setSourceType,
     startCapture,
@@ -59,7 +60,8 @@ export function useAudioCapture({
     setVadEnergyThreshold,
   } = useAudioPipeline()
 
-  const isListening = audioState === 'listening' || audioState === 'switching'
+  const isMeetingActive = isCapturing && (captureOwner === 'meeting' || captureOwner === null)
+  const isListening = (audioState === 'listening' || audioState === 'switching') && isMeetingActive
 
   // Context for chunk producer dispatch
   const getDispatchContext = useCallback((): ChunkDispatchContext => {
@@ -108,13 +110,14 @@ export function useAudioCapture({
     }
   }, [selectedDeviceId, isCapturing, sourceType, switchDevice])
 
-  // Synchronize state if capture stops externally (e.g. mic unplugged)
+  // Synchronize state if capture stops externally (e.g. mic unplugged) or owner changes
   useEffect(() => {
-    if (!isCapturing && (audioState === 'listening' || audioState === 'starting') && !isTogglingRef.current) {
+    const isOwnerLost = !isCapturing || (Boolean(captureOwner) && captureOwner !== 'meeting')
+    if (isOwnerLost && (audioState === 'listening' || audioState === 'starting') && !isTogglingRef.current) {
       setAudioState((prev) => transitionAudioState(prev, { type: 'STOP' }))
       setAudioState((prev) => transitionAudioState(prev, { type: 'STOPPED' }))
     }
-  }, [isCapturing, audioState])
+  }, [isCapturing, captureOwner, audioState])
 
   // Connect Audio Frames loop to ChunkProducer
   useEffect(() => {
@@ -176,7 +179,7 @@ export function useAudioCapture({
 
         setAudioState((prev) => transitionAudioState(prev, { type: 'START' }))
         try {
-          await startCapture()
+          await startCapture(sourceType, { owner: 'meeting', deviceId: selectedDeviceId })
           if (isMountedRef.current) {
             setAudioState((prev) => transitionAudioState(prev, { type: 'CAPTURE_READY' }))
           }
@@ -190,7 +193,7 @@ export function useAudioCapture({
     } finally {
       isTogglingRef.current = false
     }
-  }, [isListening, isCapturing, stopCapture, startCapture, getDispatchContext, onStoppedListening])
+  }, [isListening, isCapturing, stopCapture, startCapture, getDispatchContext, onStoppedListening, selectedDeviceId, sourceType])
 
   const handleSwitchSource = useCallback(
     async (newType: 'mic' | 'system') => {
@@ -214,7 +217,7 @@ export function useAudioCapture({
         switchTimerRef.current = setTimeout(async () => {
           if (!isMountedRef.current) return
           try {
-            await startCapture()
+            await startCapture(newType, { owner: 'meeting', deviceId: selectedDeviceId })
             setAudioState((prev) => transitionAudioState(prev, { type: 'SWITCH_COMPLETED' }))
           } catch (err) {
             console.warn('[useAudioCapture] restart capture on switch error:', err)
@@ -225,7 +228,7 @@ export function useAudioCapture({
         setAudioState((prev) => transitionAudioState(prev, { type: 'SWITCH_COMPLETED' }))
       }
     },
-    [sourceType, isCapturing, setSourceType, stopCapture, startCapture, getDispatchContext]
+    [sourceType, isCapturing, setSourceType, stopCapture, startCapture, getDispatchContext, selectedDeviceId]
   )
 
   useEffect(() => {

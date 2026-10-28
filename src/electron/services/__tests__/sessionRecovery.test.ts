@@ -246,4 +246,30 @@ describe('SessionRecoveryService Resilience & Durability', () => {
     expect(fs.existsSync(files.snapshot)).toBe(false)
     expect(fs.existsSync(files.journal)).toBe(false)
   })
+
+  it('6. Empty session filtering & auto-prune: should not list empty sessions without content and should prune them', () => {
+    const emptySessionId = 'empty_session_without_transcripts'
+    const files = {
+      snapshot: path.join(testDir, `${emptySessionId}.snapshot.json`),
+      journal: path.join(testDir, `${emptySessionId}.journal.ndjson`),
+    }
+
+    // Simulate an empty snapshot created at Giay 0 with no transcripts or questions
+    fs.writeFileSync(
+      files.snapshot,
+      JSON.stringify({
+        lifecycle: 'active',
+        sessionId: emptySessionId,
+        snapshot: { id: emptySessionId, title: 'Cuộc họp Live Copilot', mode: 'interview' },
+      }),
+      'utf8'
+    )
+    fs.writeFileSync(files.journal, '', 'utf8')
+
+    const unfinished = recoveryService.listUnfinished({ activeSessionId: 'different_active_session' })
+    expect(unfinished.some((r) => r.sessionId === emptySessionId)).toBe(false)
+    // Empty files should be automatically pruned
+    expect(fs.existsSync(files.snapshot)).toBe(false)
+    expect(fs.existsSync(files.journal)).toBe(false)
+  })
 })

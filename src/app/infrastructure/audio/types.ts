@@ -10,6 +10,8 @@ import type {
   PipelineStageInfo,
 } from '@/core/audio/types'
 
+export type AudioCaptureOwner = 'meeting' | 'audio-test' | null
+
 export type AudioPipelineLifecycleState =
   | 'idle'
   | 'starting'
@@ -22,6 +24,7 @@ export interface AudioPipelineState {
   isCapturing: boolean
   isStarting: boolean
   sourceType: AudioSourceType
+  captureOwner: AudioCaptureOwner
   volume: number
   db: number
   frequencyBands: number[]
@@ -57,7 +60,10 @@ export interface AudioPipelineControllerDeps {
 
 export interface AudioPipelineActions {
   setSourceType: (type: AudioSourceType) => void
-  startCapture: (sourceType?: AudioSourceType, options?: { deviceId?: string }) => Promise<void>
+  startCapture: (
+    sourceType?: AudioSourceType,
+    options?: { deviceId?: string; owner?: AudioCaptureOwner }
+  ) => Promise<void>
   stopCapture: () => void
   switchDevice: (deviceId: string) => Promise<void>
   playBuffer: () => Promise<void>

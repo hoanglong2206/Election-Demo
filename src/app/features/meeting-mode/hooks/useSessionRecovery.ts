@@ -13,6 +13,7 @@ export interface UseSessionRecoveryProps {
   meetingStartTime: number
   validLines: TranscriptLine[]
   visualQuestionsHistory: VisualQuestionItem[]
+  isSavedToHistory?: boolean
   onSessionRestored?: (recoveredSessionId: string) => void
 }
 
@@ -31,6 +32,7 @@ export function useSessionRecovery({
   meetingStartTime,
   validLines,
   visualQuestionsHistory,
+  isSavedToHistory = false,
   onSessionRestored,
 }: UseSessionRecoveryProps): UseSessionRecoveryReturn {
   const [unfinishedRecovery, setUnfinishedRecovery] = useState<any | null>(null)
@@ -42,12 +44,21 @@ export function useSessionRecovery({
   const sessionTitleRef = useRef(sessionTitle)
   const modeRef = useRef(mode)
   const visualQuestionsRef = useRef(visualQuestionsHistory)
+  const isSavedRef = useRef(isSavedToHistory)
 
   useEffect(() => {
     sessionTitleRef.current = sessionTitle
     modeRef.current = mode
     visualQuestionsRef.current = visualQuestionsHistory
   }, [sessionTitle, mode, visualQuestionsHistory])
+
+  // Theo dõi trạng thái đã lưu: nếu đã lưu thì complete recovery và khóa checkpoint
+  useEffect(() => {
+    isSavedRef.current = isSavedToHistory
+    if (isSavedToHistory && sessionId) {
+      void sessionsPort.recovery.complete(sessionId, 'completed')
+    }
+  }, [isSavedToHistory, sessionId])
 
   // Initial recovery scan (skipping currently active session)
   useEffect(() => {
@@ -66,8 +77,15 @@ export function useSessionRecovery({
     }
   }, [sessionId])
 
-  // Giây 0: Ngay khi bắt đầu phiên, ghi meeting:metadata và checkpoint đầu tiên
+  const hasRecordedMetaRef = useRef<string | null>(null)
+
+  // Ghi meeting:metadata và checkpoint lần đầu CHỈ KHI phiên họp thực sự có dữ liệu và chưa lưu
   useEffect(() => {
+    const hasContent = validLines.length > 0 || visualQuestionsHistory.length > 0
+    if (!hasContent || isSavedToHistory || hasRecordedMetaRef.current === sessionId) return
+
+    hasRecordedMetaRef.current = sessionId
+
     void sessionsPort.recovery
       .append({
         eventId: `meta:${sessionId}`,
@@ -82,7 +100,7 @@ export function useSessionRecovery({
           lifecycle: 'active',
         },
       })
-      .catch((error) => console.warn('[useSessionRecovery] Giây 0 metadata append failed:', error))
+      .catch((error) => console.warn('[useSessionRecovery] Metadata append failed:', error))
 
     void sessionsPort.recovery
       .checkpoint(sessionId, {
@@ -92,12 +110,12 @@ export function useSessionRecovery({
         startedAt: meetingStartTime,
         lifecycle: 'active',
       })
-      .catch((error) => console.warn('[useSessionRecovery] Giây 0 checkpoint failed:', error))
-  }, [sessionId, meetingStartTime])
+      .catch((error) => console.warn('[useSessionRecovery] Initial checkpoint failed:', error))
+  }, [sessionId, meetingStartTime, validLines.length, visualQuestionsHistory.length, isSavedToHistory])
 
   // Recovery Journaling: transcript:segment và late transcript:patch
   useEffect(() => {
-    if (validLines.length === 0) return
+    if (validLines.length === 0 || isSavedToHistory) return
 
     for (const line of validLines) {
       if (!line || line.id === undefined) continue
@@ -136,37 +154,43 @@ export function useSessionRecovery({
           .catch((error) => console.warn('[useSessionRecovery] Journal patch failed:', error))
       }
     }
-  }, [validLines, sessionId])
+  }, [validLines, sessionId, isSavedToHistory])
 
   const triggerCheckpoint = useCallback(() => {
-    if (!sessionId) return
+    if (!sessionId || isSavedRef.current) return
+    // Không ghi checkpoint nếu phiên họp chưa có dữ liệu nào hoặc đã lưu vào lịch sử
+    const hasContent = validLines.length > 0 || visualQuestionsRef.current.length > 0
+    if (!hasContent) return
 
     void sessionsPort.recovery
       .checkpoint(sessionId, {
         id: sessionId,
         title: sessionTitleRef.current,
         mode: modeRef.current,
+        startedAt: meetingStartTime,
         screenshotQuestions: visualQuestionsRef.current,
         usageRecords: [usageTrackerService.getSessionUsageSummary(sessionId)],
         lifecycle: 'active',
       })
       .catch((error) => console.warn('[useSessionRecovery] Checkpoint failed:', error))
-  }, [sessionId])
+  }, [sessionId, meetingStartTime, validLines.length])
 
   // Checkpoint Timer: MỘT interval (20s) cho cả phiên, không reset khi có dòng mới
   useEffect(() => {
     const timer = setInterval(triggerCheckpoint, 20000)
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
+      if (document.visibilityState === 'hidden' && !isSavedRef.current) {
         triggerCheckpoint()
         void sessionsPort.recovery.flush(sessionId)
       }
     }
 
     const handleBeforeUnload = () => {
-      triggerCheckpoint()
-      void sessionsPort.recovery.flush(sessionId)
+      if (!isSavedRef.current) {
+        triggerCheckpoint()
+        void sessionsPort.recovery.flush(sessionId)
+      }
     }
 
     window.addEventListener('visibilitychange', handleVisibilityChange)
@@ -188,6 +212,12 @@ export function useSessionRecovery({
 
     if (typeof recovered.id === 'string' && onSessionRestored) {
       onSessionRestored(recovered.id)
+    }
+
+    // Đánh dấu hoàn tất recovery cho phiên cũ để banner không xuất hiện lại
+    const recoverySessionId = unfinishedRecovery?.sessionId
+    if (recoverySessionId) {
+      void sessionsPort.recovery.complete(recoverySessionId, 'completed')
     }
 
     setUnfinishedRecovery(null)

@@ -417,6 +417,21 @@ export class SessionRecoveryService {
           }
           this.applyEventsToSnapshot(baseSnapshot, newEvents)
 
+          // Validate that the session actually has meaningful content
+          const transcripts = Array.isArray(baseSnapshot.transcripts) ? baseSnapshot.transcripts : []
+          const screenshotQuestions = Array.isArray(baseSnapshot.screenshotQuestions) ? baseSnapshot.screenshotQuestions : []
+          const suggestions = Array.isArray(baseSnapshot.suggestions) ? baseSnapshot.suggestions : []
+          const hasContent = transcripts.length > 0 || screenshotQuestions.length > 0 || suggestions.length > 0
+
+          if (!hasContent) {
+            // Prune empty orphan snapshot & journal files so they do not nag as unfinished sessions
+            try {
+              if (fs.existsSync(files.snapshot)) fs.unlinkSync(files.snapshot)
+              if (fs.existsSync(files.journal)) fs.unlinkSync(files.journal)
+            } catch {}
+            continue
+          }
+
           const snapshotUpdatedAt = Number(snapshotObj.updatedAt) || 0
           const lastEventTimestamp = events.length > 0 ? events[events.length - 1].timestamp : 0
           const updatedAt = Math.max(snapshotUpdatedAt, lastEventTimestamp, Math.round(latestMtime))
@@ -459,6 +474,21 @@ export class SessionRecoveryService {
         }
 
         this.applyEventsToSnapshot(reconstructed, events)
+
+        const reconstructedTranscripts = Array.isArray(reconstructed.transcripts) ? reconstructed.transcripts : []
+        const reconstructedScreenshots = Array.isArray(reconstructed.screenshotQuestions) ? reconstructed.screenshotQuestions : []
+        const reconstructedSuggestions = Array.isArray(reconstructed.suggestions) ? reconstructed.suggestions : []
+        const hasReconstructedContent =
+          reconstructedTranscripts.length > 0 ||
+          reconstructedScreenshots.length > 0 ||
+          reconstructedSuggestions.length > 0
+
+        if (!hasReconstructedContent) {
+          try {
+            if (fs.existsSync(files.journal)) fs.unlinkSync(files.journal)
+          } catch {}
+          continue
+        }
 
         const lastEventTime = events.length > 0 ? events[events.length - 1].timestamp : 0
         const updatedAt = Math.max(lastEventTime, Math.round(journalMtime))
