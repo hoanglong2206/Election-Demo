@@ -23,10 +23,9 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import type { AppMode } from '@/types/electron.d'
-import type { TranscriptLine } from '../types'
-import type { ScannedExchangeResult } from '../../../services/ai-model/copilot/scanLatestExchange'
-import type { STTQueueMetrics } from '../../../services/ai-model/stt'
 import { useVietnameseTranslation } from '@/hooks/useVietnameseTranslation'
+import type { TranscriptLine } from '../../types'
+import type { ScannedExchangeResult, STTQueueMetrics } from '@/services'
 
 interface LiveTranscriptPaneProps {
   sourceType: 'system' | 'mic'

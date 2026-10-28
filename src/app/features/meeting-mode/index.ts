@@ -1,7 +1,2 @@
-export * from './types'
 export * from './MeetingMode'
-export { MissingContextGuard } from './components/MissingContextGuard'
-export { MeetingHeader } from './components/MeetingHeader'
-export { LiveTranscriptPane } from './components/LiveTranscriptPane'
-export { CopilotSuggestionPane } from './components/CopilotSuggestionPane'
-export { MeetingFooter } from './components/MeetingFooter'
+export * from './types'

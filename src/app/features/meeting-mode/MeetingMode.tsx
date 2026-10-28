@@ -1,175 +1,57 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import type { AppMode } from '@/types/electron.d'
-import { getSavedMeetingContext } from '../../services/meetingContext'
+import { getSavedMeetingContext } from '@/services/meetingContext'
 import {
   getSavedAIModelId,
   getSelectedModelConfig,
   getSavedSTTEngineId,
   getAvailableSTTEngines,
-  getSavedResponseLanguage,
-  saveResponseLanguage,
-  normalizeResponseLanguage,
   needsVietnameseTranslation,
-  STORAGE_KEYS,
-  type ResponseLanguage,
-} from '../../services/ai-model/aiModels'
-import { getSavedAudioDeviceId, PRESET_AUDIO_DEVICES } from '../../services/audioDevices'
+} from '@/services/ai-model/aiModels'
 import {
-  saveSessionToHistoryAsync,
-  type MeetingSession,
-  type HistorySuggestion,
-} from '../../services/sessionHistory'
-import { useAudioPipeline } from '../../hooks/useAudioPipeline'
-import { useLatest } from '@/hooks/useLatest'
+  PRESET_AUDIO_DEVICES,
+  getSavedAudioDeviceId,
+} from '@/services/audioDevices'
 import {
-  sttJobQueue,
-  type STTJob,
-  type STTQueueMetrics,
   jdKeywordExtractor,
   whisperPromptBuilder,
-} from '../../services/ai-model/stt'
-import { profileContextService, type ProfilePresetSnapshot } from '../../services/profile-preset'
-import { summarizeMeetingTranscripts } from '../../services/ai-model/summaryService'
+} from '@/services/ai-model/stt'
 import {
-  analyzeCvBackground,
-  analyzeDiscussionBackground,
-  getCachedCvAnalysis,
-  getCachedDiscussionAnalysis,
-  generateDiscussionOptions,
-  isQuestionUtterance,
-  extractHeuristicLatestExchange,
-  assembleLatestExchange,
-  type ScannedExchangeResult,
-  prewarmCopilotCache,
-} from '../../services/ai-model/copilotResponseService'
-import type {
-  MeetingModeProps,
-  TranscriptLine,
-  AISuggestion,
-  InterviewVariation,
-} from './types'
-import { MissingContextGuard } from './components/MissingContextGuard'
-import { MeetingHeader } from './components/MeetingHeader'
-import { LiveTranscriptPane } from './components/LiveTranscriptPane'
-import { CopilotSuggestionPane } from './components/CopilotSuggestionPane'
-import { MeetingFooter } from './components/MeetingFooter'
-import { ScreenshotCropOverlay } from './components/ScreenshotCropOverlay'
-import { ScreenCaptureSourcePicker } from './components/ScreenCaptureSourcePicker'
+  profileContextService,
+  type ProfilePresetSnapshot,
+} from '@/services/profile-preset'
+import type { HistorySuggestion } from '@/services/sessionHistory'
+import type { ScreenCaptureState } from '@/services/screen-capture'
+import type { MeetingModeProps } from './types'
 import {
-  screenCaptureService,
-  visualQuestionAnalyzer,
-  ocrService,
-  type ScreenCaptureState,
-  type CapturedImageInfo,
-  type VisualQuestionItem,
-  type CropRect,
-} from '../../services/screen-capture'
+  useTranscript,
+  useMeetingSession,
+  useBackgroundAnalysis,
+  useExchangeScan,
+  useMeetingSummary,
+  useCopilotGeneration,
+  useIntentTrigger,
+  useAudioCapture,
+  useScreenCapture,
+  useSessionRecovery,
+  useMeetingHotkeys,
+} from './hooks'
 import {
-  getEffectiveVadEnergyThreshold,
-  getVADCalibration,
-} from '../../services/vad-calibration'
-import {
-  classifyIntent,
-  detectIntentFromRecentLines,
-  getAdaptiveDebounceMs,
-  speculativeRateLimiter,
-  type IntentDetectionResult,
-  type TriggerMode,
-  tieredContextManager,
-  type ContextUsageInfo,
-  type AnswerStrategyId,
-  validateAnswerGrounding,
-  validateAnswerGroundingAsync,
-} from '../../services/ai-model/copilot'
-import { settingsManager } from '../../services/settings/settingsManager'
-import { usageTrackerService } from '../../services/usage-tracker'
-import { useStreamingAnswer } from '@/hooks/useStreamingAnswer'
-import {
-  SpeechSegmenter,
-  type SpeechSegment,
-  type SpeechSegmentCloseReason,
-  speechSegmentationTelemetry,
-} from '../../core/audio'
-import { stitchFragments } from '../../services/ai-model/copilot/scanLatestExchange'
-import { translationService } from '../../services/ai-model/translation'
+  MeetingHeader,
+  MeetingFooter,
+  MissingContextGuard,
+  LiveTranscriptPane,
+  CopilotSuggestionPane,
+  ScreenCaptureSourcePicker,
+  ScreenshotCropOverlay,
+  UnfinishedSessionBanner,
+} from './components'
 
 export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
   const mode = controlledMode ?? internalMode
-  const [isListening, setIsListening] = useState(false)
-  const [isSavedToHistory, setIsSavedToHistory] = useState(false)
-  const [isShortened, setIsShortened] = useState(false)
-  const [isRegenerating, setIsRegenerating] = useState(false)
-  /** Ngôn ngữ phản hồi của AI (Settings → Ngôn ngữ phản hồi của AI). */
-  const [responseLang, setResponseLang] = useState<ResponseLanguage>(() =>
-    normalizeResponseLanguage(getSavedResponseLanguage())
-  )
-  const responseLangRef = useRef(responseLang)
-  useEffect(() => {
-    responseLangRef.current = responseLang
-  }, [responseLang])
-  const [answerStrategyOverride, setAnswerStrategyOverride] = useState<AnswerStrategyId | undefined>()
-  const [copiedAnswer, setCopiedAnswer] = useState(false)
-  const [copiedOptionId, setCopiedOptionId] = useState<number | null>(null)
 
-  // Real-time Audio Pipeline & STT
-  const {
-    isCapturing,
-    sourceType,
-    setSourceType,
-    startCapture,
-    stopCapture,
-    getAudioSegmentSince,
-    subscribeAudioFrames,
-    clearBuffer,
-    switchDevice,
-    setVadEnergyThreshold,
-  } = useAudioPipeline()
-
-  const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([])
-  const validLines = transcriptLines.filter((l): l is TranscriptLine => l != null)
-  const latestLine = validLines.length > 0 ? validLines[validLines.length - 1] : null
-
-  // Lifecycle, timer tracking & race condition guards
-  const isMountedRef = useRef(true)
-  const isTogglingAudioRef = useRef(false)
-  const isCapturingScreenRef = useRef(false)
-  const switchSourceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const retakeTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const copyAnswerTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const copyOptionTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const copySummaryTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const saveHistoryTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const validLinesRef = useRef<TranscriptLine[]>([])
-
-  // Latest Exchange auto-scanned from fragmented transcripts in original language
-  const [latestExchange, setLatestExchange] = useState<ScannedExchangeResult | null>(null)
-  const [isScanningExchange, setIsScanningExchange] = useState<boolean>(false)
-  const exchangeScanTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const latestExchangeRef = useRef<ScannedExchangeResult | null>(null)
-
-  useEffect(() => {
-    validLinesRef.current = validLines
-    latestExchangeRef.current = latestExchange
-  }, [validLines, latestExchange])
-  /** Chữ ký nội dung lần quét gần nhất — bỏ qua nếu lượt nói chưa đổi. */
-  const lastExchangeSignatureRef = useRef<string>('')
-  /** Thời điểm quét gần nhất — dùng để giãn nhịp gọi LLM. */
-  const lastExchangeScanAtRef = useRef<number>(0)
-
-  /** Ghi nhận vừa quét xong để bộ giãn nhịp biết mà bỏ qua các lần lặp. */
-  const markExchangeScanned = () => {
-    lastExchangeScanAtRef.current = Date.now()
-    lastExchangeSignatureRef.current =
-      extractHeuristicLatestExchange(validLines, mode)?.original || ''
-  }
-
-  // AI Meeting Summary State
-  const [meetingSummary, setMeetingSummary] = useState<string | null>(null)
-  const [isSummarizing, setIsSummarizing] = useState(false)
-  const [copiedSummary, setCopiedSummary] = useState(false)
-
-  // Load persistent settings
+  // Persistent settings & configs
   const contextData = getSavedMeetingContext()
   const selectedModelId = getSavedAIModelId()
   const currentModel = getSelectedModelConfig(selectedModelId)
@@ -224,1826 +106,171 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     })
   }, [activeKeywords, activeJD, contextData.discussionTopic, mode])
 
-  // Background Context Analysis
-  const [cvAnalysis, setCvAnalysis] = useState<string>(() => {
-    return getCachedCvAnalysis(activeCV, activeJD) || ''
-  })
-  const [discussionAnalysis, setDiscussionAnalysis] = useState<string>(() => {
-    return getCachedDiscussionAnalysis(contextData.discussionTopic || '') || ''
-  })
-  const [isAnalyzingBackground, setIsAnalyzingBackground] = useState<boolean>(false)
-  const analyzedKeyRef = useRef<string>('')
-
-  // Dynamic AI Copilot Responses
-  const [customInterviewAnswer, setCustomInterviewAnswer] = useState<InterviewVariation | null>(null)
-  const [customDiscussionSuggestions, setCustomDiscussionSuggestions] = useState<AISuggestion[] | null>(null)
-  const [isLatestAQuestion, setIsLatestAQuestion] = useState<boolean>(false)
-  const [isGeneratingAIResponse, setIsGeneratingAIResponse] = useState<boolean>(false)
-  const isGeneratingAIResponseRef = useRef<boolean>(false)
-  useEffect(() => {
-    isGeneratingAIResponseRef.current = isGeneratingAIResponse
-  }, [isGeneratingAIResponse])
-
-  const streamingAnswer = useStreamingAnswer()
-
-  const handleToggleCorrectedAnswer = useCallback(() => {
-    setCustomInterviewAnswer((prev) => {
-      if (!prev || !prev.grounding?.correctedAnswer) return prev
-      const applied = !prev.appliedCorrected
-      return {
-        ...prev,
-        appliedCorrected: applied,
-        content: applied
-          ? prev.grounding.correctedAnswer
-          : prev.grounding.originalAnswer || prev.content,
-      }
-    })
-  }, [])
-  const aiSuggestionsHistoryRef = useRef<HistorySuggestion[]>([])
-  /** Lỗi khi gọi LLM — hiển thị thẳng cho người dùng thay vì nội dung giả. */
-  const [aiError, setAiError] = useState<string | null>(null)
-  /** Lỗi khi gọi LLM tóm tắt cuộc họp. */
-  const [summaryError, setSummaryError] = useState<string | null>(null)
-
-  // ── Screenshot Capture & Multimodal Visual Analysis ──────────────────────
-  const [screenCaptureState, setScreenCaptureState] = useState<ScreenCaptureState>('idle')
-  const [isScreenSourcePickerOpen, setIsScreenSourcePickerOpen] = useState(false)
-  const [capturedImageInfo, setCapturedImageInfo] = useState<CapturedImageInfo | null>(null)
-  const [activeVisualQuestion, setActiveVisualQuestion] = useState<VisualQuestionItem | null>(null)
-  const [visualQuestionsHistory, setVisualQuestionsHistory] = useState<VisualQuestionItem[]>([])
-  const [initialStartTime] = useState(() => Date.now())
-  const meetingStartTimeRef = useRef<number>(initialStartTime)
-
-  // Keep references updated for leak-free unmount cleanup
-  const capturedImageInfoRef = useRef<CapturedImageInfo | null>(null)
-  const activeVisualQuestionRef = useRef<VisualQuestionItem | null>(null)
-  const visualQuestionsHistoryRef = useRef<VisualQuestionItem[]>([])
-  const lastScreenSourceRef = useRef<{ sourceType: 'screen' | 'window'; sourceId?: string }>({
-    sourceType: 'screen',
-  })
-
-  useEffect(() => {
-    capturedImageInfoRef.current = capturedImageInfo
-    activeVisualQuestionRef.current = activeVisualQuestion
-    visualQuestionsHistoryRef.current = visualQuestionsHistory
-  }, [capturedImageInfo, activeVisualQuestion, visualQuestionsHistory])
-
-  // Intelligent Copilot Trigger Mode & Intent Detection
-  const [triggerMode, setTriggerMode] = useState<TriggerMode>(() => {
-    return (settingsManager.get('triggerMode') as TriggerMode) || 'auto'
-  })
-  const [latestIntent, setLatestIntent] = useState<IntentDetectionResult | null>(null)
-  const [semiAutoPendingQuestion, setSemiAutoPendingQuestion] = useState<string | null>(null)
-  const [contextUsage, setContextUsage] = useState<ContextUsageInfo | null>(null)
-  const copilotDebounceTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  const handleTriggerModeChange = (newMode: TriggerMode) => {
-    setTriggerMode(newMode)
-    settingsManager.set('triggerMode', newMode)
-  }
-
-  const [isTranscribing, setIsTranscribing] = useState(false)
-  const [queueMetrics, setQueueMetrics] = useState<STTQueueMetrics>(() => sttJobQueue.getMetrics())
-  const sequenceIdRef = useRef(1)
-  const [initialSessionId] = useState(() => `session_${Date.now()}`)
-  const sessionIdRef = useRef<string>(initialSessionId)
-  const [unfinishedRecovery, setUnfinishedRecovery] = useState<any | null>(null)
-  const [isRecoveryOpen, setIsRecoveryOpen] = useState(true)
-  const lastProcessedSampleRef = useRef(0)
-  const lastTranscriptTextRef = useRef<string>('')
-  const speechSegmenterRef = useRef<SpeechSegmenter | null>(null)
-  const lastCloseReasonRef = useRef<SpeechSegmentCloseReason | undefined>(undefined)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const aiSuggestionsHistoryRef = useRef<HistorySuggestion[]>([])
 
-  // STT Input Audio Language (Default to 'vi' for Vietnamese speech accuracy)
-  const [sttLang, setSttLang] = useState<'auto' | 'vi' | 'en'>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.STT_LANGUAGE)
-    return saved === 'en' || saved === 'auto' ? saved : 'vi'
+  // 1. Session Manager
+  const session = useMeetingSession({
+    mode,
+    profileSnapshot,
+    discussionTopic: contextData.discussionTopic,
+    currentModelName: currentModel.name,
+    currentModelProvider: currentModel.provider,
+    currentDeviceLabel,
+    hasInterviewContext,
+    hasDiscussionContext,
+    hasActiveContext,
+    activeCV,
   })
 
-  const handleRestoreRecovery = () => {
-    const recovered = unfinishedRecovery?.snapshot
-    if (!recovered) return
-    const recoveredLines = Array.isArray(recovered.transcripts) ? recovered.transcripts : []
-    setTranscriptLines(recoveredLines)
-    if (typeof recovered.id === 'string') sessionIdRef.current = recovered.id
-    setUnfinishedRecovery(null)
-    setIsRecoveryOpen(false)
-  }
+  // 2. Meeting Summary
+  const summary = useMeetingSummary()
 
-  const handleCompleteRecovery = async (lifecycle: 'completed' | 'discarded') => {
-    const sessionId = unfinishedRecovery?.sessionId
-    if (sessionId) await window.api.sessions?.recovery?.complete(sessionId, lifecycle)
-    setUnfinishedRecovery(null)
-    setIsRecoveryOpen(false)
-  }
-
-  const handleSttLangChange = (lang: 'auto' | 'vi' | 'en') => {
-    setSttLang(lang)
-    localStorage.setItem(STORAGE_KEYS.STT_LANGUAGE, lang)
-  }
-
-  // Run background analysis strictly ONCE per unique context
-  useEffect(() => {
-    let isMounted = true
-    const currentKey =
-      mode === 'interview'
-        ? `interview_${activeCV.trim()}:::${activeJD.trim()}`
-        : `discussion_${contextData.discussionTopic?.trim() || ''}`
-
-    if (analyzedKeyRef.current === currentKey) return
-    analyzedKeyRef.current = currentKey
-
-    const runBackgroundAnalysis = async () => {
-      if (mode === 'interview') {
-        const cached = getCachedCvAnalysis(activeCV, activeJD)
-        if (cached) {
-          if (isMounted) setCvAnalysis(cached)
-          return
-        }
-      } else {
-        const cached = getCachedDiscussionAnalysis(contextData.discussionTopic || '')
-        if (cached) {
-          if (isMounted) setDiscussionAnalysis(cached)
-          return
-        }
-      }
-
-      if (
-        (mode === 'interview' && (activeCV || activeJD)) ||
-        (mode === 'discussion' && contextData.discussionTopic)
-      ) {
-        if (isMounted) setIsAnalyzingBackground(true)
-        try {
-          if (mode === 'interview') {
-            const result = await analyzeCvBackground(activeCV, activeJD)
-            if (isMounted) setCvAnalysis(result)
-          } else {
-            const result = await analyzeDiscussionBackground(contextData.discussionTopic || '')
-            if (isMounted) setDiscussionAnalysis(result)
-          }
-        } catch (err) {
-          console.warn('[MeetingMode] Background analysis error:', err)
-        } finally {
-          if (isMounted) setIsAnalyzingBackground(false)
-        }
-      }
-    }
-    runBackgroundAnalysis()
-    return () => {
-      isMounted = false
-    }
-  }, [mode, activeCV, activeJD, contextData.discussionTopic])
-
-  // Synchronize Tier 1 Permanent Context to TieredContextManager
-  useEffect(() => {
-    tieredContextManager.setPermanentContext({
-      cvSummary: activeCV,
-      jobDescription: activeJD,
-      role: mode === 'interview' ? profileSnapshot.role : undefined,
-      companyName: mode === 'interview' ? profileSnapshot.companyName : undefined,
-      customInstructions: mode === 'interview' ? profileSnapshot.customInstructions : undefined,
-      presetName: mode === 'interview' ? profileSnapshot.name : undefined,
-      discussionTopic: contextData.discussionTopic,
-      meetingObjective: contextData.discussionTopic,
-      backgroundAnalysis: mode === 'interview' ? cvAnalysis : discussionAnalysis,
-    })
-  }, [activeCV, activeJD, profileSnapshot, contextData, mode, cvAnalysis, discussionAnalysis])
-
-  const lastWarmedKeyRef = useRef<string>('')
-
-  // Pre-warm LLM prompt cache when meeting starts with an active CV
-  useEffect(() => {
-    if (mode !== 'interview' || !activeCV || !activeCV.trim()) return
-    const warmKey = `${activeCV.trim()}::${activeJD.trim()}`
-    if (lastWarmedKeyRef.current === warmKey) return
-    lastWarmedKeyRef.current = warmKey
-
-    prewarmCopilotCache({
-      cvSummary: activeCV,
-      jobDescription: activeJD,
-      backgroundAnalysis: cvAnalysis,
-      role: profileSnapshot.role,
-      companyName: profileSnapshot.companyName,
-      customInstructions: profileSnapshot.customInstructions,
-      sessionId: sessionIdRef.current,
-    }).catch(() => {})
-  }, [mode, activeCV, activeJD, cvAnalysis, profileSnapshot])
-
-  // Sync initial audio source type based on selected audio device
-  useEffect(() => {
-    const devId = selectedDeviceId.toLowerCase()
-    if (devId.includes('mic') || devId.includes('input')) {
-      setSourceType('mic')
-    } else {
-      setSourceType('system')
-    }
-  }, [selectedDeviceId, setSourceType])
-
-  // Synchronize isListening if capture ends unexpectedly or externally (e.g. mic unplugged)
-  useEffect(() => {
-    if (!isCapturing && isListening && !isTogglingAudioRef.current) {
-      setIsListening(false)
-    }
-  }, [isCapturing, isListening])
-
-  // Dynamically switch microphone device on the fly without restarting meeting session
-  useEffect(() => {
-    if (isCapturing && sourceType === 'mic' && selectedDeviceId) {
-      switchDevice(selectedDeviceId).catch((err) =>
-        console.warn('[MeetingMode] switchDevice on the fly error:', err)
-      )
-    }
-  }, [selectedDeviceId, isCapturing, sourceType, switchDevice])
-
-  // Synchronize calibrated VAD speech threshold for active microphone device
-  useEffect(() => {
-    if (selectedDeviceId) {
-      const effectiveThreshold = getEffectiveVadEnergyThreshold(selectedDeviceId)
-      setVadEnergyThreshold(effectiveThreshold)
-      const calib = getVADCalibration(selectedDeviceId)
-      if (calib) {
-        console.log(
-          `[MeetingMode] Loaded calibrated VAD threshold for device "${selectedDeviceId}": ${calib.speechThresholdDbfs} dBFS (${calib.quality})`
-        )
-      }
-    }
-  }, [selectedDeviceId, setVadEnergyThreshold])
-
-  // ── 1. Hot-swap STT provider and concurrency limit on engine change ─────────
-  useEffect(() => {
-    sttJobQueue.handleProviderSwitch(savedSTTEngineId)
-  }, [savedSTTEngineId])
-
-  // ── 2. Subscribe to STTJobQueue metrics and TranscriptAssembler monotonic commits ─
-  useEffect(() => {
-    // Pre-warm the persistent whisper-server with 1s silence on Meeting Mode mount
-    if (window.api?.nativeWhisper?.prewarm) {
-      window.api.nativeWhisper.prewarm().catch((err) => {
-        console.warn('[MeetingMode] STT Prewarm warning:', err)
-      })
-    }
-
-    const unsubMetrics = sttJobQueue.subscribe((m) => {
-      setQueueMetrics(m)
-      setIsTranscribing(m.processingJobs > 0 || m.queueDepth > 0)
-    })
-
-    const unsubCommit = sttJobQueue.assembler.onCommit((commit) => {
-      const {
-        result,
-        speakerLabel,
-        timestampStr,
-        closeReason,
-        continuation,
-        endOfSpeechTimestampMs,
-      } = commit
-
-      if (result.success && result.text.trim()) {
-        lastTranscriptTextRef.current = result.text.trim()
-        lastCloseReasonRef.current = closeReason
-
-        // Telemetry: measure utterance-end to UI transcript commit latency
-        if (endOfSpeechTimestampMs) {
-          speechSegmentationTelemetry.recordCommitLatency(endOfSpeechTimestampMs)
-        }
-
-        const newLine: TranscriptLine = {
-          id: Date.now() + Math.random(),
-          timestamp: timestampStr || '00:00',
-          original: result.text,
-          translated: result.translatedVi || result.text,
-          speaker: speakerLabel || 'Speaker',
-        }
-
-        let targetLineId = newLine.id
-        let textToTranslate = result.text
-
-        setTranscriptLines((prev) => {
-          if (prev.length === 0) return [newLine]
-
-          const lastLine = prev[prev.length - 1]
-
-          // ── Continuation Stitching ──────────────────────────────────────────
-          // Segment with continuation=true (split at energy valley) is stitched with
-          // the previous segment instead of deduplicating or treating as an isolated line!
-          if (continuation && lastLine.speaker === newLine.speaker) {
-            targetLineId = lastLine.id
-            const combinedOriginal = stitchFragments([lastLine.original, result.text])
-            textToTranslate = combinedOriginal
-            const combinedTranslated = stitchFragments([
-              lastLine.translated,
-              result.translatedVi || result.text,
-            ])
-            const updatedLine: TranscriptLine = {
-              ...lastLine,
-              original: combinedOriginal,
-              translated: combinedTranslated,
-            }
-            return [...prev.slice(0, -1), updatedLine]
-          }
-
-          if (
-            lastLine.original.trim().toLowerCase() === result.text.trim().toLowerCase()
-          ) {
-            targetLineId = 0
-            return prev
-          }
-          return [...prev, newLine]
-        })
-
-        // ── Non-blocking Background Translation (Decoupled from STT/Commit) ──
-        if (targetLineId !== 0) {
-          const shouldTranslate =
-            needsVietnameseTranslation(responseLangRef.current) &&
-            settingsManager.get('translationEnabled')
-          const isLocalOnly = settingsManager.get('modelRouterPolicy') === 'local-only'
-          const isOffline = typeof navigator !== 'undefined' && !navigator.onLine
-
-          if (shouldTranslate && !isLocalOnly && !isOffline) {
-            const capturedTargetId = targetLineId
-            translationService.enqueueLine({
-              id: capturedTargetId,
-              text: textToTranslate,
-              sttReportedLang: sttLang,
-              onTranslate: (translated, status) => {
-                if (status === 'translated' && translated && translated !== textToTranslate) {
-                  setTranscriptLines((prev) =>
-                    prev.map((line) =>
-                      line.id === capturedTargetId ? { ...line, translated } : line
-                    )
-                  )
-                }
-              },
-            })
-          }
-        }
-      }
-    })
-
-    return () => {
-      unsubMetrics()
-      unsubCommit()
-    }
-  }, [])
-
-  // ── 3. Real-time Audio Chunk Producer Loop (Audio → SpeechSegmenter / VAD → STTJobQueue) ──────
-  useEffect(() => {
-    // Helper to dispatch completed speech segment to STTJobQueue
-    const dispatchSegmentToSTT = (segment: SpeechSegment) => {
-      speechSegmentationTelemetry.recordSegmentClosed(segment)
-
-      const seqId = sequenceIdRef.current++
-      const now = new Date()
-      const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-
-      const speakerLabel =
-        mode === 'interview'
-          ? sourceType === 'system'
-            ? 'Interviewer'
-            : 'You'
-          : sourceType === 'system'
-          ? 'Cuộc họp'
-          : 'You'
-
-      const dynamicPrompt =
-        whisperPromptBuilder.buildPrompt(activeKeywords || [], {
-          contextType: mode,
-          previousTranscript: lastTranscriptTextRef.current,
-        }) || whisperPrompt || undefined
-
-      const job: STTJob = {
-        jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
-        sessionId: sessionIdRef.current,
-        sequenceId: seqId,
-        audioBuffer: segment.blob,
-        hasSpeech: segment.hasSpeech,
-        createdAt: Date.now(),
-        priority: segment.hasSpeech ? 1 : 0,
-        engineId: getSavedSTTEngineId(),
-        language: sttLang,
-        sourceType,
-        speakerLabel,
-        timestampStr: timeStr,
-        prompt: dynamicPrompt,
-        startSample: segment.startSample,
-        endSample: segment.endSample,
-        durationMs: segment.durationMs,
-        closeReason: segment.closeReason,
-        continuation: segment.continuation,
-        endOfSpeechTimestampMs: segment.endOfSpeechTimestampMs,
-      }
-
-      sttJobQueue.enqueue(job)
-    }
-
-    if (!isCapturing || !isListening) {
-      sttJobQueue.pause()
-      // Flush in-progress speech segment before pausing so trailing words aren't lost
-      if (speechSegmenterRef.current) {
-        const flushed = speechSegmenterRef.current.flush()
-        if (flushed && flushed.hasSpeech) {
-          dispatchSegmentToSTT(flushed)
-        }
-      }
-      return
-    }
-
-    sttJobQueue.resume()
-
-    const currentSettings = settingsManager.getSettings()
-    const segmentationMode = currentSettings.audio.segmentationMode || 'sentence'
-    const silenceEndMs = currentSettings.audio.silenceEndMs || 400
-    const maxSegmentMs = currentSettings.audio.maxSegmentMs || 4500
-    const effectiveVadRms = getEffectiveVadEnergyThreshold(selectedDeviceId)
-
-    if (segmentationMode === 'sentence') {
-      // ── Pure Sentence Boundary Segmentation Mode (SpeechSegmenter) ───────
-      speechSegmenterRef.current = new SpeechSegmenter({
-        sampleRate: 16000,
-        silenceEndMs,
-        maxSegmentMs,
-        vadThresholdRms: effectiveVadRms,
-      })
-
-      // Frame loop from real-time WebAudio capture: zero timer overhead, event-driven
-      const unsubFrames = subscribeAudioFrames((pcm16, totalSamples) => {
-        if (!isMountedRef.current || !isCapturing || !isListening) return
-        if (!speechSegmenterRef.current) return
-
-        const closedSegments = speechSegmenterRef.current.feed(pcm16, totalSamples)
-        for (const seg of closedSegments) {
-          dispatchSegmentToSTT(seg)
-        }
-      })
-
-      return () => {
-        unsubFrames()
-        if (speechSegmenterRef.current) {
-          const flushed = speechSegmenterRef.current.flush()
-          if (flushed && flushed.hasSpeech) {
-            dispatchSegmentToSTT(flushed)
-          }
-          speechSegmenterRef.current.reset()
-        }
-        sttJobQueue.pause()
-      }
-    } else {
-      // ── Rollback / Fallback: Legacy Fixed 1.0s Interval Slicing ──────────
-      const intervalTimer = setInterval(() => {
-        const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 1.2)
-        if (!segment) return
-
-        lastProcessedSampleRef.current = segment.endSample
-
-        const seqId = sequenceIdRef.current++
-        const now = new Date()
-        const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-
-        const speakerLabel =
-          mode === 'interview'
-            ? sourceType === 'system'
-              ? 'Interviewer'
-              : 'You'
-            : sourceType === 'system'
-            ? 'Cuộc họp'
-            : 'You'
-
-        const dynamicPrompt =
-          whisperPromptBuilder.buildPrompt(activeKeywords || [], {
-            contextType: mode,
-            previousTranscript: lastTranscriptTextRef.current,
-          }) || whisperPrompt || undefined
-
-        const job: STTJob = {
-          jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
-          sessionId: sessionIdRef.current,
-          sequenceId: seqId,
-          audioBuffer: segment.blob,
-          hasSpeech: segment.hasAudio,
-          createdAt: Date.now(),
-          priority: segment.hasAudio ? 1 : 0,
-          engineId: getSavedSTTEngineId(),
-          language: sttLang,
-          sourceType,
-          speakerLabel,
-          timestampStr: timeStr,
-          prompt: dynamicPrompt,
-          closeReason: 'silence',
-        }
-
-        sttJobQueue.enqueue(job)
-      }, 1000)
-
-      return () => {
-        clearInterval(intervalTimer)
-        sttJobQueue.pause()
-      }
-    }
-  }, [
-    isCapturing,
-    isListening,
-    getAudioSegmentSince,
-    subscribeAudioFrames,
+  // 3. Background Context Analysis & Cache Prewarm
+  const background = useBackgroundAnalysis({
     mode,
-    sourceType,
-    sttLang,
-    whisperPrompt,
-    activeKeywords,
-    selectedDeviceId,
-  ])
-
-  // ── Meeting Lifecycle & Component Unmount Cleanup (Streams, Workers, Timers, Buffers) ──
-  useEffect(() => {
-    isMountedRef.current = true
-    return () => {
-      isMountedRef.current = false
-      stopCapture()
-      clearBuffer()
-      sttJobQueue.pause()
-      sttJobQueue.clear()
-
-      // Clean up all pending timers
-      if (copilotDebounceTimerRef.current) clearTimeout(copilotDebounceTimerRef.current)
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      if (exchangeScanTimerRef.current) clearTimeout(exchangeScanTimerRef.current)
-      if (switchSourceTimerRef.current) clearTimeout(switchSourceTimerRef.current)
-      if (retakeTimerRef.current) clearTimeout(retakeTimerRef.current)
-      if (copyAnswerTimerRef.current) clearTimeout(copyAnswerTimerRef.current)
-      if (copyOptionTimerRef.current) clearTimeout(copyOptionTimerRef.current)
-      if (copySummaryTimerRef.current) clearTimeout(copySummaryTimerRef.current)
-      if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current)
-
-      // Clean up all active and historical screenshot buffers from refs (no stale closures)
-      if (capturedImageInfoRef.current?.dataUrl) {
-        screenCaptureService.releaseMemory(capturedImageInfoRef.current.dataUrl)
-      }
-      if (activeVisualQuestionRef.current?.thumbnailUrl) {
-        screenCaptureService.releaseMemory(activeVisualQuestionRef.current.thumbnailUrl)
-      }
-      for (const vq of visualQuestionsHistoryRef.current) {
-        if (vq.thumbnailUrl) {
-          screenCaptureService.releaseMemory(vq.thumbnailUrl)
-        }
-      }
-    }
-  }, [stopCapture, clearBuffer])
-
-  // Summarize meeting transcripts using AI
-  const handleGenerateSummary = async (
-    linesToSummarize: TranscriptLine[]
-  ): Promise<string | null> => {
-    if (!linesToSummarize || linesToSummarize.length === 0) {
-      setSummaryError('Chưa có transcript để tóm tắt.')
-      return null
-    }
-    setIsSummarizing(true)
-    setSummaryError(null)
-    try {
-      const summary = await summarizeMeetingTranscripts(linesToSummarize, mode, responseLang)
-      if (!summary) {
-        setMeetingSummary(null)
-        setSummaryError(
-          'Không nhận được tóm tắt từ LLM. Kiểm tra API Key trong tab Cài đặt rồi bấm "Tóm tắt lại".'
-        )
-        return null
-      }
-      setMeetingSummary(summary)
-      return summary
-    } catch (err) {
-      console.warn('[MeetingMode] summarize error:', err)
-      setMeetingSummary(null)
-      setSummaryError((err as Error)?.message || 'Lỗi khi gọi LLM tóm tắt.')
-      return null
-    } finally {
-      setIsSummarizing(false)
-    }
-  }
-
-  /**
-   * Generate intelligent response when user stops listening.
-   *
-   * `summaryOverride` lets the caller hand over the freshly generated summary —
-   * React state is not updated yet at that point, and the suggestions must be
-   * grounded on the real conversation instead of a stale/empty summary.
-   */
-  const handleGenerateCopilotResponse = useCallback(
-    async (
-      lines: TranscriptLine[],
-      summaryOverride?: string | null,
-      scannedOverride?: ScannedExchangeResult | null
-    ) => {
-    if (!lines || lines.length === 0) {
-      setAiError('Chưa có nội dung transcript. Hãy thu âm cuộc họp rồi bấm Dừng để AI phân tích.')
-      return
-    }
-
-    // Lấy nội dung trao đổi gần nhất bằng NGÔN NGỮ GỐC (đã qua AI quét ghép nối hoặc heuristic)
-    const currentExchange =
-      scannedOverride ||
-      latestExchangeRef.current ||
-      extractHeuristicLatestExchange(lines, mode)
-
-    const exchangeOriginalText = (
-      currentExchange?.original ||
-      lines[lines.length - 1].original ||
-      ''
-    ).trim()
-
-    const isQ =
-      isQuestionUtterance(exchangeOriginalText) || (currentExchange?.isQuestion ?? false)
-    setIsLatestAQuestion(isQ)
-
-    setIsGeneratingAIResponse(true)
-    setAiError(null)
-    try {
-      if (mode === 'interview') {
-        const questionText = exchangeOriginalText
-        const activeCvBg = cvAnalysis || getCachedCvAnalysis(activeCV, activeJD) || ''
-        const answerId = Date.now()
-
-        performance.mark('question_final')
-        streamingAnswer.cancelStream()
-
-        await streamingAnswer.startStream(
-          {
-            question: questionText,
-            fullTurnText: currentExchange?.fullTurnText,
-            cvSummary: activeCV,
-            backgroundAnalysis: activeCvBg,
-            transcriptLines: lines,
-            language: responseLang,
-            sessionId: sessionIdRef.current,
-            intent: latestIntent,
-            strategyOverride: answerStrategyOverride,
-          },
-          {
-            onInit: (init) => {
-              if (!isMountedRef.current) return
-              setContextUsage(init.contextUsage)
-              setCustomInterviewAnswer({
-                id: answerId,
-                type: 'answer',
-                label: init.label,
-                content: '',
-                shortContent: '',
-                confidence: 97,
-                contextUsage: init.contextUsage,
-                strategy: init.strategy,
-                retrieval: init.retrieval,
-                isStreaming: true,
-                streamingState: 'connecting',
-              })
-            },
-            onGateDecision: (decision) => {
-              if (!isMountedRef.current) return
-              console.log(`[IntentGate] Gate resolved: ${decision.intent} (conf: ${decision.confidence.toFixed(2)})`)
-              setLatestIntent((prev) => {
-                if (!prev) return prev
-                return {
-                  ...prev,
-                  normalizedIntent: decision.intent,
-                  confidence: decision.confidence,
-                  gateRequired: false,
-                  isAmbiguous: false,
-                }
-              })
-            },
-            onFirstToken: (ttftMs) => {
-              performance.mark('first_delta')
-              try {
-                performance.measure('question_to_first_delta', 'question_final', 'first_delta')
-                const measure = performance.getEntriesByName('question_to_first_delta').pop()
-                console.log(
-                  `[InterviewStreaming] TTFT: ${Math.round(measure?.duration ?? ttftMs)}ms (p50 target <= 1000ms)`
-                )
-              } catch {}
-              try {
-                performance.measure('stop_to_first_delta', 'stop_listening_click', 'first_delta')
-                const stopMeasure = performance.getEntriesByName('stop_to_first_delta').pop()
-                if (stopMeasure) {
-                  console.log(
-                    `[Telemetry] Stop -> First Token: ${Math.round(stopMeasure.duration)}ms (Target < 1500ms, LLM calls: 1)`
-                  )
-                }
-              } catch {}
-            },
-            onDelta: (_delta, currentFullText) => {
-              if (!isMountedRef.current) return
-              setCustomInterviewAnswer((prev) =>
-                prev && prev.id === answerId
-                  ? {
-                      ...prev,
-                      content: currentFullText,
-                      isStreaming: true,
-                      streamingState: 'streaming',
-                    }
-                  : prev
-              )
-            },
-            onDone: (res) => {
-              if (!isMountedRef.current) return
-              performance.mark('stream_done')
-              setIsGeneratingAIResponse(false)
-
-              setCustomInterviewAnswer((prev) =>
-                prev && prev.id === answerId
-                  ? {
-                      ...prev,
-                      content: res.content,
-                      shortContent: res.shortContent,
-                      modelName: res.modelName,
-                      routing: res.routing,
-                      failover: res.failover,
-                      isStreaming: false,
-                      streamingState: 'done',
-                    }
-                  : prev
-              )
-
-              // Grounding validation runs ASYNCHRONOUSLY after done, never replacing active reading text
-              void (async () => {
-                try {
-                  const groundingInput = {
-                    answer: res.content,
-                    cv: activeCV,
-                    profile: activeCV,
-                    transcript: lines.map((l) => `${l.speaker}: ${l.original}`).join('\n'),
-                    session: [
-                      activeCvBg,
-                      res.retrieval?.citations?.map((c: any) => c.text).join('\n'),
-                    ]
-                      .filter(Boolean)
-                      .join('\n\n'),
-                    mode: 'balanced' as const,
-                  }
-
-                  // 1. Immediate Tier 1 sync grounding for fast badge rendering
-                  const syncGrounding = validateAnswerGrounding(groundingInput)
-                  if (isMountedRef.current) {
-                    setCustomInterviewAnswer((prev) =>
-                      prev && prev.id === answerId ? { ...prev, grounding: syncGrounding } : prev
-                    )
-                  }
-
-                  // 2. Tier 2 LLM Judge async evaluation in background
-                  const asyncGrounding = await validateAnswerGroundingAsync(groundingInput)
-                  if (isMountedRef.current) {
-                    setCustomInterviewAnswer((prev) =>
-                      prev && prev.id === answerId ? { ...prev, grounding: asyncGrounding } : prev
-                    )
-                  }
-                } catch (gErr) {
-                  console.warn('[MeetingMode] Async grounding error:', gErr)
-                }
-              })()
-
-              // Save recovery & history only when stream completes
-              void window.api?.sessions?.recovery?.append({
-                eventId: `suggestion:${sessionIdRef.current}:${answerId}`,
-                sessionId: sessionIdRef.current,
-                type: 'suggestion',
-                timestamp: Date.now(),
-                payload: {
-                  id: answerId,
-                  type: 'answer',
-                  label: res.label,
-                  content: res.content,
-                  confidence: res.confidence,
-                  retrieval: res.retrieval,
-                  routing: res.routing,
-                  failover: res.failover,
-                },
-              })
-
-              const lastLine = lines[lines.length - 1]
-              aiSuggestionsHistoryRef.current.push({
-                id: answerId,
-                type: 'answer',
-                label: res.label,
-                content: res.content,
-                confidence: res.confidence,
-                retrieval: res.retrieval,
-                routing: res.routing,
-                failover: res.failover,
-                timestamp: lastLine?.timestamp || '00:00',
-                timestampMs: Date.now(),
-                triggeredByTranscriptId: lastLine?.id,
-                tokenUsage: res.contextUsage
-                  ? {
-                      promptTokens: res.contextUsage.totalTokens,
-                      totalTokens: res.contextUsage.totalTokens,
-                      costStatus: 'unknown',
-                    }
-                  : undefined,
-              })
-            },
-            onError: (err, partialText) => {
-              if (!isMountedRef.current) return
-              setIsGeneratingAIResponse(false)
-              const isGateAbort = err.message?.includes('Intent Gate')
-              if (isGateAbort) {
-                // Zero UI flicker: cancelled early before emitting any content
-                setCustomInterviewAnswer(null)
-                setAiError(null)
-                return
-              }
-              if (partialText && partialText.trim()) {
-                setCustomInterviewAnswer((prev) =>
-                  prev && prev.id === answerId
-                    ? {
-                        ...prev,
-                        content: partialText,
-                        isStreaming: false,
-                        streamingState: 'interrupted',
-                      }
-                    : prev
-                )
-                const lastLine = lines[lines.length - 1]
-                aiSuggestionsHistoryRef.current.push({
-                  id: answerId,
-                  type: 'answer',
-                  label: '⚠️ Đã dừng giữa chừng',
-                  content: partialText,
-                  confidence: 80,
-                  timestamp: lastLine?.timestamp || '00:00',
-                  timestampMs: Date.now(),
-                  triggeredByTranscriptId: lastLine?.id,
-                })
-              } else {
-                setCustomInterviewAnswer(null)
-                setAiError(
-                  err?.message ||
-                    'Không gọi được LLM. Hãy kiểm tra API Key (Groq / Gemini / OpenAI) trong tab Cài đặt rồi thử lại.'
-                )
-              }
-            },
-          }
-        )
-      } else {
-        // Ưu tiên tóm tắt vừa sinh (state React chưa kịp cập nhật ở thời điểm này).
-        const summaryText = summaryOverride ?? meetingSummary ?? ''
-        const activeDiscussionBg =
-          discussionAnalysis || getCachedDiscussionAnalysis(contextData.discussionTopic || '') || ''
-
-        const options = await generateDiscussionOptions({
-          latestLine: exchangeOriginalText,
-          isQuestion: isQ,
-          meetingSummary: summaryText,
-          discussionContext: contextData.discussionTopic,
-          backgroundAnalysis: activeDiscussionBg,
-          transcriptLines: lines,
-          language: responseLang,
-          sessionId: sessionIdRef.current,
-        })
-
-        if (!options || options.length === 0) {
-          setCustomDiscussionSuggestions(null)
-          setAiError(
-            'Không gọi được LLM. Hãy kiểm tra API Key (Groq / Gemini / OpenAI) trong tab Cài đặt rồi thử lại.'
-          )
-          return
-        }
-
-        if (options[0]?.contextUsage) {
-          setContextUsage(options[0].contextUsage)
-        }
-
-        setCustomDiscussionSuggestions(options)
-
-        // Accumulate in session history
-        const lastLine = lines[lines.length - 1]
-        const nowMs = Date.now()
-        for (const opt of options) {
-          aiSuggestionsHistoryRef.current.push({
-            id: opt.id || nowMs + Math.random(),
-            type: opt.type || 'option',
-            label: opt.label,
-            content: opt.content,
-            confidence: opt.confidence,
-            timestamp: lastLine?.timestamp || '00:00',
-            timestampMs: nowMs,
-            triggeredByTranscriptId: lastLine?.id,
-            tokenUsage: opt.contextUsage
-              ? {
-                  promptTokens: opt.contextUsage.totalTokens,
-                  totalTokens: opt.contextUsage.totalTokens,
-                    costStatus: 'unknown',
-                }
-              : undefined,
-          })
-        }
-      }
-    } catch (err) {
-      console.warn('[MeetingMode] Copilot response error:', err)
-      setAiError((err as Error)?.message || 'Lỗi không xác định khi gọi LLM.')
-    } finally {
-      setIsGeneratingAIResponse(false)
-    }
-  }, [
-    mode,
-    cvAnalysis,
     activeCV,
     activeJD,
-    responseLang,
-    latestIntent,
-    answerStrategyOverride,
-    meetingSummary,
-    discussionAnalysis,
-    contextData.discussionTopic,
-  ])
+    discussionTopic: contextData.discussionTopic,
+    sessionId: session.sessionId,
+    profileSnapshot,
+  })
 
-  // ── Intelligent QuestionDetector, Multi-chunk Stitching & Debounced Copilot Trigger ──
-  useEffect(() => {
-    const syncTimer = setTimeout(async () => {
-      if (!isMountedRef.current) return
+  // 4. Exchange Scan
+  const exchange = useExchangeScan()
 
-      if (validLines.length === 0) {
-        setLatestExchange(null)
-        setLatestIntent(null)
-        setSemiAutoPendingQuestion(null)
-        return
+  // 5. Copilot Generation
+  const copilot = useCopilotGeneration({
+    mode,
+    sessionId: session.sessionId,
+    activeCV,
+    activeJD,
+    cvAnalysis: background.cvAnalysis,
+    discussionAnalysis: background.discussionAnalysis,
+    discussionTopic: contextData.discussionTopic,
+    meetingSummary: summary.meetingSummary,
+    latestIntent: null, // Hook will read latest from trigger via caller
+    aiSuggestionsHistoryRef,
+    setContextUsage: () => {}, // Managed via trigger
+  })
+
+  // 6. Transcript
+  const transcript = useTranscript({
+    responseLang: copilot.responseLang,
+  })
+
+  // 7. Intent Trigger
+  const trigger = useIntentTrigger({
+    mode,
+    sessionId: session.sessionId,
+    validLines: transcript.validLines,
+    isListening: false, // Updated with audio capture below
+    isCapturing: false,
+    isGeneratingAIResponse: copilot.isGeneratingAIResponse,
+    cancelCurrentStream: copilot.cancelStream,
+    onTriggerCopilot: async (targetExchange) => {
+      exchange.setLatestExchange(targetExchange)
+      await copilot.handleGenerateCopilotResponse(transcript.validLines, null, targetExchange)
+    },
+  })
+
+  // 8. Screen Capture & Multimodal
+  const capture = useScreenCapture({
+    mode,
+    sessionId: session.sessionId,
+    activeCV,
+    activeJD,
+    discussionTopic: contextData.discussionTopic,
+    responseLang: copilot.responseLang,
+    setAiError: copilot.setAiError,
+  })
+
+  // 9. Audio Capture
+  const handleStoppedListening = useCallback(async () => {
+    if (transcript.validLines.length > 0) {
+      const scanned = exchange.scanExchange(transcript.validLines, mode)
+      if (scanned) {
+        trigger.setIsLatestAQuestion(scanned.isQuestion)
       }
 
-      // 0. Update TieredContextManager with latest session and transcript lines
-      tieredContextManager.setSessionId(sessionIdRef.current)
-      tieredContextManager.setTranscriptLines(validLines)
-
-      // Trigger incremental summary in background if threshold (20-30 lines) exceeded
-      if (tieredContextManager.shouldTriggerIncrementalSummary()) {
-        void tieredContextManager.runIncrementalSummary()
-      }
-
-      // 1. Detect Intent with 0ms latency heuristic + multi-chunk Whisper stitching
-      const lastLine = validLines[validLines.length - 1]
-      const exchangeWordCount = (lastLine?.original || '').trim().split(/\s+/).filter(Boolean).length
-      const currentBudgetPercent = contextUsage?.usagePercent ?? 0
-
-      const heuristicIntent = detectIntentFromRecentLines(validLines, {
-        mode,
-        triggerMode,
-        dedupeKey: `${mode}:${lastLine?.speaker || 'Speaker'}`,
-      })
-      const intentRes = heuristicIntent
-        ? await classifyIntent(heuristicIntent, {
-            triggerMode,
-            speaker: lastLine?.speaker,
-            wordCount: exchangeWordCount,
-            budgetPercent: currentBudgetPercent,
-          })
-        : null
-      setLatestIntent(intentRes)
-      if (intentRes?.isQuestion) {
-        void window.api.sessions?.recovery?.append({
-          eventId: `question:${sessionIdRef.current}:${intentRes.detectionTimestamp || intentRes.normalizedText}`,
-          sessionId: sessionIdRef.current,
-          type: 'question:detected',
-          timestamp: Date.now(),
-          payload: {
-            id: intentRes.detectionTimestamp || intentRes.normalizedText,
-            text: intentRes.questionText || intentRes.normalizedText,
-            intent: intentRes.normalizedIntent,
-          },
-        })
-      }
-
-      // 2. Synchronize latest exchange UI with coherent normalized text
-      let targetExchange: ScannedExchangeResult | null = null
-      if (intentRes && intentRes.normalizedText) {
-        targetExchange = {
-          original: intentRes.normalizedText,
-          speaker: intentRes.speaker,
-          timestamp: intentRes.timestamp || validLines[validLines.length - 1]?.timestamp || '',
-          isQuestion: intentRes.isQuestion,
-          isAiScanned: false,
-          sourceLineCount: validLines.length,
-        }
-        setLatestExchange(targetExchange)
-        setIsLatestAQuestion(intentRes.isQuestion)
-      }
-
-      // Update live context usage estimate
-      const exchangeText = targetExchange?.original || validLines[validLines.length - 1]?.original || ''
-      setContextUsage(tieredContextManager.getUsageEstimate(exchangeText, mode))
-
-      // 3. Copilot Trigger Decision:
-      if (!isListening || !isCapturing) return
-
-      if (triggerMode === 'manual') {
-        setSemiAutoPendingQuestion(null)
-        return
-      }
-
-      if (triggerMode === 'semi-auto') {
-        // High confidence question: ready chip. Ambiguous range: show "có thể là câu hỏi" chip without calling LLM
-        if (intentRes?.isQuestion && intentRes.confidence >= 0.65) {
-          setSemiAutoPendingQuestion(intentRes.normalizedText)
-        } else if (intentRes?.isAmbiguous && intentRes.normalizedText) {
-          setSemiAutoPendingQuestion(intentRes.normalizedText)
-        } else {
-          setSemiAutoPendingQuestion(null)
-        }
-        return
-      }
-
-      // Auto Mode: Only trigger if shouldTriggerCopilot is true (Question/Command/Discussion in discussion mode)
-      // Small talk ("Okay", "I see", "Right", "Thank you") sets shouldTriggerCopilot = false -> LLM call skipped!
-      if (intentRes?.shouldTriggerCopilot && targetExchange) {
-        // Speculative rate limit check for ambiguous band
-        if (intentRes.isAmbiguous && !speculativeRateLimiter.canExecute()) {
-          console.log('[IntentGate] Speculative call rate limit reached (max 6/min). Skipping auto speculative stream.')
-          return
-        }
-
-        // When segment closed by natural silence, debounce can be reduced for instant answers
-        if (copilotDebounceTimerRef.current) clearTimeout(copilotDebounceTimerRef.current)
-        const debounceMs = getAdaptiveDebounceMs(targetExchange.original, 500, lastCloseReasonRef.current)
-        copilotDebounceTimerRef.current = setTimeout(async () => {
-          if (!isMountedRef.current) return
-          if (intentRes.isAmbiguous) {
-            speculativeRateLimiter.recordExecution()
-          }
-          // Câu hỏi mới: hủy stream cũ nếu đang chạy và bắt đầu stream mới ngay
-          if (isGeneratingAIResponseRef.current) {
-            streamingAnswer.cancelStream()
-          }
-          await handleGenerateCopilotResponse(validLinesRef.current, null, targetExchange)
-        }, debounceMs)
-      }
-    }, 0)
-
-    return () => {
-      clearTimeout(syncTimer)
-      if (copilotDebounceTimerRef.current) {
-        clearTimeout(copilotDebounceTimerRef.current)
-      }
-    }
-  }, [validLines, mode, triggerMode, isListening, isCapturing, handleGenerateCopilotResponse, streamingAnswer])
-
-  const handleCopySummary = () => {
-    if (!meetingSummary) return
-    navigator.clipboard.writeText(meetingSummary)
-    setCopiedSummary(true)
-    if (copySummaryTimerRef.current) clearTimeout(copySummaryTimerRef.current)
-    copySummaryTimerRef.current = setTimeout(() => {
-      if (isMountedRef.current) setCopiedSummary(false)
-    }, 2000)
-  }
-
-  const handleToggleListening = async () => {
-    if (isTogglingAudioRef.current) return
-    isTogglingAudioRef.current = true
-    try {
-      if (isCapturing) {
-        performance.mark('stop_listening_click')
-        stopCapture()
-        setIsListening(false)
-        if (validLines.length > 0) {
-          // Bấm Dừng:
-          // 1. Quét ghép trao đổi gần nhất xác định (0 token, vài ms) bằng exchangeAssembler
-          const asmStart = performance.now()
-          const scanned = assembleLatestExchange(validLines, mode)
-          const asmDuration = performance.now() - asmStart
-          console.log(`[ExchangeAssembler] Assembled in ${asmDuration.toFixed(2)}ms (target < 5ms)`)
-
-          if (scanned && isMountedRef.current) {
-            setLatestExchange(scanned)
-            setIsLatestAQuestion(scanned.isQuestion)
-            markExchangeScanned()
-          }
-          if (isMountedRef.current) {
-            setIsScanningExchange(false)
-          }
-
-          setIsGeneratingAIResponse(true)
-          try {
-            if (mode === 'interview') {
-              // INTERVIEW MODE: Bắt đầu stream câu trả lời NGAY LẬP TỨC (1 lượt LLM, TTFT < 1s).
-              // KHÔNG chờ tóm tắt vì nhánh này không cần summary. Chạy tóm tắt nền song song.
-              void handleGenerateSummary(validLines)
-              if (isMountedRef.current) {
-                await handleGenerateCopilotResponse(validLines, null, scanned)
-              }
-            } else {
-              // DISCUSSION MODE: Dùng incremental summary sẵn có từ tieredContextManager làm summaryOverride,
-              // sinh gợi ý ngay lập tức. Chạy tóm tắt mới song song và cập nhật UI khi hoàn tất.
-              const readyIncrementalSummary =
-                tieredContextManager.getIncrementalSummary() || meetingSummary || ''
-
-              const copilotPromise = isMountedRef.current
-                ? handleGenerateCopilotResponse(validLines, readyIncrementalSummary, scanned)
-                : Promise.resolve()
-
-              const summaryPromise = handleGenerateSummary(validLines)
-              await Promise.allSettled([copilotPromise, summaryPromise])
-            }
-          } finally {
-            if (isMountedRef.current) {
-              setIsScanningExchange(false)
-              setIsGeneratingAIResponse(false)
-            }
-          }
-        } else {
-          setAiError('Chưa nhận diện được câu nào trong phiên thu âm này, nên không có gì để AI phân tích.')
-          setSummaryError('Chưa nhận diện được câu nào trong phiên thu âm này.')
-        }
+      if (mode === 'interview') {
+        void summary.handleGenerateSummary(transcript.validLines, mode, copilot.responseLang)
+        await copilot.handleGenerateCopilotResponse(transcript.validLines, null, scanned)
       } else {
-        // Pre-flight health check if using Local Whisper
-        if (currentSTTEngine?.provider === 'Local' && window.api?.nativeWhisper?.healthCheck) {
-          try {
-            const health = await window.api.nativeWhisper.healthCheck(currentSTTEngine.id)
-            if (!health.healthy) {
-              console.warn('[MeetingMode] Pre-flight STT health check warning:', health.error)
-            }
-          } catch (err) {
-            console.warn('[MeetingMode] Health check error:', err)
-          }
-        }
-
-        setIsListening(true)
-        try {
-          await startCapture()
-        } catch (err) {
-          console.warn('[MeetingMode] Could not start capture:', err)
-          if (isMountedRef.current) {
-            setIsListening(false)
-          }
-        }
+        const readySummary = summary.meetingSummary || ''
+        const copilotPromise = copilot.handleGenerateCopilotResponse(
+          transcript.validLines,
+          readySummary,
+          scanned
+        )
+        const summaryPromise = summary.handleGenerateSummary(
+          transcript.validLines,
+          mode,
+          copilot.responseLang
+        )
+        await Promise.allSettled([copilotPromise, summaryPromise])
       }
-    } finally {
-      isTogglingAudioRef.current = false
-    }
-  }
-
-  const handleSwitchSource = async (newType: 'system' | 'mic') => {
-    if (sourceType === newType) return
-    if (switchSourceTimerRef.current) {
-      clearTimeout(switchSourceTimerRef.current)
-      switchSourceTimerRef.current = null
-    }
-
-    // Flush any pending utterance before changing source
-    if (speechSegmenterRef.current) {
-      const flushed = speechSegmenterRef.current.flush()
-      if (flushed && flushed.hasSpeech) {
-        const seqId = sequenceIdRef.current++
-        const now = new Date()
-        const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-        sttJobQueue.enqueue({
-          jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
-          sessionId: sessionIdRef.current,
-          sequenceId: seqId,
-          audioBuffer: flushed.blob,
-          hasSpeech: true,
-          createdAt: Date.now(),
-          priority: 1,
-          engineId: getSavedSTTEngineId(),
-          language: sttLang,
-          sourceType,
-          speakerLabel:
-            mode === 'interview'
-              ? sourceType === 'system'
-                ? 'Interviewer'
-                : 'You'
-              : sourceType === 'system'
-              ? 'Cuộc họp'
-              : 'You',
-          timestampStr: timeStr,
-          closeReason: 'flush',
-        })
-      }
-      speechSegmenterRef.current.reset()
-    }
-    lastProcessedSampleRef.current = 0
-
-    setSourceType(newType)
-    if (isCapturing) {
-      stopCapture()
-      switchSourceTimerRef.current = setTimeout(() => {
-        if (isMountedRef.current) {
-          startCapture().catch((err) => console.warn('[MeetingMode] restart capture error:', err))
-        }
-      }, 150)
-    }
-  }
-
-  const handleClearTranscript = () => {
-    setTranscriptLines([])
-    clearBuffer()
-    speechSegmenterRef.current?.reset()
-    speechSegmentationTelemetry.reset()
-    lastCloseReasonRef.current = undefined
-    lastProcessedSampleRef.current = 0
-    sequenceIdRef.current = 1
-    sessionIdRef.current = `session_${Date.now()}`
-    sttJobQueue.reset(sessionIdRef.current)
-    tieredContextManager.setSessionId(sessionIdRef.current)
-    tieredContextManager.clearSessionMemory()
-    setContextUsage(null)
-    setLatestExchange(null)
-    setIsScanningExchange(false)
-    if (exchangeScanTimerRef.current) {
-      clearTimeout(exchangeScanTimerRef.current)
-    }
-    // Reset bộ giãn nhịp quét để phiên mới được quét ngay.
-    lastExchangeSignatureRef.current = ''
-    lastExchangeScanAtRef.current = 0
-    setMeetingSummary(null)
-    setSummaryError(null)
-    setCustomInterviewAnswer(null)
-    setCustomDiscussionSuggestions(null)
-    aiSuggestionsHistoryRef.current = []
-    setAiError(null)
-    setIsLatestAQuestion(false)
-    setLatestIntent(null)
-    setSemiAutoPendingQuestion(null)
-    tieredContextManager.clearVisualQuestions()
-    if (activeVisualQuestion?.thumbnailUrl) {
-      screenCaptureService.releaseMemory(activeVisualQuestion.thumbnailUrl)
-    }
-    for (const vq of visualQuestionsHistory) {
-      if (vq.thumbnailUrl) {
-        screenCaptureService.releaseMemory(vq.thumbnailUrl)
-      }
-    }
-    setVisualQuestionsHistory([])
-    setActiveVisualQuestion(null)
-    setScreenCaptureState('idle')
-    if (copilotDebounceTimerRef.current) {
-      clearTimeout(copilotDebounceTimerRef.current)
-    }
-  }
-
-  // ── Chỉ dùng nội dung thật do LLM sinh ra (không còn mock/fallback cứng) ──
-  const activeAnswerContent = customInterviewAnswer
-    ? isShortened
-      ? customInterviewAnswer.shortContent
-      : customInterviewAnswer.content
-    : ''
-
-  const suggestions: AISuggestion[] =
-    mode === 'discussion'
-      ? customDiscussionSuggestions ?? []
-      : customInterviewAnswer
-      ? [
-          {
-            id: customInterviewAnswer.id,
-            type: 'answer',
-            label: customInterviewAnswer.label,
-            content: activeAnswerContent,
-            confidence: customInterviewAnswer.confidence,
-          },
-        ]
-      : []
-
-  const handleCopyAnswer = () => {
-    if (mode === 'interview') {
-      if (!activeAnswerContent) return
-      navigator.clipboard.writeText(activeAnswerContent)
     } else {
-      if (suggestions.length === 0) return
-      const text = suggestions
-        .map((s, i) => `${i + 1}. [${s.label || 'Phương án'}]\n${s.content}`)
-        .join('\n\n')
-      navigator.clipboard.writeText(text)
-    }
-    setCopiedAnswer(true)
-    if (copyAnswerTimerRef.current) clearTimeout(copyAnswerTimerRef.current)
-    copyAnswerTimerRef.current = setTimeout(() => {
-      if (isMountedRef.current) setCopiedAnswer(false)
-    }, 2000)
-  }
-
-  const handleCopyOption = (text: string, id: number, e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(text)
-    setCopiedOptionId(id)
-    if (copyOptionTimerRef.current) clearTimeout(copyOptionTimerRef.current)
-    copyOptionTimerRef.current = setTimeout(() => {
-      if (isMountedRef.current) setCopiedOptionId(null)
-    }, 2000)
-  }
-
-  const handleToggleShorten = () => {
-    setIsShortened((prev) => !prev)
-  }
-
-  /** Đổi ngôn ngữ phản hồi của AI (đồng bộ với trang Cài đặt). */
-  const handleResponseLangChange = (lang: ResponseLanguage) => {
-    setResponseLang(lang)
-    saveResponseLanguage(lang)
-    // Nội dung đã sinh theo ngôn ngữ cũ -> xoá để tránh trộn hai ngôn ngữ.
-    setCustomInterviewAnswer(null)
-    setCustomDiscussionSuggestions(null)
-    setAiError(null)
-  }
-
-  /** Gọi lại LLM để sinh nội dung mới từ transcript hiện có. */
-  const handleRegenerate = async () => {
-    if (validLines.length === 0) {
-      setAiError('Chưa có nội dung transcript. Hãy thu âm cuộc họp rồi bấm Dừng để AI phân tích.')
-      return
-    }
-    setIsRegenerating(true)
-    setIsShortened(false)
-    try {
-      const scanned = assembleLatestExchange(validLines, mode)
-      if (scanned && isMountedRef.current) {
-        setLatestExchange(scanned)
-        setIsLatestAQuestion(scanned.isQuestion)
-        markExchangeScanned()
-      }
-      setIsScanningExchange(false)
-      const summaryToUse =
-        mode === 'discussion'
-          ? tieredContextManager.getIncrementalSummary() || meetingSummary || null
-          : null
-      await handleGenerateCopilotResponse(validLines, summaryToUse, scanned)
-    } finally {
-      setIsScanningExchange(false)
-      setIsRegenerating(false)
-    }
-  }
-
-  // ── SCREEN CAPTURE & MULTIMODAL QUESTION LOGIC ─────────────────────────────
-  const handleStartScreenCapture = useCallback(async (
-    source: { sourceType: 'screen' | 'window'; sourceId?: string },
-  ) => {
-    if (
-      isCapturingScreenRef.current ||
-      screenCaptureState === 'capturing' ||
-      screenCaptureState === 'processing' ||
-      screenCaptureState === 'cropping'
-    ) {
-      return
-    }
-    setIsScreenSourcePickerOpen(false)
-    lastScreenSourceRef.current = source
-    isCapturingScreenRef.current = true
-    setScreenCaptureState('capturing')
-
-    // Safety watchdog: ensure button never spins indefinitely even on unexpected stalls
-    const watchdogTimer = setTimeout(() => {
-      if (isCapturingScreenRef.current) {
-        console.warn('[MeetingMode] ⏰ Watchdog timer hết hạn sau 9000ms.')
-        isCapturingScreenRef.current = false
-        if (isMountedRef.current) {
-          setScreenCaptureState('idle')
-          setAiError('Quá trình chụp màn hình phản hồi chậm hoặc bị treo. Hãy thử bấm lại.')
-        }
-      }
-    }, 9000)
-
-    try {
-      if (capturedImageInfoRef.current?.dataUrl) {
-        screenCaptureService.releaseMemory(capturedImageInfoRef.current.dataUrl)
-        setCapturedImageInfo(null)
-      }
-      const imgInfo = await screenCaptureService.captureScreen(source)
-      clearTimeout(watchdogTimer)
-      if (isMountedRef.current) {
-        setCapturedImageInfo(imgInfo)
-        setScreenCaptureState('cropping')
-      } else {
-        screenCaptureService.releaseMemory(imgInfo.dataUrl)
-        setScreenCaptureState('idle')
-      }
-    } catch (err: unknown) {
-      clearTimeout(watchdogTimer)
-      console.warn('[MeetingMode] ❌ Chụp màn hình thất bại / bị hủy:', err)
-      if (isMountedRef.current) {
-        setScreenCaptureState('idle')
-        const msg = (err as Error)?.message || ''
-        if (msg && !msg.includes('cancelled') && !msg.includes('dismissed')) {
-          setAiError(`Không thể chụp màn hình: ${msg}`)
-        }
-      }
-    } finally {
-      clearTimeout(watchdogTimer)
-      isCapturingScreenRef.current = false
-    }
-  }, [screenCaptureState])
-
-  const handleTriggerScreenCapture = useCallback(() => {
-    if (
-      isCapturingScreenRef.current ||
-      screenCaptureState === 'capturing' ||
-      screenCaptureState === 'processing' ||
-      screenCaptureState === 'cropping'
-    ) {
-      return
-    }
-    setIsScreenSourcePickerOpen(true)
-  }, [screenCaptureState])
-
-  const handleConfirmCrop = async (cropRect: CropRect) => {
-    if (!capturedImageInfo) return
-    setScreenCaptureState('processing')
-    try {
-      // 1. Crop and compress downscaled to max 1400px JPEG quality 0.85
-      const cropped = await screenCaptureService.cropAndCompress(
-        capturedImageInfo.dataUrl,
-        cropRect,
-        { maxWidth: 1400, quality: 0.85 }
+      copilot.setAiError(
+        'Chưa nhận diện được câu nào trong phiên thu âm này, nên không có gì để AI phân tích.'
       )
-
-      // 2. Dereference the heavy full-screen raw capture buffer
-      screenCaptureService.releaseMemory(capturedImageInfo.dataUrl)
-      setCapturedImageInfo(null)
-
-      // 3. Fast non-blocking OCR in background
-      const ocrPromise = ocrService.extractText(cropped.dataUrl).catch(() => '')
-
-      // 4. Send directly to Multimodal Provider (Gemini / OpenAI / Groq)
-      const analysis = await visualQuestionAnalyzer.analyzeVisualQuestion({
-        imageBase64: cropped.dataUrl,
-        mimeType: cropped.mimeType,
-        thumbnailUrl: cropped.dataUrl,
-        sessionId: sessionIdRef.current,
-        userContext:
-          mode === 'interview'
-            ? activeJD || activeCV || undefined
-            : contextData.discussionTopic || undefined,
-        responseLanguage: responseLang,
-        languageContext: mode === 'interview' ? `${activeJD}\n${activeCV}` : undefined,
-      })
-
-      const ocrText = await ocrPromise
-
-      // 5. Construct VisualQuestionItem
-      const visualItem: VisualQuestionItem = {
-        ...analysis,
-        source: 'screenshot',
-        thumbnailUrl: cropped.dataUrl,
-        ocrText: ocrText || analysis.extractedCode || undefined,
-      }
-
-      tieredContextManager.addVisualQuestion(visualItem)
-      setActiveVisualQuestion(visualItem)
-      setVisualQuestionsHistory((prev) => [...prev, visualItem])
-      void window.api.sessions?.recovery?.append({
-        eventId: `visual:${sessionIdRef.current}:${visualItem.id}`,
-        sessionId: sessionIdRef.current,
-        type: 'visual:question',
-        timestamp: Date.now(),
-        payload: visualItem as unknown as Record<string, unknown>,
-      })
-      setScreenCaptureState('completed')
-    } catch (err: unknown) {
-      console.error('[MeetingMode] Multimodal question analysis error:', err)
-      setScreenCaptureState('error')
-      setAiError((err as Error)?.message || 'Lỗi khi phân tích câu hỏi hình ảnh từ màn hình.')
     }
-  }
+  }, [transcript.validLines, exchange, mode, summary, copilot, trigger])
 
-  const handleCancelCrop = () => {
-    if (capturedImageInfo) {
-      screenCaptureService.releaseMemory(capturedImageInfo.dataUrl)
-      setCapturedImageInfo(null)
-    }
-    setScreenCaptureState('idle')
-  }
+  const audio = useAudioCapture({
+    mode,
+    sessionId: session.sessionId,
+    sttLang: transcript.sttLang,
+    activeKeywords,
+    fallbackPrompt: whisperPrompt,
+    selectedDeviceId,
+    onStoppedListening: handleStoppedListening,
+  })
 
-  const handleRetakeCrop = async () => {
-    if (capturedImageInfo) {
-      screenCaptureService.releaseMemory(capturedImageInfo.dataUrl)
-      setCapturedImageInfo(null)
-    }
-    setScreenCaptureState('idle')
-    if (retakeTimerRef.current) {
-      clearTimeout(retakeTimerRef.current)
-      retakeTimerRef.current = null
-    }
-    retakeTimerRef.current = setTimeout(() => {
-      if (isMountedRef.current) {
-        handleStartScreenCapture(lastScreenSourceRef.current)
-      }
-    }, 150)
-  }
+  // 10. Session Recovery
+  const recovery = useSessionRecovery({
+    sessionId: session.sessionId,
+    sessionTitle: session.currentSessionTitle,
+    mode,
+    meetingStartTime: session.meetingStartTime,
+    validLines: transcript.validLines,
+    visualQuestionsHistory: capture.visualQuestionsHistory,
+    onSessionRestored: session.setSessionId,
+  })
 
-  const handleDismissVisualQuestion = () => {
-    if (activeVisualQuestion?.thumbnailUrl) {
-      screenCaptureService.releaseMemory(activeVisualQuestion.thumbnailUrl)
-    }
-    setActiveVisualQuestion(null)
-    setScreenCaptureState('idle')
-  }
+  // 11. Hotkeys
+  useMeetingHotkeys({
+    onTriggerScreenCapture: capture.handleTriggerScreenCapture,
+  })
 
-  // Configurable Global Shortcut (Ctrl/Cmd + Shift + S)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isCmdOrCtrl = e.ctrlKey || e.metaKey
-      if (isCmdOrCtrl && e.shiftKey && (e.key.toLowerCase() === 's' || e.code === 'KeyS')) {
-        e.preventDefault()
-        e.stopPropagation()
-        handleTriggerScreenCapture()
-      }
-    }
+  // Master Clear Transcript & Reset
+  const handleMasterClearTranscript = useCallback(() => {
+    transcript.handleClearTranscript()
+    exchange.resetExchange()
+    summary.resetSummary()
+    copilot.resetCopilot()
+    capture.clearVisuals()
+    session.resetSession()
+    trigger.setContextUsage(null)
+  }, [transcript, exchange, summary, copilot, capture, session, trigger])
 
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown, true)
-    }
-  }, [handleTriggerScreenCapture])
-
-  const defaultSessionTitle = useMemo(() => {
-    return mode === 'interview'
-      ? (hasInterviewContext
-          ? `Phỏng vấn Kỹ thuật (${profileSnapshot.name || 'CV'})`
-          : 'Cuộc họp Live Copilot')
-      : (hasDiscussionContext && contextData.discussionTopic
-          ? `Thảo luận: ${contextData.discussionTopic.slice(0, 40)}`
-          : 'Cuộc họp Thảo luận Live')
-  }, [mode, hasInterviewContext, hasDiscussionContext, profileSnapshot.name, contextData.discussionTopic])
-
-  const [customSessionTitle, setCustomSessionTitle] = useState<string>('')
-  const currentSessionTitle = customSessionTitle || defaultSessionTitle
-
-  const currentSessionTitleRef = useLatest(currentSessionTitle)
-
-
-  const modeRef = useLatest(mode)
-
-
-  const recordedLineIdsRef = useRef<Set<string | number>>(new Set())
-  const recordedTranslationsRef = useRef<Map<string | number, string>>(new Map())
-
-  // Initial recovery scan (skipping currently active session)
-  useEffect(() => {
-    let cancelled = false
-    void window.api.sessions?.recovery
-      ?.list({ activeSessionId: sessionIdRef.current })
-      .then((records) => {
-        if (!cancelled && records.length > 0) setUnfinishedRecovery(records[0])
-      })
-      .catch((error) => console.warn('[MeetingMode] Recovery scan failed:', error))
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Giây 0: Ngay khi bắt đầu phiên, ghi sự kiện meeting:metadata và một checkpoint đầu tiên ngay lập tức
-  useEffect(() => {
-    if (!window.api.sessions?.recovery) return
-    const sid = sessionIdRef.current
-    const startedAt = meetingStartTimeRef.current
-
-    void window.api.sessions.recovery
-      .append({
-        eventId: `meta:${sid}`,
-        sessionId: sid,
-        type: 'meeting:metadata',
-        timestamp: startedAt,
-        payload: {
-          id: sid,
-          title: currentSessionTitleRef.current,
-          mode: modeRef.current,
-          startedAt,
-          lifecycle: 'active',
-        },
-      })
-      .catch((error) => console.warn('[MeetingMode] Giây 0 metadata append failed:', error))
-
-    void window.api.sessions.recovery
-      .checkpoint(sid, {
-        id: sid,
-        title: currentSessionTitleRef.current,
-        mode: modeRef.current,
-        startedAt,
-        lifecycle: 'active',
-      })
-      .catch((error) => console.warn('[MeetingMode] Giây 0 checkpoint failed:', error))
-  }, [])
-
-  // Journaling: Duyệt theo ID chưa ghi (không chỉ phần tử cuối), và ghi transcript:patch khi bản dịch đến sau
-  useEffect(() => {
-    if (!window.api.sessions?.recovery || validLines.length === 0) return
-    const sid = sessionIdRef.current
-
-    for (const line of validLines) {
-      if (!line || line.id === undefined) continue
-      const lineId = line.id
-
-      if (!recordedLineIdsRef.current.has(lineId)) {
-        recordedLineIdsRef.current.add(lineId)
-        if (line.translated) {
-          recordedTranslationsRef.current.set(lineId, line.translated)
-        }
-        void window.api.sessions.recovery
-          .append({
-            eventId: `transcript:${sid}:${lineId}`,
-            sessionId: sid,
-            type: 'transcript:segment',
-            timestamp: Date.now(),
-            payload: line,
-          })
-          .catch((error) => console.warn('[MeetingMode] Recovery journal append failed:', error))
-      } else if (
-        line.translated &&
-        line.translated !== recordedTranslationsRef.current.get(lineId)
-      ) {
-        // Late translation arrived: emit transcript:patch for ID replay
-        recordedTranslationsRef.current.set(lineId, line.translated)
-        void window.api.sessions.recovery
-          .append({
-            eventId: `patch:${sid}:${lineId}:${Date.now()}`,
-            sessionId: sid,
-            type: 'transcript:patch',
-            timestamp: Date.now(),
-            payload: {
-              id: lineId,
-              translated: line.translated,
-            },
-          })
-          .catch((error) => console.warn('[MeetingMode] Recovery journal patch failed:', error))
-      }
-    }
-  }, [validLines])
-
-  // Checkpoint: MỘT interval (20s) cho cả phiên (đọc qua ref), không reset khi có dòng mới.
-  // Thêm flush khi beforeunload / visibilitychange.
-  useEffect(() => {
-    if (!window.api.sessions?.recovery) return
-
-    const triggerCheckpoint = () => {
-      const sid = sessionIdRef.current
-      if (!sid) return
-      void window.api.sessions?.recovery
-        ?.checkpoint(sid, {
-          id: sid,
-          title: currentSessionTitleRef.current,
-          mode: modeRef.current,
-          screenshotQuestions: visualQuestionsHistoryRef.current,
-          usageRecords: [usageTrackerService.getSessionUsageSummary(sid)],
-          lifecycle: 'active',
-        })
-        .catch((error) => console.warn('[MeetingMode] Recovery checkpoint failed:', error))
-    }
-
-    const timer = window.setInterval(triggerCheckpoint, 20000)
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        triggerCheckpoint()
-        void window.api.sessions?.recovery?.flush?.(sessionIdRef.current)
-      }
-    }
-
-    const handleBeforeUnload = () => {
-      triggerCheckpoint()
-      void window.api.sessions?.recovery?.flush?.(sessionIdRef.current)
-    }
-
-    window.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    return () => {
-      window.clearInterval(timer)
-      window.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [])
-
-  const handleSaveToHistory = async () => {
-    const endedAt = Date.now()
-    const startedAt = meetingStartTimeRef.current
-    const durationSeconds = Math.max(1, Math.round((endedAt - startedAt) / 1000))
-    const durationMinutes = Math.max(1, Math.round(durationSeconds / 60))
-
-    const sessionTranscripts = validLines.map((l) => ({
-      id: l.id,
-      speaker: l.speaker,
-      timestamp: l.timestamp,
-      original: l.original,
-      translated: l.translated,
-      isQuestion: isQuestionUtterance(l.original),
-    }))
-
-    // Ensure transcripts remain strictly sorted chronologically
-    sessionTranscripts.sort((a, b) => {
-      const parseSec = (ts: string) => {
-        if (!ts) return 0
-        const parts = ts.split(':').map((p) => parseFloat(p) || 0)
-        return parts.length === 2 ? parts[0] * 60 + parts[1] : parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : 0
-      }
-      return parseSec(a.timestamp) - parseSec(b.timestamp)
+  // Master Save to History
+  const handleMasterSaveToHistory = useCallback(async () => {
+    await session.handleSaveToHistory({
+      validLines: transcript.validLines,
+      aiSuggestionsHistory: aiSuggestionsHistoryRef.current,
+      currentSuggestions: copilot.suggestions,
+      visualQuestionsHistory: capture.visualQuestionsHistory,
+      contextUsage: trigger.contextUsage,
     })
+  }, [session, transcript.validLines, copilot.suggestions, capture.visualQuestionsHistory, trigger.contextUsage])
 
-    const sessionSuggestions: HistorySuggestion[] =
-      aiSuggestionsHistoryRef.current.length > 0
-        ? [...aiSuggestionsHistoryRef.current]
-        : suggestions.map((s) => {
-            const usage = s.contextUsage || contextUsage
-            return {
-              id: s.id,
-              type: s.type,
-              label: s.label,
-              content: s.content,
-              confidence: s.confidence,
-              timestamp: validLines[validLines.length - 1]?.timestamp || '00:00',
-              tokenUsage: usage
-                ? {
-                    promptTokens: usage.totalTokens,
-                    totalTokens: usage.totalTokens,
-                    costStatus: 'unknown',
-                  }
-                : undefined,
-            }
-          })
-
-    const sessionScreenshots = visualQuestionsHistory.map((vq) => ({
-      id: vq.id,
-      timestamp: vq.timestamp,
-      imageMetadata: {
-        fileName: 'screenshot.png',
-        dataUrl: vq.thumbnailUrl,
-      },
-      thumbnailUrl: vq.thumbnailUrl,
-      dataUrl: vq.thumbnailUrl,
-      ocrText: vq.ocrText,
-      contentType: vq.contentType,
-      analysisResult: {
-        questionSummary: vq.problemSummary,
-        questionType: vq.contentType,
-        suggestedAnswer: vq.recommendedAnswer,
-        keyPoints: vq.keyInsights,
-        codeSnippet: vq.extractedCode,
-      },
-    }))
-
-    const questionCount =
-      sessionTranscripts.filter((t) => t.isQuestion).length + sessionScreenshots.length
-
-    const sessionUsage = usageTrackerService.getSessionUsageSummary(sessionIdRef.current)
-    const trackedTokens = sessionUsage.totalInputTokens + sessionUsage.totalOutputTokens
-
-    const session: MeetingSession = {
-      id: sessionIdRef.current || `session-live-${Date.now()}`,
-      title: currentSessionTitle,
-      profileId: mode === 'interview' ? profileSnapshot.presetId : undefined,
-      profileSnapshot: mode === 'interview' ? profileSnapshot : undefined,
-      companyName: mode === 'interview' ? profileSnapshot.companyName : undefined,
-      targetRole: mode === 'interview' ? profileSnapshot.role : (contextData.discussionTopic || 'Thảo luận nhóm'),
-      startedAt,
-      endedAt,
-      durationMinutes,
-      durationSeconds,
-      date: new Date().toLocaleString('vi-VN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      mode,
-      aiModel: `${currentModel.name} (${currentModel.provider})`,
-      audioSource: currentDeviceLabel,
-      contextApplied: hasActiveContext,
-      candidateName: activeCV
-        ? profileSnapshot.name
-          ? `${profileSnapshot.role} (${profileSnapshot.name})`
-          : 'Ứng viên (Theo hồ sơ CV đã nạp)'
-        : undefined,
-      transcripts: sessionTranscripts,
-      suggestions: sessionSuggestions,
-      screenshotQuestions: sessionScreenshots,
-      metrics: {
-        totalInteractions:
-          sessionTranscripts.length + sessionSuggestions.length + sessionScreenshots.length,
-        questionCount,
-        aiResponseCount: sessionSuggestions.length,
-        screenshotCount: sessionScreenshots.length,
-        totalTokens: trackedTokens > 0 ? trackedTokens : (contextUsage?.totalTokens || 0),
-        inputTokens: sessionUsage.totalInputTokens,
-        outputTokens: sessionUsage.totalOutputTokens,
-        cachedTokens: sessionUsage.totalCachedTokens,
-        audioDurationSeconds: sessionUsage.totalAudioDurationSeconds,
-        estimatedCostUsd: sessionUsage.totalEstimatedCostUsd,
-        costStatus: sessionUsage.costStatus,
-      },
-      exportSchemaVersion: '2.0',
-    }
-
-    try {
-      const saveAck = await saveSessionToHistoryAsync(session)
-      if (saveAck && saveAck.success) {
-        // Safe Sequencing: Complete recovery ONLY AFTER confirmed storage save
-        await window.api.sessions?.recovery?.complete(session.id, 'completed')
-        void usageTrackerService.flushBatch()
-        setIsSavedToHistory(true)
-        if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current)
-        saveHistoryTimerRef.current = setTimeout(() => {
-          if (isMountedRef.current) setIsSavedToHistory(false)
-        }, 2500)
-      } else {
-        console.error('[MeetingMode] Save to history failed, preserving crash recovery journal:', saveAck?.error)
-        alert('Không thể lưu cuộc họp vào bộ nhớ bền vững. Dữ liệu phục hồi sự cố được giữ nguyên an toàn!')
-      }
-    } catch (saveErr) {
-      console.error('[MeetingMode] Unexpected exception saving session:', saveErr)
-      alert('Đã xảy ra lỗi khi lưu cuộc họp. Dữ liệu phục hồi sự cố được giữ nguyên!')
-    }
-  }
+  const uiCaptureState: ScreenCaptureState =
+    capture.captureState === 'done'
+      ? 'completed'
+      : capture.captureState === 'picking'
+      ? 'capturing'
+      : capture.captureState
 
   // Guard: In interview mode, both CV and JD are required
   if (mode === 'interview' && (!hasCV || !hasJD)) {
@@ -2057,100 +284,102 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   }
 
   return (
-    <div className="flex flex-col h-full bg-transparent select-none">
+    <div className="flex flex-col h-full bg-transparent select-none animate-fade-in">
       {/* Header with Mode, Controls, and Context Strip */}
       <MeetingHeader
         mode={mode}
-        sessionTitle={currentSessionTitle}
-        onSessionTitleChange={setCustomSessionTitle}
-        isSavedToHistory={isSavedToHistory}
-        onSaveToHistory={handleSaveToHistory}
-        isCapturing={isCapturing}
-        isListening={isListening}
-        isTranscribing={isTranscribing}
-        queueMetrics={queueMetrics}
-        onToggleListening={handleToggleListening}
+        sessionTitle={session.currentSessionTitle}
+        onSessionTitleChange={session.setCustomSessionTitle}
+        isSavedToHistory={session.isSavedToHistory}
+        onSaveToHistory={handleMasterSaveToHistory}
+        isCapturing={audio.isCapturing}
+        isListening={audio.isListening}
+        isTranscribing={transcript.isTranscribing}
+        queueMetrics={transcript.queueMetrics}
+        onToggleListening={audio.handleToggleListening}
         contextData={contextData}
         hasActiveContext={hasActiveContext}
         hasDiscussionContext={hasDiscussionContext}
-        isAnalyzingBackground={isAnalyzingBackground}
-        responseLang={responseLang}
-        onResponseLangChange={handleResponseLangChange}
+        isAnalyzingBackground={background.isAnalyzingBackground}
+        responseLang={copilot.responseLang}
+        onResponseLangChange={copilot.handleResponseLangChange}
+        onTriggerScreenCapture={capture.handleTriggerScreenCapture}
+        screenCaptureState={uiCaptureState}
       />
 
-      {unfinishedRecovery && isRecoveryOpen && (
-        <div className="mx-3 mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
-          <span>Recovered unfinished session</span>
-          <div className="flex gap-2">
-            <button className="rounded bg-amber-300 px-2 py-1 text-black" onClick={handleRestoreRecovery}>Restore</button>
-            <button className="rounded border border-white/20 px-2 py-1" onClick={() => void handleCompleteRecovery('completed')}>Finalize</button>
-            <button className="rounded border border-red-300/30 px-2 py-1 text-red-200" onClick={() => void handleCompleteRecovery('discarded')}>Discard</button>
-          </div>
-        </div>
-      )}
+      {/* Unfinished Session Recovery Banner */}
+      <UnfinishedSessionBanner
+        unfinishedRecovery={recovery.unfinishedRecovery}
+        isOpen={recovery.isRecoveryOpen}
+        onRestore={recovery.handleRestoreRecovery}
+        onFinalize={() => void recovery.handleCompleteRecovery('completed')}
+        onDiscard={() => void recovery.handleCompleteRecovery('discarded')}
+      />
 
       {/* Main Split: Transcript & AI Response */}
       <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
         <LiveTranscriptPane
-          sourceType={sourceType}
-          onSwitchSource={handleSwitchSource}
-          validLines={validLines}
-          latestLine={latestLine}
-          latestExchange={latestExchange}
-          isScanningExchange={isScanningExchange}
-          isCapturing={isCapturing}
-          isListening={isListening}
-          isTranscribing={isTranscribing}
-          queueMetrics={queueMetrics}
-          onClearTranscript={handleClearTranscript}
-          onToggleListening={handleToggleListening}
+          sourceType={audio.sourceType}
+          onSwitchSource={audio.handleSwitchSource}
+          validLines={transcript.validLines}
+          latestLine={transcript.latestLine}
+          latestExchange={exchange.latestExchange}
+          isScanningExchange={exchange.isScanningExchange}
+          isCapturing={audio.isCapturing}
+          isListening={audio.isListening}
+          isTranscribing={transcript.isTranscribing}
+          queueMetrics={transcript.queueMetrics}
+          onClearTranscript={handleMasterClearTranscript}
+          onToggleListening={audio.handleToggleListening}
           scrollRef={scrollRef}
           sttEngineLabel={sttEngineLabel}
           mode={mode}
-          meetingSummary={meetingSummary}
-          isSummarizing={isSummarizing}
-          summaryError={summaryError}
-          copiedSummary={copiedSummary}
-          onCopySummary={handleCopySummary}
-          onGenerateSummary={handleGenerateSummary}
-          showTranslate={needsVietnameseTranslation(responseLang)}
-          sttLang={sttLang}
-          onSttLangChange={handleSttLangChange}
+          meetingSummary={summary.meetingSummary}
+          isSummarizing={summary.isSummarizing}
+          summaryError={summary.summaryError}
+          copiedSummary={summary.copiedSummary}
+          onCopySummary={summary.handleCopySummary}
+          onGenerateSummary={(lines) => summary.handleGenerateSummary(lines, mode, copilot.responseLang)}
+          showTranslate={needsVietnameseTranslation(copilot.responseLang)}
+          sttLang={transcript.sttLang}
+          onSttLangChange={transcript.handleSttLangChange}
         />
 
         <CopilotSuggestionPane
           mode={mode}
-          isLatestAQuestion={isLatestAQuestion}
-          isGeneratingAIResponse={isGeneratingAIResponse}
+          isLatestAQuestion={trigger.isLatestAQuestion}
+          isGeneratingAIResponse={copilot.isGeneratingAIResponse}
           currentModel={currentModel}
-          customInterviewAnswer={customInterviewAnswer}
-          isShortened={isShortened}
-          onToggleShorten={handleToggleShorten}
-          isRegenerating={isRegenerating}
-          onRegenerate={handleRegenerate}
-          copiedAnswer={copiedAnswer}
-          onCopyAnswer={handleCopyAnswer}
-          customDiscussionSuggestions={customDiscussionSuggestions}
-          copiedOptionId={copiedOptionId}
-          onCopyOption={handleCopyOption}
-          aiError={aiError}
-          hasTranscript={validLines.length > 0}
+          customInterviewAnswer={copilot.customInterviewAnswer}
+          isShortened={copilot.isShortened}
+          onToggleShorten={copilot.handleToggleShorten}
+          isRegenerating={copilot.isRegenerating}
+          onRegenerate={() => copilot.handleRegenerate(transcript.validLines, exchange.latestExchange)}
+          copiedAnswer={copilot.copiedAnswer}
+          onCopyAnswer={copilot.handleCopyAnswer}
+          customDiscussionSuggestions={copilot.customDiscussionSuggestions}
+          copiedOptionId={copilot.copiedOptionId}
+          onCopyOption={copilot.handleCopyOption}
+          aiError={copilot.aiError}
+          hasTranscript={transcript.validLines.length > 0}
           onOpenSettings={onViewChange ? () => onViewChange('settings') : undefined}
-          showTranslate={needsVietnameseTranslation(responseLang)}
-          triggerMode={triggerMode}
-          onTriggerModeChange={handleTriggerModeChange}
-          latestIntent={latestIntent}
-          semiAutoPendingQuestion={semiAutoPendingQuestion}
-          onTriggerSemiAuto={() => handleGenerateCopilotResponse(validLines, null, latestExchange)}
-          answerStrategyId={answerStrategyOverride}
-          onAnswerStrategyChange={setAnswerStrategyOverride}
-          contextUsage={contextUsage}
-          visualQuestion={activeVisualQuestion}
-          isAnalyzingVisual={screenCaptureState === 'processing'}
-          onDismissVisualQuestion={handleDismissVisualQuestion}
-          onTriggerScreenCapture={handleTriggerScreenCapture}
-          screenCaptureState={screenCaptureState}
-          onToggleCorrectedAnswer={handleToggleCorrectedAnswer}
+          showTranslate={needsVietnameseTranslation(copilot.responseLang)}
+          triggerMode={trigger.triggerMode}
+          onTriggerModeChange={trigger.handleTriggerModeChange}
+          latestIntent={trigger.latestIntent}
+          semiAutoPendingQuestion={trigger.semiAutoPendingQuestion}
+          onTriggerSemiAuto={() =>
+            copilot.handleGenerateCopilotResponse(transcript.validLines, null, exchange.latestExchange)
+          }
+          answerStrategyId={copilot.answerStrategyOverride}
+          onAnswerStrategyChange={copilot.setAnswerStrategyOverride}
+          contextUsage={trigger.contextUsage}
+          visualQuestion={capture.activeVisualQuestion}
+          isAnalyzingVisual={capture.captureState === 'processing'}
+          onDismissVisualQuestion={capture.handleDismissVisualQuestion}
+          onTriggerScreenCapture={capture.handleTriggerScreenCapture}
+          screenCaptureState={uiCaptureState}
+          onToggleCorrectedAnswer={copilot.handleToggleCorrectedAnswer}
         />
       </div>
 
@@ -2158,25 +387,25 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       <MeetingFooter
         modelName={currentModel.name}
         sttEngineLabel={sttEngineLabel}
-        isCapturing={isCapturing}
-        isListening={isListening}
-        transcriptCount={transcriptLines.length}
+        isCapturing={audio.isCapturing}
+        isListening={audio.isListening}
+        transcriptCount={transcript.transcriptLines.length}
       />
 
-      {/* Interactive Screenshot Crop Overlay */}
-      {isScreenSourcePickerOpen && (
+      {/* Interactive Screenshot Modals */}
+      {capture.isScreenSourcePickerOpen && (
         <ScreenCaptureSourcePicker
-          onSelect={handleStartScreenCapture}
-          onCancel={() => setIsScreenSourcePickerOpen(false)}
+          onSelect={capture.handleStartScreenCapture}
+          onCancel={() => capture.setIsScreenSourcePickerOpen(false)}
         />
       )}
 
-      {screenCaptureState === 'cropping' && capturedImageInfo && (
+      {capture.captureState === 'cropping' && capture.capturedImageInfo && (
         <ScreenshotCropOverlay
-          imageInfo={capturedImageInfo}
-          onConfirmCrop={handleConfirmCrop}
-          onCancel={handleCancelCrop}
-          onRetake={handleRetakeCrop}
+          imageInfo={capture.capturedImageInfo}
+          onConfirmCrop={capture.handleConfirmCrop}
+          onCancel={capture.handleCancelCrop}
+          onRetake={capture.handleRetakeCrop}
         />
       )}
     </div>

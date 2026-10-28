@@ -13,6 +13,7 @@ if (typeof globalThis.window === 'undefined') {
   ;(globalThis as any).Event = dom.Event
   ;(globalThis as any).CustomEvent = dom.CustomEvent
   ;(globalThis as any).Node = dom.Node
+  ;(globalThis as any).localStorage = dom.localStorage
   ;(globalThis as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0)
   ;(globalThis as any).cancelAnimationFrame = (id: number) => clearTimeout(id)
 }

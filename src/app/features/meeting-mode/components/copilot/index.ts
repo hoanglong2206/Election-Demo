@@ -1,0 +1,2 @@
+export { CopilotSuggestionPane } from './CopilotSuggestionPane'
+

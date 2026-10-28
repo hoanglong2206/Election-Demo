@@ -26,18 +26,18 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import type { AppMode } from '@/types/electron.d'
-import type { AISuggestion, InterviewVariation } from '../types'
-import type { AIModelConfig } from '../../../services/ai-model/aiModels'
+import type { AISuggestion, InterviewVariation } from '../../types'
+import type { AIModelConfig } from '../../../../services/ai-model/aiModels'
 import type {
   ContextUsageInfo,
   IntentDetectionResult,
   TriggerMode,
   AnswerStrategyId,
-} from '../../../services/ai-model/copilot'
-import { answerStrategyRouter, triggerLogManager } from '../../../services/ai-model/copilot'
+} from '../../../../services/ai-model/copilot'
+import { answerStrategyRouter, triggerLogManager } from '../../../../services/ai-model/copilot'
 import { useVietnameseTranslation } from '@/hooks/useVietnameseTranslation'
-import { VisualQuestionCard } from './VisualQuestionCard'
-import type { ScreenCaptureState, VisualQuestionItem } from '../../../services/screen-capture/types'
+import { VisualQuestionCard } from '../VisualQuestionCard'
+import type { ScreenCaptureState, VisualQuestionItem } from '../../../../services/screen-capture/types'
 
 interface CopilotSuggestionPaneProps {
   mode: AppMode
