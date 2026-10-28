@@ -54,11 +54,14 @@ export function TrendChartSvg({
       {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
         const y = padding.top + chartHeight * (1 - ratio)
         const val = maxValue * ratio
-        let label = ''
-        if (metricMode === 'cost') label = `$${val.toFixed(3)}`
-        else if (metricMode === 'tokens')
-          label = val >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${Math.round(val)}`
-        else label = `${Math.round(val)}`
+        const label =
+          metricMode === 'cost'
+            ? `$${val.toFixed(3)}`
+            : metricMode === 'tokens'
+              ? val >= 1000
+                ? `${(val / 1000).toFixed(0)}k`
+                : `${Math.round(val)}`
+              : `${Math.round(val)}`
 
         return (
           <g key={ratio}>
