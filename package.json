@@ -13,7 +13,10 @@
     "build:vite": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "arch:check": "bun x madge --extensions ts,tsx --ts-config tsconfig.app.json --circular src/app/ && eslint . --quiet",
+    "size:report": "node scripts/size-report.cjs",
+    "check": "bun run build:electron && bun x tsc -p tsconfig.app.json --noEmit && bun x tsc -p tsconfig.node.json --noEmit && bun run lint && bun test src/ && bun run build:vite"
   },
   "dependencies": {
     "@radix-ui/react-scroll-area": "^1.2.3",

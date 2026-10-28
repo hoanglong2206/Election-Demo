@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 import { ToastHost } from '@/components/ui/toast'
 import type { ViewState } from './types'
+export type { ViewState }
 
 interface LayoutProps {
   children: ReactNode

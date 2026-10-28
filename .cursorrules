@@ -1,0 +1,23 @@
+# Cursor Rules for Meeting Copilot Architectural Refactor
+
+## Dependency Rules
+- core: only imports core/types; NO React or DOM.
+- infrastructure: imports core, lib, common.
+- services: imports core + infrastructure/ipc. STRICTLY NO React or ReactDOM imports. Each service folder has a public index.ts.
+- hooks/components/features: import services, core, lib, components/ui, infrastructure/ipc.
+- components/ui & lib: only import lib.
+- features: must NOT import internal files of another feature (features/<other>/*), only through public index.ts.
+- IPC: All window.api calls MUST go through typed ports in @/infrastructure/ipc. Direct window.api calls are prohibited.
+
+## Size Limits
+- Container component: <= 600 lines
+- Custom hook: <= 300 lines and <= ~8 useState
+- Sub-component: <= 400 lines
+- Service file: <= ~500 lines
+
+## Implementation Rules
+- Never use state+ref mirrors (const r = useRef(val); r.current = val; in render). Use useLatest(val).
+- Timers must go through shared hooks (useTimeout, useInterval).
+- Pure logic (debounce, dedupe, queues, loops, state machines) written in pure TS controllers; hooks only wire.
+- Invariants: ZERO UI/UX changes, ZERO string literal changes, ZERO runtime dependencies added, ZERO IPC contract modifications.
+
