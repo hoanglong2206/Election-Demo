@@ -3,6 +3,8 @@ import { credentialsPort } from '@/infrastructure/ipc'
 import {
   getAllAIModels,
   getAvailableSTTEngines,
+  syncActiveAIModels,
+  saveAIModelId,
   type AIModelConfig,
   type STTEngineConfig,
 } from '@/services/ai-model/aiModels'
@@ -15,28 +17,23 @@ import type { VerifyState, LLMProviderOption, CredentialStatus } from '../types'
 
 interface UseCredentialManagementProps {
   llmProvider: LLMProviderOption
-  selectedLLM?: string
+  selectedLLM: string
   selectedSTT: string
   setSelectedLLM: (id: string) => void
   setSelectedSTT: (id: string) => void
   setModelsList: (models: AIModelConfig[]) => void
   setSttEnginesList: (engines: STTEngineConfig[]) => void
-  syncModelsSelection?: (models: AIModelConfig[]) => void
-  setSyncMeta?: (state: any) => void
-  setSyncStatus?: (status: any) => void
   autoDismissMs?: number
 }
 
 export function useCredentialManagement({
   llmProvider,
+  selectedLLM,
   selectedSTT,
   setSelectedLLM,
   setSelectedSTT,
   setModelsList,
   setSttEnginesList,
-  syncModelsSelection = () => {},
-  setSyncMeta = () => {},
-  setSyncStatus = () => {},
   autoDismissMs = 4000,
 }: UseCredentialManagementProps) {
   const isMountedRef = useRef(true)
@@ -45,9 +42,6 @@ export function useCredentialManagement({
     setSelectedSTT,
     setModelsList,
     setSttEnginesList,
-    syncModelsSelection,
-    setSyncMeta,
-    setSyncStatus,
   })
 
   useEffect(() => {
@@ -56,9 +50,6 @@ export function useCredentialManagement({
       setSelectedSTT,
       setModelsList,
       setSttEnginesList,
-      syncModelsSelection,
-      setSyncMeta,
-      setSyncStatus,
     }
   })
 
@@ -86,6 +77,14 @@ export function useCredentialManagement({
     detected?: string
   }>({ state: 'idle' })
 
+  const [syncMeta, setSyncMeta] = useState(() => modelRegistryService.getSyncState())
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<{
+    text: string
+    isError: boolean
+    isWarning?: boolean
+  } | null>(null)
+
   // Auto-dismiss verify messages
   useEffect(() => {
     if (groqVerify.message && autoDismissMs > 0) {
@@ -104,6 +103,17 @@ export function useCredentialManagement({
       return () => clearTimeout(timer)
     }
   }, [llmVerify.message, autoDismissMs])
+
+  const syncModelsSelection = useCallback((models: AIModelConfig[]) => {
+    callbacksRef.current.setModelsList(models)
+    if (models.length > 0 && (!selectedLLM || !models.some((m) => m.id === selectedLLM))) {
+      callbacksRef.current.setSelectedLLM(models[0].id)
+      saveAIModelId(models[0].id)
+    } else if (models.length === 0) {
+      callbacksRef.current.setSelectedLLM('')
+      saveAIModelId('')
+    }
+  }, [selectedLLM])
 
   // Initialize credential store & legacy migration
   useEffect(() => {
@@ -168,15 +178,15 @@ export function useCredentialManagement({
         setCredentialStatuses(statuses)
         setGroqVerify({ state: 'valid', message: 'Khóa Groq API đã được lưu an toàn (DPAPI).' })
         callbacksRef.current.setSttEnginesList(getAvailableSTTEngines('groq_configured'))
-        callbacksRef.current.syncModelsSelection(getAllAIModels())
-        callbacksRef.current.setSyncStatus(null)
-        callbacksRef.current.setSyncMeta(modelRegistryService.getSyncState())
+        syncModelsSelection(getAllAIModels())
+        setSyncStatus(null)
+        setSyncMeta(modelRegistryService.getSyncState())
         return true
       }
       setGroqVerify({ state: 'invalid', message: res.error || 'Lỗi khi lưu khóa' })
       return false
     },
-    []
+    [syncModelsSelection]
   )
 
   const handleDeleteGroqKey = useCallback(async (): Promise<boolean> => {
@@ -196,13 +206,13 @@ export function useCredentialManagement({
         callbacksRef.current.setSelectedSTT(updatedSTT[0]?.id || 'ggml-tiny.bin')
       }
       modelRegistryService.removeProviderModels('Groq')
-      callbacksRef.current.syncModelsSelection(getAllAIModels())
-      callbacksRef.current.setSyncStatus(null)
-      callbacksRef.current.setSyncMeta(modelRegistryService.getSyncState())
+      syncModelsSelection(getAllAIModels())
+      setSyncStatus(null)
+      setSyncMeta(modelRegistryService.getSyncState())
       return true
     }
     return false
-  }, [selectedSTT])
+  }, [selectedSTT, syncModelsSelection])
 
   const handleVerifyGroq = useCallback(async () => {
     if (!credentialsPort.isSupported) return
@@ -229,32 +239,35 @@ export function useCredentialManagement({
         setCredentialStatuses(statuses)
         setLlmVerify({ state: 'valid', message: 'Khóa LLM API đã được lưu an toàn (DPAPI).' })
         settingsManager.set('llmProvider', llmProvider)
-        callbacksRef.current.syncModelsSelection(getAllAIModels())
-        callbacksRef.current.setSyncStatus(null)
-        callbacksRef.current.setSyncMeta(modelRegistryService.getSyncState())
+        syncModelsSelection(getAllAIModels())
+        setSyncStatus(null)
+        setSyncMeta(modelRegistryService.getSyncState())
         return true
       }
       setLlmVerify({ state: 'invalid', message: res.error || 'Lỗi khi lưu khóa' })
       return false
     },
-    [llmProvider]
+    [llmProvider, syncModelsSelection]
   )
 
-  const handleDeleteLLMKey = useCallback(async (provider: string): Promise<boolean> => {
-    if (!credentialsPort.isSupported) return false
-    const res = await credentialsPort.deleteApiKey(provider)
-    if (res.success) {
-      const statuses = await credentialsPort.getAllStatuses()
-      setCredentialStatuses(statuses)
-      setLlmVerify({ state: 'idle' })
-      modelRegistryService.removeProviderModels(provider)
-      callbacksRef.current.syncModelsSelection(getAllAIModels())
-      callbacksRef.current.setSyncStatus(null)
-      callbacksRef.current.setSyncMeta(modelRegistryService.getSyncState())
-      return true
-    }
-    return false
-  }, [])
+  const handleDeleteLLMKey = useCallback(
+    async (provider: string): Promise<boolean> => {
+      if (!credentialsPort.isSupported) return false
+      const res = await credentialsPort.deleteApiKey(provider)
+      if (res.success) {
+        const statuses = await credentialsPort.getAllStatuses()
+        setCredentialStatuses(statuses)
+        setLlmVerify({ state: 'idle' })
+        modelRegistryService.removeProviderModels(provider)
+        syncModelsSelection(getAllAIModels())
+        setSyncStatus(null)
+        setSyncMeta(modelRegistryService.getSyncState())
+        return true
+      }
+      return false
+    },
+    [syncModelsSelection]
+  )
 
   const handleVerifyLLM = useCallback(async () => {
     if (!credentialsPort.isSupported) return
@@ -263,15 +276,20 @@ export function useCredentialManagement({
     if (llmProvider === 'OpenAI') targetProvider = 'openai'
     else if (llmProvider === 'Google') targetProvider = 'gemini'
     else {
-      targetProvider = credentialStatuses['openai']?.configured ? 'openai' : 'gemini'
+      if (credentialStatuses['openai']?.configured) targetProvider = 'openai'
+      else targetProvider = 'gemini'
     }
 
     const res = await credentialsPort.verifyApiKey(targetProvider)
-    setLlmVerify({
-      state: res.valid ? 'valid' : 'invalid',
-      message: res.message,
-      detected: res.valid ? res.provider : undefined,
-    })
+    if (res.valid) {
+      setLlmVerify({
+        state: 'valid',
+        message: res.message,
+        detected: res.provider,
+      })
+    } else {
+      setLlmVerify({ state: 'invalid', message: res.message })
+    }
   }, [credentialStatuses, llmProvider])
 
   const handleVerifyRawKey = useCallback(
@@ -294,12 +312,64 @@ export function useCredentialManagement({
     []
   )
 
+  const handleSyncModels = useCallback(async () => {
+    setIsSyncing(true)
+    setSyncStatus((prev) =>
+      prev
+        ? {
+            text: 'Đang kết nối và đồng bộ danh sách mô hình từ API...',
+            isError: false,
+            isWarning: false,
+          }
+        : null
+    )
+    try {
+      const res = await syncActiveAIModels()
+      syncModelsSelection(getAllAIModels())
+      const state = modelRegistryService.getSyncState()
+      setSyncMeta(state)
+
+      if (state.status === 'error' || !res.success) {
+        setSyncStatus({
+          text:
+            state.error ||
+            res.error ||
+            'API không trả về model nào. Hãy kiểm tra API key rồi thử lại.',
+          isError: true,
+        })
+      } else if (state.modelSource === 'mixed') {
+        setSyncStatus({
+          text: `Đồng bộ một phần: ${state.providerBreakdown}. Một số model đang dùng cache từ lần đồng bộ trước.`,
+          isError: false,
+          isWarning: true,
+        })
+      } else {
+        setSyncStatus({
+          text: `Đồng bộ API thành công! Đã nạp ${res.totalLoaded} model (${res.providerBreakdown}).`,
+          isError: false,
+        })
+      }
+    } catch (err) {
+      setSyncStatus({
+        text: (err as Error)?.message || 'Lỗi khi đồng bộ danh sách model từ API.',
+        isError: true,
+      })
+    } finally {
+      if (isMountedRef.current) {
+        setIsSyncing(false)
+      }
+    }
+  }, [selectedLLM])
+
   return {
     credentialStatuses,
     secureStorageAvailable,
     secureStorageWarning,
     groqVerify,
     llmVerify,
+    syncMeta,
+    isSyncing,
+    syncStatus,
     handleSaveGroqKey,
     handleDeleteGroqKey,
     handleVerifyGroq,
@@ -308,6 +378,7 @@ export function useCredentialManagement({
     handleVerifyLLM,
     handleVerifyRawKey,
     handleTestModelAvailability,
+    handleSyncModels,
     setLlmVerify,
   }
 }

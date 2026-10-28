@@ -59,11 +59,8 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
   // 2. AI Model Sync
   const {
     syncMeta,
-    setSyncMeta,
     isSyncing,
     syncStatus,
-    setSyncStatus,
-    syncModelsSelection,
     handleSyncModels,
   } = useModelSync({
     selectedLLM,
@@ -95,9 +92,6 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
     setSelectedSTT,
     setModelsList,
     setSttEnginesList,
-    syncModelsSelection,
-    setSyncMeta,
-    setSyncStatus,
   })
 
   // 3. Local Whisper Native Engine Check
