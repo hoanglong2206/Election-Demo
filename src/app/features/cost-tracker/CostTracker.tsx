@@ -1,37 +1,37 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  usageTrackerService,
-  type MonthlyUsageSummary,
-  type BudgetSettings,
-  type UsageRecord,
-} from '@/services/usage-tracker'
 import type { CostTrackerViewTab, ChartDaysRange } from './types'
-import { CostTrackerHeader } from './components/CostTrackerHeader'
-import { CostOverviewMetrics } from './components/CostOverviewMetrics'
-import { DailyUsageTrendChart } from './components/DailyUsageTrendChart'
-import { DistributionCharts } from './components/DistributionCharts'
-import { BudgetManagementCard } from './components/BudgetManagementCard'
-import { ModelPricingConfigCard } from './components/ModelPricingConfigCard'
-import { RecentUsageLogsTable } from './components/RecentUsageLogsTable'
+import { useUsageTracker } from './hooks'
+import {
+  CostTrackerHeader,
+  CostOverviewMetrics,
+  DailyUsageTrendChart,
+  DistributionCharts,
+  BudgetManagementCard,
+  ModelPricingConfigCard,
+  RecentUsageLogsTable,
+} from './components'
 
 export function CostTracker() {
-  const [summary, setSummary] = useState<MonthlyUsageSummary>(() =>
-    usageTrackerService.getCurrentMonthSummary()
-  )
-  const [budget, setBudget] = useState<BudgetSettings>(() =>
-    usageTrackerService.getBudgetSettings()
-  )
-  const [records, setRecords] = useState<UsageRecord[]>(() =>
-    usageTrackerService.getAllRecords(200)
-  )
+  const {
+    summary,
+    budget,
+    setBudget,
+    records,
+    isRefreshing,
+    isResetConfirmOpen,
+    setIsResetConfirmOpen,
+    isResetSuccess,
+    demoLoadedSuccess,
+    handleRefresh,
+    handleSeedDemoData,
+    handleResetConfirmed,
+    handleExportCsv,
+  } = useUsageTracker()
+
   const [currentTab, setCurrentTab] = useState<CostTrackerViewTab>('overview')
   const [chartDays, setChartDays] = useState<ChartDaysRange>(14)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
-  const [isResetSuccess, setIsResetSuccess] = useState(false)
-  const [demoLoadedSuccess, setDemoLoadedSuccess] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   const handleTabChange = useCallback((tab: CostTrackerViewTab) => {
@@ -40,93 +40,6 @@ export function CostTracker() {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' })
     }
   }, [])
-
-  // Subscribe to usage updates
-  useEffect(() => {
-    const unsubscribe = usageTrackerService.subscribe((updatedSummary) => {
-      setSummary(updatedSummary)
-      setRecords(usageTrackerService.getAllRecords(200))
-    })
-    return () => unsubscribe()
-  }, [])
-
-  const handleRefresh = useCallback(() => {
-    if (isRefreshing) return
-    setIsRefreshing(true)
-    setSummary(usageTrackerService.getCurrentMonthSummary())
-    setBudget(usageTrackerService.getBudgetSettings())
-    setRecords(usageTrackerService.getAllRecords(200))
-    setTimeout(() => {
-      setIsRefreshing(false)
-    }, 500)
-  }, [isRefreshing])
-
-  const handleSeedDemoData = useCallback(() => {
-    usageTrackerService.seedDemoData()
-    handleRefresh()
-    setDemoLoadedSuccess(true)
-    setTimeout(() => setDemoLoadedSuccess(false), 3000)
-  }, [handleRefresh])
-
-  const handleResetConfirmed = useCallback(() => {
-    const ok = usageTrackerService.resetLocalStatistics(true)
-    if (ok) {
-      setIsResetConfirmOpen(false)
-      setIsResetSuccess(true)
-      handleRefresh()
-      setTimeout(() => setIsResetSuccess(false), 3000)
-    }
-  }, [handleRefresh])
-
-  // CSV Export function
-  const handleExportCsv = useCallback(() => {
-    if (records.length === 0) return
-
-    const headers = [
-      'ID',
-      'Timestamp',
-      'Date',
-      'Provider',
-      'Model',
-      'Feature',
-      'InputTokens',
-      'OutputTokens',
-      'CachedTokens',
-      'AudioDurationSec',
-      'EstimatedCostUSD',
-      'CostStatus',
-    ]
-
-    const rows = records.map((r) => [
-      r.id,
-      r.timestamp,
-      new Date(r.timestamp).toISOString(),
-      `"${r.provider}"`,
-      `"${r.model}"`,
-      `"${r.feature}"`,
-      r.inputTokens ?? 0,
-      r.outputTokens ?? 0,
-      r.cachedTokens ?? 0,
-      r.audioDurationSeconds ?? 0,
-      (r.estimatedCostUsd ?? 0).toFixed(6),
-      r.costStatus,
-    ])
-
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
-
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute(
-      'download',
-      `api-cost-usage-${new Date().toISOString().slice(0, 10)}.csv`
-    )
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }, [records])
 
   return (
     <div
@@ -168,7 +81,6 @@ export function CostTracker() {
       <div className="min-h-[500px]">
         {currentTab === 'overview' && (
           <div key="overview" className="space-y-4 animate-tab-pane">
-            {/* Main 2-Column Dashboard: Trend Chart & Donut Distribution */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
               <div className="xl:col-span-7">
                 <DailyUsageTrendChart days={chartDays} onDaysChange={setChartDays} />
@@ -178,7 +90,6 @@ export function CostTracker() {
               </div>
             </div>
 
-            {/* Quick Budget & Pricing Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <BudgetManagementCard
                 budget={budget}
@@ -272,4 +183,5 @@ export function CostTracker() {
     </div>
   )
 }
+
 export default CostTracker

@@ -14,8 +14,6 @@ const BASELINE_OVERSIZED_FILES = [
   'src/app/features/audio-test/components/AudioControlsToolbar.tsx',
   'src/app/features/audio-test/components/STTPreviewPanel.tsx',
   'src/app/features/audio-test/components/VADCalibrationModal.tsx',
-  'src/app/features/cost-tracker/components/DailyUsageTrendChart.tsx',
-  'src/app/features/cost-tracker/components/DistributionCharts.tsx',
   'src/app/features/home/components/AIModelSelectorCard.tsx',
   'src/app/features/home/components/ContextEditorCard.tsx',
   'src/app/features/home/components/ProfilePresetDialog.tsx',
