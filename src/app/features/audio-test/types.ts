@@ -1,4 +1,4 @@
-import type { AudioDeviceInfo } from '@/services/audioDevices'
+import type { AudioDeviceInfo } from '@/services/audio-devices'
 import type { VADCalibrationRecord, VADCalibrationResult } from '@/services/vad-calibration'
 
 export type LayoutTab = 'split' | 'stt' | 'benchmark'

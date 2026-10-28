@@ -1,5 +1,5 @@
 import type { AppMode } from '@/types/electron.d'
-import { estimateTokenCount } from '@/services/meetingContext'
+import { estimateTokenCount } from '@/services/meeting-context'
 
 export interface MeetingLaunchValidationResult {
   canLaunch: boolean

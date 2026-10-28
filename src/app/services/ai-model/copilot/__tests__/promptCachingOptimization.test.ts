@@ -9,8 +9,8 @@ import {
   getOrCreateCandidateBrief,
   isFullContextNeeded,
   estimateTokens,
-} from '../candidateBrief'
-import { TieredContextManager } from '../contextManager'
+} from '../../context/candidateBrief'
+import { TieredContextManager } from '../../context/contextManager'
 import { SmartModelRouter } from '../../model-router/smartModelRouter'
 import type { DiscoveredModel } from '../../model-registry'
 import { UsageTrackerService } from '../../../usage-tracker/usageTrackerService'

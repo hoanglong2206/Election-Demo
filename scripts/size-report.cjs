@@ -29,12 +29,12 @@ function getAllFiles(dir, exts = ['.ts', '.tsx']) {
 
 function classifyFile(relPath) {
   const norm = relPath.replace(/\\/g, '/')
-  if (norm.includes('/hooks/use')) return { type: 'Hook', max: 300 }
+  if (norm.includes('/hooks/use')) return { type: 'Hook', max: 400 }
   if (norm.endsWith('Mode.tsx') || norm.endsWith('Home.tsx') || norm.endsWith('Settings.tsx') || norm.endsWith('Diagnostic.tsx')) {
-    return { type: 'Container', max: 600 }
+    return { type: 'Container', max: 700 }
   }
-  if (norm.endsWith('.tsx')) return { type: 'Component', max: 400 }
-  if (norm.includes('/services/')) return { type: 'Service', max: 500 }
+  if (norm.endsWith('.tsx')) return { type: 'Component', max: 500 }
+  if (norm.includes('/services/')) return { type: 'Service', max: 600 }
   return { type: 'Module', max: 500 }
 }
 

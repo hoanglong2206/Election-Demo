@@ -2,7 +2,7 @@ import { History, ArrowRight, Calendar, Download, Printer, ShieldCheck, MessageS
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { exportSessionToMarkdown, exportSessionToPDF, type MeetingSession } from '@/services/sessionHistory'
+import { exportSessionToMarkdown, exportSessionToPDF, type MeetingSession } from '@/services/session-history'
 import { cn } from '@/lib/utils'
 
 export interface RecentSessionsCardProps {

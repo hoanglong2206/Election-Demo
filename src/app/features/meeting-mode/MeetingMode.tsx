@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
 import type { AppMode } from '@/types/electron.d'
-import { getSavedMeetingContext } from '@/services/meetingContext'
+import { getSavedMeetingContext } from '@/services/meeting-context'
 import {
   getSavedAIModelId,
   getSelectedModelConfig,
@@ -11,7 +11,7 @@ import {
 import {
   PRESET_AUDIO_DEVICES,
   getSavedAudioDeviceId,
-} from '@/services/audioDevices'
+} from '@/services/audio-devices'
 import {
   jdKeywordExtractor,
   whisperPromptBuilder,
@@ -20,7 +20,7 @@ import {
   profileContextService,
   type ProfilePresetSnapshot,
 } from '@/services/profile-preset'
-import type { HistorySuggestion } from '@/services/sessionHistory'
+import type { HistorySuggestion } from '@/services/session-history'
 import type { ScreenCaptureState } from '@/services/screen-capture'
 import type { MeetingModeProps } from './types'
 import {

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import type { AppMode } from '@/types/electron.d'
 import type { TranscriptLine } from '../types'
 import type { ResponseLanguage } from '@/services/ai-model/aiModels'
-import { summarizeMeetingTranscripts } from '@/services/ai-model/summaryService'
+import { summarizeMeetingTranscripts } from '@/services/ai-model/summary'
 
 export interface UseMeetingSummaryReturn {
   meetingSummary: string | null

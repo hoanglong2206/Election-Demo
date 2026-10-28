@@ -4,7 +4,7 @@ import {
   initialSessionSelectionState,
   type SessionSelectionState,
 } from '../sessionSelectionReducer'
-import type { MeetingSession } from '@/services/sessionHistory'
+import type { MeetingSession } from '@/services/session-history'
 
 describe('sessionSelectionReducer', () => {
   it('returns initial state by default', () => {

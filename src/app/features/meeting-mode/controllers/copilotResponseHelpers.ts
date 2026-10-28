@@ -1,9 +1,9 @@
-import type { HistorySuggestion } from '@/services/sessionHistory'
+import type { HistorySuggestion } from '@/services/session-history'
 import type { TranscriptLine } from '../types'
 import {
   validateAnswerGrounding,
   validateAnswerGroundingAsync,
-} from '@/services/ai-model/copilot'
+} from '@/services/ai-model/grounding'
 import { sessionsPort } from '@/infrastructure/ipc'
 import type { InterviewVariation, AISuggestion } from '../types'
 

@@ -1,4 +1,4 @@
-import { callUniversalLLM } from '../copilot/universalLlm'
+import { callUniversalLLM } from '../llm'
 import type { AppMode } from '@/types/electron.d'
 import type { SummaryTranscriptItem } from './types'
 import {

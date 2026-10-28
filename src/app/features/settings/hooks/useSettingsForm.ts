@@ -19,7 +19,7 @@ import {
   PRESET_AUDIO_DEVICES,
   getSavedAudioDeviceId,
   saveAudioDeviceId,
-} from '@/services/audioDevices'
+} from '@/services/audio-devices'
 import { normalizeResponseLanguage } from '@/services/ai-model/language'
 import {
   getAppSettings,

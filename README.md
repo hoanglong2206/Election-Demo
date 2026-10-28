@@ -635,6 +635,21 @@ sequenceDiagram
    bun run build
    ```
 
+5. Kiểm tra chất lượng mã nguồn & kiến trúc:
+   ```powershell
+   # Kiểm tra vòng lặp phụ thuộc và các ràng buộc phân tầng kiến trúc
+   bun run arch:check
+
+   # Chạy toàn bộ 451 unit & integration tests
+   bun test
+
+   # Kiểm tra kích thước và số dòng các tệp mã nguồn
+   bun run size:report
+
+   # Pipeline kiểm tra toàn diện trước khi commit (Typecheck + Lint + Test + Build)
+   bun run check
+   ```
+
 ---
 
 ## 🎙️ Cấu Hình Local Whisper C++ Native
@@ -645,13 +660,13 @@ sequenceDiagram
    ```
    resources/bin/whisper-cli.exe
    ```
-   *(Xem hướng dẫn chi tiết tại [`resources/bin/README.txt`](file:///d:/DEV/Election-Demo/resources/bin/README.txt))*
+   *(Xem hướng dẫn chi tiết tại `resources/bin/README.txt`)*
 
 2. Tải mô hình GGML (định dạng `.bin`, ví dụ `ggml-tiny.bin` hoặc `ggml-base.bin`) và đặt vào:
    ```
    resources/models/ggml-base.bin
    ```
-   *(Xem hướng dẫn chi tiết tại [`resources/models/README.txt`](file:///d:/DEV/Election-Demo/resources/models/README.txt))*
+   *(Xem hướng dẫn chi tiết tại `resources/models/README.txt`)*
 
 3. Mở ứng dụng, vào **Settings** $\to$ **STT Engine**, chọn **Local Whisper C++** và bấm **Health Check** để xác nhận engine đã sẵn sàng hoạt động.
 

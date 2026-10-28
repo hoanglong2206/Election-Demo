@@ -1,7 +1,7 @@
 import { Camera } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { HistoryScreenshotQuestion } from '@/services/sessionHistory'
+import type { HistoryScreenshotQuestion } from '@/services/session-history'
 
 export interface ScreenshotsTabViewProps {
   screenshotQuestions: HistoryScreenshotQuestion[] | undefined

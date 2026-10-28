@@ -1,5 +1,5 @@
 import type { CopilotDiscussionOption } from './types'
-import { callUniversalLLM } from './universalLlm'
+import { callUniversalLLM } from '../llm'
 import type { PromptTranscriptLine } from './transcript'
 import { parseOptionResponse, looksLikeJson, stripCodeFences } from './parseOptions'
 import {
@@ -7,7 +7,7 @@ import {
   normalizeResponseLanguage,
   type ResponseLanguage,
 } from '../language'
-import { tieredContextManager, TieredContextManager } from './contextManager'
+import { tieredContextManager, TieredContextManager } from '../context'
 
 /**
  * Generates options for discussion mode using 4-Tier Context Architecture.

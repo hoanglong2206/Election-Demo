@@ -504,3 +504,21 @@ export function assembleLatestExchange(
     continuationStitched: continuationUsed,
   }
 }
+
+
+/**
+ * Overlap-aware fragment stitcher for transcript lines.
+ */
+export function stitchFragments(fragments: string[]): string {
+  if (!fragments || fragments.length === 0) return ''
+  let result = ''
+  for (const frag of fragments) {
+    if (!frag.trim()) continue
+    if (!result) {
+      result = cleanAudioAnnotations(frag).trim()
+    } else {
+      result = stitchTwoChunks(result, frag)
+    }
+  }
+  return result.trim()
+}

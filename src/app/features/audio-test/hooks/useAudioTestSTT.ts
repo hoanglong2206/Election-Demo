@@ -10,7 +10,7 @@ import {
   type STTQueueMetrics,
   whisperPromptBuilder,
 } from '@/services/ai-model/stt'
-import { getSavedMeetingContext } from '@/services/meetingContext'
+import { getSavedMeetingContext } from '@/services/meeting-context'
 import { YOUTUBE_STT_SAMPLES } from '../constants'
 import type { STTLang, STTPreviewLine } from '../types'
 import type { AudioSegment } from '@/core/audio/types'

@@ -6,16 +6,18 @@ import {
   detectIntentFromRecentLines,
   type IntentDetectionResult,
   type TriggerMode,
+} from '@/services/ai-model/intent'
+import {
   tieredContextManager,
-  type ContextUsageInfo,
-} from '@/services/ai-model/copilot'
+} from '@/services/ai-model/context'
+import type { ContextUsageInfo } from '@/services/ai-model/copilot'
 import { sessionsPort } from '@/infrastructure/ipc'
 import { settingsManager } from '@/services/settings/settingsManager'
 import {
   copilotTriggerController,
 } from '../controllers/copilotTriggerController'
 import { chunkProducer } from '../controllers/chunkProducer'
-import type { ScannedExchangeResult } from '@/services/ai-model/copilotResponseService'
+import type { AssembledExchange as ScannedExchangeResult } from '@/services/ai-model/copilot/exchangeAssembler'
 
 export interface UseIntentTriggerProps {
   mode: AppMode
@@ -146,7 +148,10 @@ export function useIntentTrigger({
           speaker: intentRes.speaker,
           timestamp: intentRes.timestamp || lastLine?.timestamp || '',
           isQuestion: intentRes.isQuestion,
-          isAiScanned: false,
+          fullTurnText: intentRes.normalizedText,
+          questionSentence: intentRes.normalizedText,
+          mergedLineCount: 1,
+          continuationStitched: false,
           sourceLineCount: validLines.length,
         }
       }

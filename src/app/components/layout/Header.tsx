@@ -2,6 +2,7 @@ import { Brain, Minus, Maximize, X, Pin, PinOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
+import { windowPort } from '@/infrastructure/ipc'
 
 interface HeaderProps {
   opacity: number
@@ -17,18 +18,18 @@ export function Header({ opacity, onOpacityChange, onMinimizeStart, onMaximizeSt
   const handleMinimize = () => {
     onMinimizeStart()
     setTimeout(() => {
-      window.api?.minimize()
+      windowPort.minimize()
     }, 300)
   }
   const handleMaximize = () => {
     onMaximizeStart()
     setTimeout(() => {
-      window.api?.maximize()
+      windowPort.maximize()
     }, 300)
   }
-  const handleClose = () => window.api?.close()
+  const handleClose = () => windowPort.close()
   const handlePinToggle = async () => {
-    const newState = await window.api?.toggleAlwaysOnTop()
+    const newState = await windowPort.toggleAlwaysOnTop()
     setIsPinned(newState ?? !isPinned)
   }
 

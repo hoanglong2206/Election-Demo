@@ -4,7 +4,7 @@ import {
   callUniversalLLMStream,
   checkCachedHasApiKey,
   invalidateApiKeyCache,
-} from '../universalLlm'
+} from '../../llm'
 
 describe('universalLlm Hardened IPC Streaming & Wrapper', () => {
   const originalWindow = (globalThis as any).window

@@ -2,7 +2,7 @@ import { MessageSquare, Copy, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-import type { HistoryTranscriptLine } from '@/services/sessionHistory'
+import type { HistoryTranscriptLine } from '@/services/session-history'
 
 export interface TranscriptTabViewProps {
   sortedTranscripts: HistoryTranscriptLine[]

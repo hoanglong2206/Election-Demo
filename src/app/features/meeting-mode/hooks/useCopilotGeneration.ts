@@ -13,15 +13,16 @@ import {
 import { useStreamingAnswer } from './useStreamingAnswer'
 import {
   generateDiscussionOptions,
-  type ScannedExchangeResult,
-} from '@/services/ai-model/copilotResponseService'
+  
+} from '@/services/ai-model/copilot/discussion'
 import {
   getSavedResponseLanguage,
   saveResponseLanguage,
   normalizeResponseLanguage,
   type ResponseLanguage,
 } from '@/services/ai-model/aiModels'
-import type { AnswerStrategyId } from '@/services/ai-model/copilot'
+import type { AnswerStrategyId } from '@/services/ai-model/strategy'
+import type { AssembledExchange as ScannedExchangeResult } from '@/services/ai-model/copilot/exchangeAssembler'
 import {
   runGroundingValidation,
   journalInterviewSuggestion,

@@ -18,8 +18,8 @@ import {
   PERSONAL_PATTERN,
   METRIC_PATTERN,
   clearEvidenceIndexCache,
-} from '../answerGrounding'
-import { extractFactSheet, clearFactSheetCache } from '../factSheet'
+} from '../../grounding'
+import { extractFactSheet, clearFactSheetCache } from '../../grounding/factSheet'
 import { GOLDEN_GROUNDING_DATASET } from './goldenGroundingDataset'
 
 describe('Answer Grounding 7 Target Bug Fixes', () => {
@@ -415,7 +415,7 @@ describe('Golden Dataset Benchmark (>= 60 Test Pairs)', () => {
       groundSentenceWithWorker,
       cancelGroundingWorkerRequests,
       terminateGroundingWorker,
-    } = await import('../groundingWorkerClient')
+    } = await import('../../grounding/groundingWorkerClient')
 
     const input = {
       answer: 'I used RabbitMQ for the message queue.',

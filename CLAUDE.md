@@ -9,7 +9,8 @@ Tài liệu này trích xuất từ Prompt Chủ để định hướng mọi l�
 - **hooks/**, **components/**, **features/**: Import từ `services/`, `core/`, `lib/`, `components/ui/`, `infrastructure/ipc/`.
 - **components/ui/** và **lib/**: Chỉ import từ `lib/`.
 - **features/**: Không import ruột `features/<other-feature>/*`, chỉ import qua `index.ts` công khai của feature đó.
-- **IPC Access**: Mọi lời gọi `window.api.*` phải đi qua các port có kiểu trong `@/infrastructure/ipc/`. Không gọi trực tiếp `window.api`.
+- **IPC Access**: Mọi lời gọi `window.api.*` phải đi qua các port có kiểu trong `@/infrastructure/ipc/`. **TUYỆT ĐỐI CẤM gọi trực tiếp `window.api` (ESLint Rule: ERROR)**.
+- **Max-lines Enforcement**: Mọi file mới đều phải tuân thủ giới hạn dòng nghiêm ngặt (`max-lines: error`, $\le 400$ dòng cho components/modules thông thường, baseline ngoại lệ chỉ còn 8 file nợ).
 
 ## 2. Quy Tắc Nội Dung & State Management
 - Hook hoặc Component dùng từ $\ge 2$ feature: bắt buộc nằm trong `hooks/` hoặc `components/shared/`.

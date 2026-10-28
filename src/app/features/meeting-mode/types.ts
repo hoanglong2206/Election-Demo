@@ -1,14 +1,15 @@
 import type { AppMode } from '@/types/electron.d'
 import type { ViewState } from '../../components/layout/Layout'
+import type { RetrievalCitation, RetrievalDiagnostics } from '../../services/ai-model/context'
 import type { ContextUsageInfo } from '../../services/ai-model/copilot'
-import type { AnswerStrategyId } from '../../services/ai-model/copilot'
-import type { GroundingResult } from '../../services/ai-model/copilot'
-import type { RetrievalCitation, RetrievalDiagnostics } from '../../services/ai-model/copilot'
+import type { AnswerStrategyId } from '../../services/ai-model/strategy'
+import type { GroundingResult } from '../../services/ai-model/grounding'
 import type { RoutingDecision } from '../../services/ai-model/model-router'
-import type { HistorySuggestion } from '../../services/sessionHistory'
-import type { IntentDetectionResult } from '../../services/ai-model/copilot'
+import type { HistorySuggestion } from '@/services/session-history'
+import type { IntentDetectionResult } from '../../services/ai-model/intent'
 import type { ResponseLanguage } from '../../services/ai-model/aiModels'
-import type { ScannedExchangeResult } from '../../services/ai-model/copilotResponseService'
+import type { AssembledExchange as ScannedExchangeResult } from '../../services/ai-model/copilot/exchangeAssembler'
+export type { ScannedExchangeResult }
 import type { CopilotState } from './machines/copilotStateMachine'
 
 export interface TranscriptLine {

@@ -1,7 +1,7 @@
 import { Volume2, RefreshCw, Headphones, ChevronDown, Check } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import type { AudioDeviceInfo } from '@/services/audioDevices'
+import type { AudioDeviceInfo } from '@/services/audio-devices'
 
 export interface AudioDeviceSelectorCardProps {
   audioDevices: AudioDeviceInfo[]

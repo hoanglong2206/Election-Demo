@@ -2,6 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react'
 import { Layout, type ViewState } from './components/layout/Layout'
 import type { AppMode } from './types/electron.d'
 import { modelRegistryService } from './services/ai-model/model-registry'
+import { windowPort } from '@/infrastructure/ipc'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 const Home = lazy(() =>
@@ -37,7 +38,7 @@ function App() {
 
   const handleModeChange = (newMode: AppMode) => {
     setMode(newMode)
-    window.api?.toggleMode(newMode)
+    windowPort.toggleMode(newMode)
   }
 
   const handleViewChange = (newView: ViewState) => {

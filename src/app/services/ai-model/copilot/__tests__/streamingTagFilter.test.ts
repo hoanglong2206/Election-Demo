@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { createStreamingTagFilter } from '../streamingTagFilter'
+import { createStreamingTagFilter } from '../../llm/streamingTagFilter'
 
 describe('createStreamingTagFilter', () => {
   it('should remove full <think> tag inside a single chunk', () => {

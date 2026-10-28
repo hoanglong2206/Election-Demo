@@ -28,15 +28,13 @@ import { cn } from '@/lib/utils'
 import type { AppMode } from '@/types/electron.d'
 import type { AISuggestion, InterviewVariation } from '../../types'
 import type { AIModelConfig } from '../../../../services/ai-model/aiModels'
-import type {
-  ContextUsageInfo,
-  IntentDetectionResult,
-  TriggerMode,
-  AnswerStrategyId,
-} from '../../../../services/ai-model/copilot'
-import { answerStrategyRouter, triggerLogManager } from '../../../../services/ai-model/copilot'
+import type { ContextUsageInfo } from '../../../../services/ai-model/copilot'
+import type { IntentDetectionResult, TriggerMode } from '../../../../services/ai-model/intent'
+import type { AnswerStrategyId } from '../../../../services/ai-model/strategy'
+import { answerStrategyRouter } from '../../../../services/ai-model/strategy'
+import { triggerLogManager } from '../../../../services/ai-model/intent'
 import { useVietnameseTranslation } from '@/hooks/useVietnameseTranslation'
-import { VisualQuestionCard } from '../VisualQuestionCard'
+import { VisualQuestionCard } from '../visual'
 import type { ScreenCaptureState, VisualQuestionItem } from '../../../../services/screen-capture/types'
 
 interface CopilotSuggestionPaneProps {
@@ -283,7 +281,7 @@ export function CopilotSuggestionPane({
               aria-label="Answer strategy"
             >
               <option value="">Auto strategy</option>
-              {answerStrategyRouter.list().map((strategy) => (
+              {answerStrategyRouter.list().map((strategy: any) => (
                 <option key={strategy.id} value={strategy.id}>
                   {strategy.label}
                 </option>
@@ -584,7 +582,7 @@ export function CopilotSuggestionPane({
             {logs.length === 0 ? (
               <div className="text-white/30 italic py-2 text-center">Chưa có phát biểu nào được ghi nhận.</div>
             ) : (
-              logs.map((lg) => (
+              logs.map((lg: any) => (
                 <div
                   key={lg.id}
                   className="flex items-start justify-between gap-2 p-1.5 rounded bg-white/[0.02] border border-white/[0.04]"

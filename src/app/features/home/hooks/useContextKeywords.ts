@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { AppMode } from '@/types/electron.d'
-import { type MeetingContextData, saveMeetingContext } from '@/services/meetingContext'
+import { type MeetingContextData, saveMeetingContext } from '@/services/meeting-context'
 import { jdKeywordExtractor } from '@/services/ai-model/stt'
 import { profileContextService, type ProfilePreset } from '@/services/profile-preset'
 

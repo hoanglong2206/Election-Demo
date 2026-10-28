@@ -3,6 +3,7 @@ import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 import { ToastHost } from '@/components/ui/toast'
+import { windowPort } from '@/infrastructure/ipc'
 import type { ViewState } from './types'
 export type { ViewState }
 
@@ -19,7 +20,7 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
 
   useEffect(() => {
     // Listen for restore event from Electron to reverse the minimize/maximize animation
-    const unsubscribe = window.api?.onRestore?.(() => {
+    const unsubscribe = windowPort.onRestore(() => {
       setIsMinimizing(false)
       setIsMaximizing(false)
     })

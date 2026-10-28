@@ -2,7 +2,7 @@ import '@/test/setupDom'
 import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { useAudioDeviceSelection } from '../useAudioDeviceSelection'
-import * as audioDevices from '@/services/audioDevices'
+import * as audioDevices from '@/services/audio-devices'
 
 describe('useAudioDeviceSelection', () => {
   let spySave: ReturnType<typeof spyOn>

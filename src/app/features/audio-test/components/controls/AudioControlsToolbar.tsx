@@ -1,5 +1,5 @@
 import type { AudioMetrics } from '@/core/audio/types'
-import type { AudioDeviceInfo } from '@/services/audioDevices'
+import type { AudioDeviceInfo } from '@/services/audio-devices'
 import { AudioSourceDeviceSelector } from './AudioSourceDeviceSelector'
 import { AudioBufferActions } from './AudioBufferActions'
 import { AudioSignalVisualizer } from './AudioSignalVisualizer'

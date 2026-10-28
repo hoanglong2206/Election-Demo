@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { MessageSquare } from 'lucide-react'
-import type { MeetingSession } from '@/services/sessionHistory'
+import type { MeetingSession } from '@/services/session-history'
 import type { DetailTab } from '../../types'
 import {
   buildChronologicalTimeline,

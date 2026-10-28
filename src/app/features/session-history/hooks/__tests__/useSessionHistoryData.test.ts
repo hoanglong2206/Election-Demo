@@ -6,7 +6,7 @@ import {
   saveSessionToHistory,
   clearAllSessionsFromHistory,
   type MeetingSession,
-} from '@/services/sessionHistory'
+} from '@/services/session-history'
 
 const mockSessions: MeetingSession[] = [
   {

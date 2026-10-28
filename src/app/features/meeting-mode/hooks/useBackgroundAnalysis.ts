@@ -6,9 +6,9 @@ import {
   analyzeDiscussionBackground,
   getCachedCvAnalysis,
   getCachedDiscussionAnalysis,
-  prewarmCopilotCache,
-} from '@/services/ai-model/copilotResponseService'
-import { tieredContextManager } from '@/services/ai-model/copilot'
+} from '@/services/ai-model/context'
+import { tieredContextManager } from '@/services/ai-model/context'
+import { prewarmCopilotCache } from '@/services/ai-model/copilot/interview'
 
 export interface UseBackgroundAnalysisProps {
   mode: AppMode

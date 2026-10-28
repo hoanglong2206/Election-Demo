@@ -6,7 +6,7 @@ import {
   type InterviewStreamInit,
 } from '@/services/ai-model/copilot/interview'
 import type { CopilotInterviewResult } from '@/services/ai-model/copilot/types'
-import type { GateDecision } from '@/services/ai-model/copilot/intentGate'
+import type { GateDecision } from '@/services/ai-model/intent'
 
 export type StreamingAnswerCallbacks = {
   onInit?: (init: InterviewStreamInit) => void

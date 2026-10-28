@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Volume2, ChevronDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { PRESET_AUDIO_DEVICES, type AudioDeviceInfo } from '@/services/audioDevices'
+import { PRESET_AUDIO_DEVICES, type AudioDeviceInfo } from '@/services/audio-devices'
 
 interface AudioDeviceSelectorProps {
   selectedDevice: string

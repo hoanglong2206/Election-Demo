@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Search, X, Filter } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { cn } from '@/lib/utils'
-import type { SessionDateFilter } from '@/services/sessionHistory'
+import type { SessionDateFilter } from '@/services/session-history'
 import type { ProfileFilterOption } from '../../hooks/useSessionFilter'
 
 export interface SidebarFilterHeaderProps {

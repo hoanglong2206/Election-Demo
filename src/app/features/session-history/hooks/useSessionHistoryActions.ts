@@ -5,7 +5,7 @@ import {
   clearAllSessionsFromHistory,
   renameSessionInHistory,
   type MeetingSession,
-} from '@/services/sessionHistory'
+} from '@/services/session-history'
 import {
   sessionSelectionReducer,
   initialSessionSelectionState,

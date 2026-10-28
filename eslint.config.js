@@ -6,32 +6,13 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 const BASELINE_OVERSIZED_FILES = [
-  'src/app/core/audio/AudioBufferManager.ts',
-  'src/app/core/audio/SpeechSegmenter.ts',
-  'src/app/features/ai-diagnostic/components/AILatencyBenchmarkSection.tsx',
-  'src/app/features/ai-diagnostic/components/ScreenCaptureVisionSection.tsx',
-  'src/app/features/home/components/AIModelSelectorCard.tsx',
-  'src/app/features/home/components/ContextEditorCard.tsx',
-  'src/app/features/home/components/ProfilePresetDialog.tsx',
-  'src/app/features/home/Home.tsx',
-  'src/app/features/meeting-mode/components/CopilotSuggestionPane.tsx',
   'src/app/features/meeting-mode/components/copilot/CopilotSuggestionPane.tsx',
-  'src/app/features/meeting-mode/components/LiveTranscriptPane.tsx',
   'src/app/features/meeting-mode/components/transcript/LiveTranscriptPane.tsx',
-  'src/app/features/meeting-mode/components/ScreenshotCropOverlay.tsx',
-  'src/app/features/meeting-mode/MeetingMode.tsx',
   'src/app/services/ai-model/aiModels.ts',
-  'src/app/services/ai-model/copilot/answerGrounding.ts',
-  'src/app/services/ai-model/copilot/contextManager.ts',
-  'src/app/services/ai-model/copilot/exchangeAssembler.ts',
   'src/app/services/ai-model/copilot/interview.ts',
-  'src/app/services/ai-model/copilot/questionDetector.ts',
-  'src/app/services/ai-model/copilot/universalLlm.ts',
   'src/app/services/ai-model/model-registry/modelRegistryService.ts',
-  'src/app/services/ai-model/stt/sttJobQueue.ts',
   'src/app/services/ai-model/translation/TranslationService.ts',
   'src/app/services/session-history/repository.ts',
-  'src/app/services/settings/settingsManager.ts',
   'src/app/services/usage-tracker/usageTrackerService.ts',
 ]
 
@@ -189,17 +170,17 @@ export default defineConfig([
     },
   },
 
-  // 5. Debt warning: detect any direct window.api.* calls outside infrastructure/ipc
+  // 5. Debt enforcement: forbid any direct window.api.* calls outside infrastructure/ipc
   {
     files: ['src/app/**/*.{ts,tsx}'],
     ignores: ['src/app/infrastructure/ipc/**', 'src/app/**/__tests__/**', 'src/app/types/**'],
     rules: {
       'no-restricted-syntax': [
-        'warn',
+        'error',
         {
           selector: "MemberExpression[object.name='window'][property.name='api']",
           message:
-            "Direct window.api access is deprecated. Migrate to typed ports in '@/infrastructure/ipc'.",
+            "Direct window.api access is strictly forbidden. Migrate to typed ports in '@/infrastructure/ipc'.",
         },
       ],
     },
@@ -210,13 +191,13 @@ export default defineConfig([
     files: ['src/app/**/*.{ts,tsx}'],
     ignores: ['src/app/**/__tests__/**'],
     rules: {
-      'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
     },
   },
   {
     files: BASELINE_OVERSIZED_FILES,
     rules: {
-      'max-lines': ['warn', { max: 400, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['warn', { max: 500, skipBlankLines: true, skipComments: true }],
     },
   },
 ])

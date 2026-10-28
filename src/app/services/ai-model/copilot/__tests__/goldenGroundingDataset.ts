@@ -14,7 +14,7 @@
  * 11. Long context (> 4000 chars)
  */
 
-import { type ClaimClassification, type ClaimType } from '../answerGrounding'
+import { type ClaimClassification, type ClaimType } from '../../grounding/types'
 
 export interface GoldenTestCase {
   id: string

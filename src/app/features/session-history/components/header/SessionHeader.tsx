@@ -8,7 +8,7 @@ import {
   exportSessionToJson,
   exportSessionToPDF,
   type MeetingSession,
-} from '@/services/sessionHistory'
+} from '@/services/session-history'
 
 export interface SessionHeaderProps {
   totalSessions: number

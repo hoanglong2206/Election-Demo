@@ -16,7 +16,7 @@
 
 import { settingsManager } from '../../settings'
 import { usageTrackerService } from '../../usage-tracker'
-import { callUniversalLLM } from '../copilot/universalLlm'
+import { callUniversalLLM } from '../llm'
 import { TranslationLRUCache } from './LRUCache'
 import { TranslationRateLimiter } from './RateLimiter'
 import { TranslationCircuitBreaker } from './CircuitBreaker'
@@ -473,7 +473,7 @@ ${texts.map((t, idx) => `${idx + 1}. ${t}`).join('\n')}`
 
         const lines = res.text
           .split('\n')
-          .map((l) => l.replace(/^\d+[.:\-)]\s*/, '').trim())
+          .map((l: string) => l.replace(/^\d+[.:\-)]\s*/, '').trim())
           .filter(Boolean)
 
         if (lines.length >= texts.length) {

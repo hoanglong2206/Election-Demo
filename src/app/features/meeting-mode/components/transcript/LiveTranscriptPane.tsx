@@ -25,7 +25,8 @@ import { cn } from '@/lib/utils'
 import type { AppMode } from '@/types/electron.d'
 import { useVietnameseTranslation } from '@/hooks/useVietnameseTranslation'
 import type { TranscriptLine } from '../../types'
-import type { ScannedExchangeResult, STTQueueMetrics } from '@/services'
+import type { ScannedExchangeResult } from '../../types'
+import type { STTQueueMetrics } from '@/services/ai-model/stt'
 
 interface LiveTranscriptPaneProps {
   sourceType: 'system' | 'mic'

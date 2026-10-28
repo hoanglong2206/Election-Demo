@@ -4,7 +4,7 @@ import {
   getSavedAudioDeviceId,
   saveAudioDeviceId,
   type AudioDeviceInfo,
-} from '@/services/audioDevices'
+} from '@/services/audio-devices'
 
 export interface UseAudioDeviceSelectionReturn {
   audioDevices: AudioDeviceInfo[]

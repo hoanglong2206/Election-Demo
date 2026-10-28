@@ -1,4 +1,4 @@
-import type { MeetingContextData } from '@/services/meetingContext'
+import type { MeetingContextData } from '@/services/meeting-context'
 import { TechnicalKeywordsSection } from './TechnicalKeywordsSection'
 
 export interface DiscussionContextTabProps {

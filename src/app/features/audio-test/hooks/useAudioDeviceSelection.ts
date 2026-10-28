@@ -4,7 +4,7 @@ import {
   saveAudioDeviceId,
   enumerateSystemAudioDevices,
   type AudioDeviceInfo,
-} from '@/services/audioDevices'
+} from '@/services/audio-devices'
 import {
   getVADCalibration,
   getEffectiveVadEnergyThreshold,

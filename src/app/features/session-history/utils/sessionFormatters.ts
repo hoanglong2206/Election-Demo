@@ -3,7 +3,7 @@ import type {
   HistorySuggestion,
   HistoryTranscriptLine,
   MeetingSession,
-} from '@/services/sessionHistory'
+} from '@/services/session-history'
 
 /**
  * Parses timestamp string "MM:SS" or "HH:MM:SS" into numeric seconds for sorting.

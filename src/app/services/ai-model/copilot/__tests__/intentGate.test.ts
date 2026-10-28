@@ -6,12 +6,12 @@ import {
   inferStrategyFromGateIntent,
   SpeculativeRateLimiter,
   CONFIDENCE_HIGH,
-} from '../intentGate'
+} from '../../intent/intentGate'
 import {
   classifyIntent,
   detectIntentFromRecentLines,
   type IntentDetectionResult,
-} from '../questionDetector'
+} from '../../intent'
 
 function createMockIntent(overrides: Partial<IntentDetectionResult> = {}): IntentDetectionResult {
   return {

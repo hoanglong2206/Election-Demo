@@ -12,7 +12,7 @@ import {
   type CaptureState,
   transitionCaptureState,
 } from '../machines/captureStateMachine'
-import { tieredContextManager } from '@/services/ai-model/copilot'
+import { tieredContextManager } from '@/services/ai-model/context'
 import { sessionsPort } from '@/infrastructure/ipc'
 import type { ResponseLanguage } from '@/services/ai-model/aiModels'
 

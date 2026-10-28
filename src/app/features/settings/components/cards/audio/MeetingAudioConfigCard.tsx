@@ -4,7 +4,7 @@ import { AudioDeviceSelector } from './AudioDeviceSelector'
 import { ModelRouterPolicySelector, type ModelRouterPolicy } from './ModelRouterPolicySelector'
 import { VADSegmentationSection } from './VADSegmentationSection'
 import { ResponseLanguageSection } from './ResponseLanguageSection'
-import type { AudioDeviceInfo } from '@/services/audioDevices'
+import type { AudioDeviceInfo } from '@/services/audio-devices'
 
 export interface MeetingAudioConfigCardProps {
   vadThreshold: string

@@ -4,8 +4,8 @@ import {
   speculativeRateLimiter,
   type IntentDetectionResult,
   type TriggerMode,
-} from '@/services/ai-model/copilot'
-import type { ScannedExchangeResult } from '@/services/ai-model/copilotResponseService'
+} from '@/services/ai-model/intent'
+import type { AssembledExchange as ScannedExchangeResult } from '@/services/ai-model/copilot/exchangeAssembler'
 
 export interface ScheduleTriggerOptions {
   exchange: ScannedExchangeResult

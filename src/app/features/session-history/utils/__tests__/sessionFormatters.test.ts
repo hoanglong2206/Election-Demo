@@ -6,7 +6,7 @@ import {
   formatTokenCount,
   formatCost,
 } from '../sessionFormatters'
-import type { MeetingSession, HistoryTranscriptLine } from '@/services/sessionHistory'
+import type { MeetingSession, HistoryTranscriptLine } from '@/services/session-history'
 
 describe('sessionFormatters utility functions', () => {
   describe('parseTimestampToSeconds', () => {

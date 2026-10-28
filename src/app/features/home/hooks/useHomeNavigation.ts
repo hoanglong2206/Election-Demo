@@ -7,8 +7,8 @@ import {
   initSessionStorage,
   subscribeSessions,
   type MeetingSession,
-} from '@/services/sessionHistory'
-import { saveMeetingContext, type MeetingContextData } from '@/services/meetingContext'
+} from '@/services/session-history'
+import { saveMeetingContext, type MeetingContextData } from '@/services/meeting-context'
 import { jdKeywordExtractor } from '@/services/ai-model/stt'
 import { profileContextService, type ProfilePreset } from '@/services/profile-preset'
 import { validateMeetingLaunch } from '../utils/validation'

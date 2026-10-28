@@ -1,5 +1,5 @@
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { MeetingSession, SessionDateFilter } from '@/services/sessionHistory'
+import type { MeetingSession, SessionDateFilter } from '@/services/session-history'
 import type { ModeFilter } from '../../types'
 import type { ProfileFilterOption } from '../../hooks/useSessionFilter'
 import { SidebarFilterHeader } from './SidebarFilterHeader'

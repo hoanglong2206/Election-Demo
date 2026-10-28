@@ -1,4 +1,4 @@
-import type { MeetingSession } from '@/services/sessionHistory'
+import type { MeetingSession } from '@/services/session-history'
 
 export type DeleteTarget =
   | { type: 'single'; session: MeetingSession }

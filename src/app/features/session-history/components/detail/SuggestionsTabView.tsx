@@ -1,6 +1,6 @@
 import { Sparkles, Copy, Check } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { HistorySuggestion } from '@/services/sessionHistory'
+import type { HistorySuggestion } from '@/services/session-history'
 
 export interface SuggestionsTabViewProps {
   suggestions: HistorySuggestion[] | undefined

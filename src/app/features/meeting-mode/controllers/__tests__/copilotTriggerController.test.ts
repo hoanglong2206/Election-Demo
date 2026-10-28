@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { CopilotTriggerController } from '../copilotTriggerController'
-import type { ScannedExchangeResult } from '@/services/ai-model/copilotResponseService'
-import type { IntentDetectionResult } from '@/services/ai-model/copilot'
+import type { AssembledExchange as ScannedExchangeResult } from '@/services/ai-model/copilot/exchangeAssembler'
+import type { IntentDetectionResult } from '@/services/ai-model/intent'
 
 describe('CopilotTriggerController Controller', () => {
   let controller: CopilotTriggerController
@@ -15,7 +15,7 @@ describe('CopilotTriggerController Controller', () => {
     speaker: 'Interviewer',
     timestamp: '00:15',
     isQuestion: true,
-    isAiScanned: false,
+    fullTurnText: '', questionSentence: '', mergedLineCount: 1, continuationStitched: false,
     sourceLineCount: 1,
   }
 

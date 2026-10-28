@@ -1,5 +1,5 @@
 import type { TranscriptLine } from '../types'
-import { stitchFragments } from '@/services/ai-model/copilot/scanLatestExchange'
+import { stitchFragments } from '@/services/ai-model/copilot/exchangeAssembler'
 import { speechSegmentationTelemetry } from '@/core/audio'
 
 export interface CommitSegmentPayload {

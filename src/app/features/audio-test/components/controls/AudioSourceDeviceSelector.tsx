@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Radio, Mic, ChevronDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { AudioDeviceInfo } from '@/services/audioDevices'
+import type { AudioDeviceInfo } from '@/services/audio-devices'
 
 export interface AudioSourceDeviceSelectorProps {
   sourceType: 'mic' | 'system'

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/electron/main.ts",
+    "src/electron/preload.ts",
+    "src/app/main.tsx",
+    "scripts/*.cjs"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "scripts/**/*.{js,cjs}"
+  ],
+  "ignore": [
+    "**/*.d.ts",
+    "**/*.test.{ts,tsx}",
+    "**/__tests__/**"
+  ],
+  "ignoreDependencies": [
+    "@testing-library/react",
+    "happy-dom"
+  ]
+}

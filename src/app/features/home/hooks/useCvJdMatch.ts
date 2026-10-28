@@ -4,7 +4,7 @@ import {
   analyzeCvJdMatchHeuristic,
   analyzeCvJdMatchWithAI,
   type CvJdMatchResult,
-} from '@/services/ai-model/copilot'
+} from '@/services/ai-model/context'
 
 export interface UseCvJdMatchProps {
   mode: AppMode

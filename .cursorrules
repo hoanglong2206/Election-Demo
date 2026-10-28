@@ -7,7 +7,8 @@
 - hooks/components/features: import services, core, lib, components/ui, infrastructure/ipc.
 - components/ui & lib: only import lib.
 - features: must NOT import internal files of another feature (features/<other>/*), only through public index.ts.
-- IPC: All window.api calls MUST go through typed ports in @/infrastructure/ipc. Direct window.api calls are prohibited.
+- IPC: All window.api calls MUST go through typed ports in @/infrastructure/ipc. Direct window.api calls are STRICTLY PROHIBITED (ESLint: ERROR).
+- Max-lines: Enforced strictly at error level for all files (<= 400 lines for standard components). Only 8 legacy baseline files permitted temporary warning.
 
 ## Size Limits
 - Container component: <= 600 lines

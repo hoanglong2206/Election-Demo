@@ -1,7 +1,7 @@
 import { Clock, Calendar, Trash2, Pencil, User, Briefcase, Layers, Coins } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import type { MeetingSession } from '@/services/sessionHistory'
+import type { MeetingSession } from '@/services/session-history'
 
 export interface SessionListItemCardProps {
   session: MeetingSession

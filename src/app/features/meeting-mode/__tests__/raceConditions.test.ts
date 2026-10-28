@@ -21,8 +21,12 @@ describe('MeetingMode Required Race Condition Tests', () => {
       speaker: 'Interviewer',
       timestamp: '00:15',
       isQuestion: true,
-      isAiScanned: false,
+      
       sourceLineCount: 2,
+      fullTurnText: 'How do you handle distributed transactions and Saga pattern?',
+      questionSentence: 'How do you handle distributed transactions and Saga pattern?',
+      mergedLineCount: 1,
+      continuationStitched: false,
     }
 
     const intent: IntentDetectionResult = {
@@ -137,8 +141,12 @@ describe('MeetingMode Required Race Condition Tests', () => {
         speaker: 'Interviewer',
         timestamp: '00:01',
         isQuestion: true,
-        isAiScanned: false,
+        
         sourceLineCount: 1,
+        fullTurnText: 'Question before unmount',
+        questionSentence: 'Question before unmount',
+        mergedLineCount: 1,
+        continuationStitched: false,
       },
       intent: {
         intent: 'QUESTION',

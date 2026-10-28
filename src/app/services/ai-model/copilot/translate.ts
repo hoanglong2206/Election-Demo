@@ -1,4 +1,4 @@
-import { callUniversalLLM } from './universalLlm'
+import { callUniversalLLM } from '../llm'
 
 /**
  * Translate an AI answer into Vietnamese on demand.

@@ -1,29 +1,29 @@
 import type { CopilotInterviewResult } from './types'
-import { callUniversalLLM, callUniversalLLMStream } from './universalLlm'
+import { callUniversalLLM, callUniversalLLMStream } from '../llm'
 import { looksLikeJson, stripCodeFences } from './parseOptions'
 import {
   languageInstruction,
   normalizeResponseLanguage,
   type ResponseLanguage,
 } from '../language'
-import { tieredContextManager, TieredContextManager } from './contextManager'
+import { tieredContextManager, TieredContextManager } from '../context'
 import {
   answerStrategyRouter,
   selectAnswerStrategy,
   type AnswerStrategyId,
-} from './answerStrategyRouter'
+} from '../strategy'
 import {
   type IntentDetectionResult,
   recordFalseTrigger,
-} from './questionDetector'
-import { validateAnswerGrounding, type GroundingMode } from './answerGrounding'
+} from '../intent'
+import { validateAnswerGrounding, type GroundingMode } from '../grounding'
 import {
   createInterviewDocuments,
   localRagIndex,
   type LocalRagOptions,
-} from './localRag'
+} from '../context'
 import { buildStaticSystemPrefix, buildDynamicUserPrompt } from './promptTemplate'
-import { isFullContextNeeded } from './candidateBrief'
+import { isFullContextNeeded } from '../context'
 import { usageTrackerService } from '../../usage-tracker'
 import {
   IntentGateStreamParser,
@@ -34,7 +34,7 @@ import {
   recordGateCancelled,
   recordGatePassed,
   type GateDecision,
-} from './intentGate'
+} from '../intent'
 
 export interface InterviewStreamInit {
   label: string

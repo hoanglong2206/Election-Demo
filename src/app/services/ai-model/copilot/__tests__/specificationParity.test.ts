@@ -4,14 +4,14 @@ import {
   isSmallTalkUtterance,
   isIncompleteSpeechFragment,
   detectIntentFromRecentLines,
-} from '../questionDetector'
+} from '../../intent'
 import {
   validateAnswerGrounding,
   checkMetricContradiction,
   checkDirectedRelationContradiction,
   type GroundingInput,
-} from '../answerGrounding'
-import { extractFactSheet, clearFactSheetCache } from '../factSheet'
+} from '../../grounding'
+import { extractFactSheet, clearFactSheetCache } from '../../grounding/factSheet'
 
 describe('Specification Parity Tests (Pre-Split Baseline)', () => {
   describe('QuestionDetector Specification', () => {

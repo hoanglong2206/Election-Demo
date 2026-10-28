@@ -7,7 +7,7 @@ import {
   SAMPLE_CV,
   SAMPLE_DISCUSSION_CONTEXT,
   type MeetingContextData,
-} from '@/services/meetingContext'
+} from '@/services/meeting-context'
 import { jdKeywordExtractor } from '@/services/ai-model/stt'
 import { profileContextService } from '@/services/profile-preset'
 import { useLatest } from '@/hooks/useLatest'

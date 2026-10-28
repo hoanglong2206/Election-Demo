@@ -3,7 +3,7 @@ import {
   searchAndFilterSessions,
   type MeetingSession,
   type SessionDateFilter,
-} from '@/services/sessionHistory'
+} from '@/services/session-history'
 import { profilePresetRepository } from '@/services/profile-preset'
 import type { ModeFilter } from '../types'
 

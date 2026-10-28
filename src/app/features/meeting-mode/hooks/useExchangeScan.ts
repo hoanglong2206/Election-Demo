@@ -3,8 +3,8 @@ import type { AppMode } from '@/types/electron.d'
 import type { TranscriptLine } from '../types'
 import {
   assembleLatestExchange,
-  type ScannedExchangeResult,
-} from '@/services/ai-model/copilotResponseService'
+  type AssembledExchange as ScannedExchangeResult,
+} from '@/services/ai-model/copilot/exchangeAssembler'
 
 export interface UseExchangeScanReturn {
   latestExchange: ScannedExchangeResult | null
@@ -36,7 +36,6 @@ export function useExchangeScan(): UseExchangeScanReturn {
 
   const resetExchange = useCallback(() => {
     setLatestExchange(null)
-    setIsScanningExchange(false)
   }, [])
 
   return {
