@@ -183,5 +183,3 @@ export function CostTracker() {
     </div>
   )
 }
-
-export default CostTracker

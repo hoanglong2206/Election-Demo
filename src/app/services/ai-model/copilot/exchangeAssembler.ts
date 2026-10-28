@@ -52,13 +52,13 @@ export interface AssembledExchange {
 /**
  * Common parenthetical/bracketed audio annotations from STT engines like Whisper
  */
-export const AUDIO_TAGS_REGEX =
+const AUDIO_TAGS_REGEX =
   /\((?:laughing|laughter|cười|music|applause|cheering|coughing|sighs?|gasp|chuckle|whisper|silence|throat clearing|blank_audio)\)|\[(?:laughing|laughter|cười|music|applause|cheering|coughing|sighs?|gasp|chuckle|whisper|silence|throat clearing|blank_audio)\]/gi
 
 /**
  * Common abbreviations ending with a period that should NOT trigger a sentence split.
  */
-export const ABBREVIATION_END_REGEX =
+const ABBREVIATION_END_REGEX =
   /(?:^|\s)(?:Prof|Mr|Mrs|Ms|Dr|Sr|Jr|St|vs|etc|Inc|Ltd|Co|Corp|approx|No|Vol|Fig|dept|univ|e\.g|i\.e|al)\.$/i
 
 /**
