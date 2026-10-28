@@ -42,10 +42,12 @@ import {
   MissingContextGuard,
   LiveTranscriptPane,
   CopilotSuggestionPane,
-  ScreenCaptureSourcePicker,
-  ScreenshotCropOverlay,
   UnfinishedSessionBanner,
 } from './components'
+import {
+  ScreenCaptureSourcePicker,
+  ScreenshotCropOverlay,
+} from '@/components/shared'
 
 export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
