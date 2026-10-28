@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
 import type { AppMode } from '@/types/electron.d'
-import { getSavedMeetingContext } from '@/services/meeting-context'
+import { getSavedMeetingContext, isValidCvContent, isValidJdContent } from '@/services/meeting-context'
 import {
   getSavedAIModelId,
   getSelectedModelConfig,
@@ -87,8 +87,8 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       : contextData.discussionKeywords || []
   }, [mode, profileSnapshot.keywords, contextData.keywords, contextData.discussionKeywords])
 
-  const hasCV = Boolean(activeCV && activeCV.trim())
-  const hasJD = Boolean(activeJD && activeJD.trim())
+  const hasCV = isValidCvContent(activeCV)
+  const hasJD = isValidJdContent(activeJD)
   const hasInterviewContext = hasCV && hasJD
   const hasDiscussionContext = Boolean(contextData.discussionTopic && contextData.discussionTopic.trim())
   const hasActiveContext = mode === 'interview' ? hasInterviewContext : hasDiscussionContext
@@ -271,7 +271,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     capture.captureState === 'done'
       ? 'completed'
       : capture.captureState === 'picking'
-      ? 'capturing'
+      ? 'idle'
       : capture.captureState
 
   // Guard: In interview mode, both CV and JD are required
@@ -398,7 +398,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       {capture.isScreenSourcePickerOpen && (
         <ScreenCaptureSourcePicker
           onSelect={capture.handleStartScreenCapture}
-          onCancel={() => capture.setIsScreenSourcePickerOpen(false)}
+          onCancel={capture.handleCancelPicker}
         />
       )}
 
