@@ -54,11 +54,11 @@ export function RecentSessionsCard({
 
       {/* ── Sessions Content ── */}
       {recentSessions.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1 min-h-0">
+        <div className="grid grid-cols-1 gap-2 flex-1 min-h-0">
           {recentSessions.slice(0, 2).map((s) => (
             <div
               key={s.id}
-              className="p-2 sm:p-2.5 rounded-lg bg-black/30 border border-white/[0.06] hover:bg-white/[0.04] hover:border-violet-500/30 transition-all flex flex-col justify-between gap-1.5 border-l-2 border-l-violet-500 group min-w-0"
+              className="p-2 sm:p-2.5 rounded-lg bg-black/30 border border-white/[0.06] hover:bg-white/[0.04] hover:border-violet-500/30 transition-all flex flex-col justify-between gap-1.5 border-l-2 border-l-violet-500 group min-w-0 h-[85px]"
             >
               <div className="min-w-0">
                 <div className="flex items-center justify-between text-[8.5px] text-white/40 mb-1 gap-1">
