@@ -12,7 +12,6 @@ import { whisperPort } from '@/infrastructure/ipc'
 import { translationService } from '@/services/ai-model/translation'
 import { settingsManager } from '@/services/settings/settingsManager'
 import {
-  needsVietnameseTranslation,
   getSavedSTTEngineId,
   type ResponseLanguage,
   STORAGE_KEYS,
@@ -81,14 +80,12 @@ export function useTranscript({ responseLang }: UseTranscriptProps): UseTranscri
       if (commitRes) {
         chunkProducer.updateLastTranscriptText(commitRes.textToTranslate)
 
-        // Non-blocking background translation
-        const shouldTranslate =
-          needsVietnameseTranslation(responseLang) &&
-          settingsManager.get('translationEnabled')
+        // Non-blocking background translation (auto translates non-Vietnamese speech to Vietnamese)
+        const translationEnabled = settingsManager.get('translationEnabled') !== false
         const isLocalOnly = settingsManager.get('modelRouterPolicy') === 'local-only'
         const isOffline = typeof navigator !== 'undefined' && !navigator.onLine
 
-        if (shouldTranslate && !isLocalOnly && !isOffline) {
+        if (translationEnabled && !isLocalOnly && !isOffline) {
           const targetId = commitRes.targetLineId
           translationService.enqueueLine({
             id: targetId,

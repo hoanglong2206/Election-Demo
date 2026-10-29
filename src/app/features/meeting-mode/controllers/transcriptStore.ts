@@ -1,5 +1,6 @@
 import type { TranscriptLine } from '../types'
 import { stitchFragments } from '@/services/ai-model/copilot/exchangeAssembler'
+import { detectLanguage } from '@/services/ai-model/translation'
 import { speechSegmentationTelemetry } from '@/core/audio'
 
 export interface CommitSegmentPayload {
@@ -77,11 +78,12 @@ export class TranscriptStore {
       speechSegmentationTelemetry.recordCommitLatency(endOfSpeechTimestampMs)
     }
 
+    const needsViTranslation = detectLanguage(result.text.trim()).shouldTranslateToVi
     const newLine: TranscriptLine = {
       id: Date.now() + Math.random(),
       timestamp: timestampStr || '00:00',
       original: result.text.trim(),
-      translated: result.translatedVi || result.text.trim(),
+      translated: result.translatedVi || (needsViTranslation ? '' : result.text.trim()),
       speaker: speakerLabel || 'Speaker',
     }
 
@@ -100,7 +102,10 @@ export class TranscriptStore {
     // 1. Continuation stitching (split at energy valley)
     if (continuation && lastLine.speaker === newLine.speaker) {
       const combinedOriginal = stitchFragments([lastLine.original, newLine.original])
-      const combinedTranslated = stitchFragments([lastLine.translated, newLine.translated])
+      const combinedTranslated =
+        lastLine.translated && newLine.translated
+          ? stitchFragments([lastLine.translated, newLine.translated])
+          : (lastLine.translated || newLine.translated || '')
       const updatedLine: TranscriptLine = {
         ...lastLine,
         original: combinedOriginal,

@@ -92,6 +92,7 @@ export class ElectronLlmService {
     pingMs?: number
     modelCount?: number
     models?: any[]
+    sttModels?: any[]
   }> {
     const provider = this.credentialStore.normalizeProvider(rawProvider)
     const key = rawKey?.trim() || this.credentialStore.getDecryptedKey(provider)
@@ -122,14 +123,19 @@ export class ElectronLlmService {
           }
         }
         const data = await parseJsonSafe(res)
-        const models = Array.isArray(data?.data) ? data.data : []
+        const allModels = Array.isArray(data?.data) ? data.data : []
+        const sttModels = allModels
+          .filter((m: any) => this.isSTTModel(m))
+          .map((m: any) => this.formatSTTModel(m, 'Groq'))
+        const models = allModels.filter((m: any) => !this.isSTTModel(m) && m.active !== false)
         return {
           valid: true,
           provider: 'Groq',
-          message: `Khóa Groq hợp lệ! Đã kết nối thành công tới Groq Cloud (${models.length} models khả dụng, Ping: ~${pingMs}ms).`,
+          message: `Khóa Groq hợp lệ! Đã kết nối thành công tới Groq Cloud (${models.length} LLM, ${sttModels.length} STT, Ping: ~${pingMs}ms).`,
           pingMs,
           modelCount: models.length,
           models,
+          sttModels,
         }
       }
 
@@ -1127,6 +1133,33 @@ export class ElectronLlmService {
 
     const key = this.credentialStore.getDecryptedKey(provider)
     if (!key) {
+      if (provider === 'google_translate') {
+        try {
+          const translations = await Promise.all(
+            texts.map(async (text) => {
+              const trimmed = text.trim()
+              if (!trimmed) return ''
+              const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang || 'auto'}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(trimmed)}`
+              const res = await fetch(url, { signal: AbortSignal.timeout(3500) })
+              if (!res.ok) return trimmed
+              const json = (await res.json()) as any
+              if (Array.isArray(json) && Array.isArray(json[0])) {
+                return json[0].map((seg: any) => seg?.[0] || '').join('').trim() || trimmed
+              }
+              return trimmed
+            })
+          )
+          return { success: true, translations }
+        } catch (err: any) {
+          return {
+            success: false,
+            translations: texts,
+            error: `Google Translate error: ${err?.message || 'network error'}`,
+            status: 500,
+          }
+        }
+      }
+
       return {
         success: false,
         translations: texts,

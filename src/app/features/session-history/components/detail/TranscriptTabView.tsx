@@ -77,9 +77,12 @@ export function TranscriptTabView({
 
               <div className="text-[12px] text-white/90 leading-relaxed">{t.original}</div>
 
-              {t.translated && (
-                <div className="text-[11px] text-white/50 italic border-t border-white/[0.04] pt-1">
-                  {t.translated}
+              {t.translated && t.translated !== t.original && (
+                <div className="text-[11.5px] text-emerald-300/90 leading-relaxed border-t border-white/[0.04] pt-1.5 flex items-start gap-1.5">
+                  <span className="text-[8.5px] uppercase font-mono tracking-wider text-emerald-400/90 font-semibold select-none shrink-0 mt-0.5 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">
+                    Tiếng Việt
+                  </span>
+                  <span>{t.translated}</span>
                 </div>
               )}
             </div>

@@ -1,5 +1,5 @@
 import type { RefObject } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   MessageSquare,
   Volume2,
@@ -17,6 +17,10 @@ import {
   ArrowDown,
   Layers,
   Clock,
+  Search,
+  ChevronUp,
+  ChevronDown,
+  X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,6 +31,26 @@ import { useVietnameseTranslation } from '@/hooks/useVietnameseTranslation'
 import type { TranscriptLine } from '../../types'
 import type { ScannedExchangeResult } from '../../types'
 import type { STTQueueMetrics } from '@/services/ai-model/stt'
+import { detectLanguage } from '@/services/ai-model/translation'
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query.trim() || !text) return <>{text}</>
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <mark key={i} className="bg-amber-400/35 text-amber-200 rounded px-0.5 font-semibold">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  )
+}
 
 interface LiveTranscriptPaneProps {
   sourceType: 'system' | 'mic'
@@ -107,11 +131,68 @@ export function LiveTranscriptPane({
   const [unreadCount, setUnreadCount] = useState(0)
   const [copiedLineId, setCopiedLineId] = useState<number | null>(null)
 
-  const totalLinesCount = validLines.length
+const totalLinesCount = validLines.length
   const isVirtualizing = !isAllExpanded && totalLinesCount > DEFAULT_WINDOW_SIZE
   const startIndex = isVirtualizing ? Math.max(0, totalLinesCount - windowSize) : 0
   const visibleLines = isVirtualizing ? validLines.slice(startIndex) : validLines
   const hiddenCount = startIndex
+
+// ── Transcript Keyword Search ──────────────────────────────────────────────
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
+
+  const matchedLineIds = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+    return validLines
+      .filter((line) => {
+        return (
+          line.original?.toLowerCase().includes(q) ||
+          line.translated?.toLowerCase().includes(q) ||
+          line.speaker?.toLowerCase().includes(q) ||
+          line.timestamp?.toLowerCase().includes(q)
+        )
+      })
+      .map((l) => l.id)
+  }, [validLines, searchQuery])
+
+  const scrollToMatch = useCallback(
+    (index: number) => {
+      if (matchedLineIds.length === 0) return
+      const targetId = matchedLineIds[index]
+      if (targetId === undefined) return
+
+      if (isVirtualizing) {
+        const lineIndex = validLines.findIndex((l) => l.id === targetId)
+        if (lineIndex < startIndex) {
+          setIsAllExpanded(true)
+        }
+      }
+
+      setTimeout(() => {
+        const el = document.getElementById(`transcript-line-${targetId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 60)
+    },
+    [matchedLineIds, isVirtualizing, validLines, startIndex]
+  )
+
+  const handleNextMatch = useCallback(() => {
+    if (matchedLineIds.length === 0) return
+    const next = (currentMatchIndex + 1) % matchedLineIds.length
+    setCurrentMatchIndex(next)
+    scrollToMatch(next)
+  }, [matchedLineIds.length, currentMatchIndex, scrollToMatch])
+
+  const handlePrevMatch = useCallback(() => {
+    if (matchedLineIds.length === 0) return
+    const prev = (currentMatchIndex - 1 + matchedLineIds.length) % matchedLineIds.length
+    setCurrentMatchIndex(prev)
+    scrollToMatch(prev)
+  }, [matchedLineIds.length, currentMatchIndex, scrollToMatch])
 
   // Intelligent auto-scroll listener
   useEffect(() => {
@@ -171,6 +252,20 @@ export function LiveTranscriptPane({
           <span className="text-[11px] text-white/50 font-semibold uppercase tracking-wider">
             Live Transcript
           </span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSearchOpen((prev) => !prev);
+              if (isSearchOpen) setSearchQuery('');
+            }}
+            className={cn(
+              'p-1 rounded text-white/40 hover:text-white hover:bg-white/10 transition-colors ml-1',
+              isSearchOpen && 'text-violet-300 bg-violet-500/20'
+            )}
+            title="Tìm kiếm từ khóa trong transcript"
+          >
+            <Search className="w-3 h-3" />
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 text-[9.5px]">
@@ -250,6 +345,60 @@ export function LiveTranscriptPane({
           </div>
         </div>
       </div>
+
+      {/* Search Input Bar */}
+      {isSearchOpen && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-black/60 border-b border-white/[0.08] animate-fade-in text-[10.5px] shrink-0">
+          <Search className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentMatchIndex(0);
+            }}
+            placeholder="Tìm kiếm nội dung hội thoại..."
+            className="flex-1 bg-transparent border-none outline-none text-white placeholder-white/30 text-[11px]"
+            autoFocus
+          />
+          {searchQuery && (
+            <span className="text-[9.5px] font-mono text-white/40 shrink-0">
+              {matchedLineIds.length > 0
+                ? `${currentMatchIndex + 1}/${matchedLineIds.length}`
+                : 'Không tìm thấy'}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handlePrevMatch}
+            disabled={matchedLineIds.length === 0}
+            className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white disabled:opacity-30 transition-colors"
+            title="Kết quả trước"
+          >
+            <ChevronUp className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNextMatch}
+            disabled={matchedLineIds.length === 0}
+            className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white disabled:opacity-30 transition-colors"
+            title="Kết quả tiếp"
+          >
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSearchOpen(false);
+              setSearchQuery('');
+            }}
+            className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white ml-0.5 transition-colors"
+            title="Đóng tìm kiếm"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* Sub Toolbar: Source Switcher & STT Badge */}
       <div className="flex items-center justify-between gap-1.5 px-3.5 py-1 shrink-0 border-b border-white/[0.02]">
@@ -465,9 +614,11 @@ export function LiveTranscriptPane({
             {visibleLines.map((line, idx) => (
               <div
                 key={line.id}
+                id={`transcript-line-${line.id}`}
                 className={cn(
                   'group animate-fade-in transition-opacity',
-                  idx === visibleLines.length - 1 ? 'opacity-100' : 'opacity-85 hover:opacity-100'
+                  idx === visibleLines.length - 1 ? 'opacity-100' : 'opacity-85 hover:opacity-100',
+                  matchedLineIds[currentMatchIndex] === line.id && 'ring-1 ring-amber-400/50 bg-amber-500/[0.06] rounded-lg p-1.5'
                 )}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -482,10 +633,12 @@ export function LiveTranscriptPane({
                           : 'text-indigo-400/95'
                       )}
                     >
-                      {line.speaker}
+                      <HighlightText text={line.speaker} query={searchQuery} />
                     </span>
                     <span className="text-white/20">&bull;</span>
-                    <span className="text-[10px] text-white/35 font-mono">{line.timestamp}</span>
+                    <span className="text-[10px] text-white/35 font-mono">
+                      <HighlightText text={line.timestamp} query={searchQuery} />
+                    </span>
                   </div>
 
                   <button
@@ -502,13 +655,35 @@ export function LiveTranscriptPane({
                   </button>
                 </div>
 
-                <p className="text-[11.5px] leading-relaxed text-white/60 font-normal mb-1">
-                  {line.original}
-                </p>
-
-                <p className="text-[12.5px] leading-relaxed text-white font-medium tracking-normal">
-                  {line.translated}
-                </p>
+                {line.translated && line.translated !== line.original ? (
+                  <div className="space-y-1">
+                    <p className="text-[12.5px] leading-relaxed text-white font-medium">
+                      <HighlightText text={line.original} query={searchQuery} />
+                    </p>
+                    <div className="text-[12px] leading-relaxed text-emerald-300 font-normal border-t border-white/[0.06] pt-1 flex items-start gap-1.5">
+                      <span className="text-[8.5px] uppercase font-mono tracking-wider text-emerald-400/90 font-semibold select-none shrink-0 mt-0.5 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">
+                        Tiếng Việt
+                      </span>
+                      <span>
+                        <HighlightText text={line.translated} query={searchQuery} />
+                      </span>
+                    </div>
+                  </div>
+                ) : !line.translated && detectLanguage(line.original).shouldTranslateToVi ? (
+                  <div className="space-y-1">
+                    <p className="text-[12.5px] leading-relaxed text-white font-medium">
+                      <HighlightText text={line.original} query={searchQuery} />
+                    </p>
+                    <div className="text-[11px] text-white/40 italic flex items-center gap-1.5 pt-0.5 select-none">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/70 animate-pulse" />
+                      <span>Đang dịch tiếng Việt...</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[12.5px] leading-relaxed text-white font-medium tracking-normal">
+                    <HighlightText text={line.original} query={searchQuery} />
+                  </p>
+                )}
               </div>
             ))}
 
@@ -666,54 +841,64 @@ export function LiveTranscriptPane({
           </div>
 
           {/* Summary Content Body */}
-          {isSummarizing ? (
-            <div className="py-2 px-1 space-y-1.5 animate-pulse">
-              <div className="flex items-center gap-1.5 text-[10px] text-amber-300/80 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-                <span>AI đang phân tích các câu thoại và tổng hợp nội dung cốt lõi...</span>
+          <div className="min-h-[64px] flex flex-col justify-center">
+            {isSummarizing ? (
+              <div className="py-2 px-1 space-y-1.5 animate-pulse">
+                <div className="flex items-center gap-1.5 text-[10px] text-amber-300/80 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                  <span>AI đang phân tích các câu thoại và tổng hợp nội dung cốt lõi...</span>
+                </div>
+                <div className="h-1.5 bg-white/10 rounded w-3/4" />
+                <div className="h-1.5 bg-white/10 rounded w-5/6" />
               </div>
-              <div className="h-1.5 bg-white/10 rounded w-3/4" />
-              <div className="h-1.5 bg-white/10 rounded w-5/6" />
-            </div>
-          ) : summaryError ? (
-            <div className="text-rose-200/80 text-[10.5px] leading-relaxed py-1 flex items-start gap-1.5">
-              <AlertCircle className="w-3 h-3 text-rose-400 shrink-0 mt-px" />
-              <span className="min-w-0">{summaryError}</span>
-            </div>
-          ) : meetingSummary ? (
-            <div
-              className={cn(
-                'text-white/90 text-[10.5px] leading-relaxed whitespace-pre-line pr-1 custom-scrollbar',
-                isSummaryExpanded ? 'max-h-none' : 'max-h-16 overflow-y-auto'
-              )}
-            >
-              {summaryDisplay}
-              {showTranslate && summaryTr?.error && (
-                <span className="flex items-center gap-1 mt-1 text-rose-300/85">
-                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-                  <span>{summaryTr.error}</span>
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="text-white/50 italic text-[10px] py-1 flex items-center justify-between">
-              <span>
-                {validLines.length === 0
-                  ? 'Sau khi bấm dừng thu âm, AI sẽ tự động đọc transcript và tóm tắt tại đây.'
-                  : 'Bấm nút Dừng (Mic/Paused) ở thanh điều khiển để AI tự động tổng hợp nội dung.'}
-              </span>
-              {validLines.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onGenerateSummary(validLines)}
-                  className="h-5 text-[8.5px] px-2 bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20 shrink-0 ml-2"
+            ) : meetingSummary ? (
+              <div className="space-y-1.5">
+                {summaryError && (
+                  <div className="text-rose-200/80 text-[10px] leading-relaxed py-0.5 flex items-start gap-1 bg-rose-500/10 p-1.5 rounded border border-rose-500/20">
+                    <AlertCircle className="w-3 h-3 text-rose-400 shrink-0 mt-px" />
+                    <span className="min-w-0">{summaryError}</span>
+                  </div>
+                )}
+                <div
+                  className={cn(
+                    'text-white/90 text-[10.5px] leading-relaxed whitespace-pre-line pr-1 custom-scrollbar',
+                    isSummaryExpanded ? 'max-h-none' : 'max-h-16 overflow-y-auto'
+                  )}
                 >
-                  Tổng hợp ngay
-                </Button>
-              )}
-            </div>
-          )}
+                  {summaryDisplay}
+                  {showTranslate && summaryTr?.error && (
+                    <span className="flex items-center gap-1 mt-1 text-rose-300/85">
+                      <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                      <span>{summaryTr.error}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : summaryError ? (
+              <div className="text-rose-200/80 text-[10.5px] leading-relaxed py-1 flex items-start gap-1.5">
+                <AlertCircle className="w-3 h-3 text-rose-400 shrink-0 mt-px" />
+                <span className="min-w-0">{summaryError}</span>
+              </div>
+            ) : (
+              <div className="text-white/50 italic text-[10px] py-1 flex items-center justify-between">
+                <span>
+                  {validLines.length === 0
+                    ? 'Sau khi bấm dừng thu âm, AI sẽ tự động đọc transcript và tóm tắt tại đây.'
+                    : 'Bấm nút Dừng (Mic/Paused) ở thanh điều khiển để AI tự động tổng hợp nội dung.'}
+                </span>
+                {validLines.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onGenerateSummary(validLines)}
+                    className="h-5 text-[8.5px] px-2 bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20 shrink-0 ml-2"
+                  >
+                    Tổng hợp ngay
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className='flex items-center justify-end gap-2 mt-2.5'>
             {meetingSummary && showTranslate && (

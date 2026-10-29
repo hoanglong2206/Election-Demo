@@ -449,7 +449,28 @@ export class TranslationService {
           provider,
         })
       }
-      // If IPC not available (browser dev mode), return original text
+      // If IPC not available (browser dev mode), use Google GTX fallback directly
+      if (provider === 'google_translate' && typeof fetch !== 'undefined') {
+        try {
+          const results = await Promise.all(
+            texts.map(async (text) => {
+              const trimmed = text.trim()
+              if (!trimmed) return ''
+              const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang || 'auto'}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(trimmed)}`
+              const res = await fetch(url)
+              if (!res.ok) return trimmed
+              const json = (await res.json()) as any
+              if (Array.isArray(json) && Array.isArray(json[0])) {
+                return json[0].map((seg: any) => seg?.[0] || '').join('').trim() || trimmed
+              }
+              return trimmed
+            })
+          )
+          return { success: true, translations: results }
+        } catch {
+          // Fall through to error response
+        }
+      }
       return { success: false, translations: texts, error: 'IPC translateText unavailable in current environment' }
     }
 

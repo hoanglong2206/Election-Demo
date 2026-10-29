@@ -97,6 +97,7 @@ describe('TranscriptStore Controller', () => {
       speakerLabel: 'Interviewer',
     })
     expect(commit).not.toBeNull()
+    expect(store.getLatestLine()?.translated).toBe('')
 
     const lineId = commit!.targetLineId
     const patched = store.patchTranslation(lineId, 'Kinh nghiệm của bạn là gì?')
