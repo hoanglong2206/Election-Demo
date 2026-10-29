@@ -302,8 +302,11 @@ export function saveRetentionDays(days: number): void {
 export class HybridSessionRepository implements ISessionRepository {
   private indexedDbRepo = new IndexedDbSessionRepository()
 
-  public async init(): Promise<MeetingSession[]> {
-    if (initPromise) return initPromise
+  public async init(forceReload = false): Promise<MeetingSession[]> {
+    if (!forceReload && sessionsCache !== null) {
+      return sessionsCache
+    }
+    if (initPromise && !forceReload) return initPromise
     const initRevision = sessionMutationRevision
 
     initPromise = (async () => {
@@ -414,6 +417,8 @@ export class HybridSessionRepository implements ISessionRepository {
         console.error('[SessionStorage] Initialization failed:', err)
         sessionsCache = sessionsCache || []
         return sessionsCache
+      } finally {
+        initPromise = null
       }
     })()
 
@@ -494,6 +499,7 @@ export class HybridSessionRepository implements ISessionRepository {
     const updated = [normalized, ...filtered]
     updated.sort((a, b) => getSessionEpoch(b) - getSessionEpoch(a))
     sessionsCache = updated
+    initPromise = null
     saveToLocalStorageBackup(updated)
     notifyListeners()
 
@@ -520,6 +526,7 @@ export class HybridSessionRepository implements ISessionRepository {
     const updated = [normalized, ...filtered]
     updated.sort((a, b) => getSessionEpoch(b) - getSessionEpoch(a))
     sessionsCache = updated
+    initPromise = null
     saveToLocalStorageBackup(updated)
     notifyListeners()
 
@@ -548,6 +555,7 @@ export class HybridSessionRepository implements ISessionRepository {
     sessionMutationRevision++
     const updated = current.filter((s) => s.id !== sessionId)
     sessionsCache = updated
+    initPromise = null
     saveToLocalStorageBackup(updated)
     notifyListeners()
     markFirstRunCompleted()
@@ -604,6 +612,7 @@ export class HybridSessionRepository implements ISessionRepository {
     }
 
     sessionsCache = []
+    initPromise = null
     saveToLocalStorageBackup([])
     notifyListeners()
     markFirstRunCompleted()
@@ -798,8 +807,8 @@ export class HybridSessionRepository implements ISessionRepository {
 
 export const defaultSessionRepository = new HybridSessionRepository()
 
-export function initSessionStorage(): Promise<MeetingSession[]> {
-  return defaultSessionRepository.init()
+export function initSessionStorage(forceReload = false): Promise<MeetingSession[]> {
+  return defaultSessionRepository.init(forceReload)
 }
 
 export function getSavedSessions(): MeetingSession[] {

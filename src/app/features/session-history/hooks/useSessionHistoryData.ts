@@ -25,6 +25,15 @@ export function useSessionHistoryData(
 ): UseSessionHistoryDataReturn {
   const [sessions, setSessions] = useState<MeetingSession[]>(() => getSavedSessions())
   const [selectedSessionId, setSelectedSessionId] = useState<string>(() => {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const preselected = sessionStorage.getItem('meeting_copilot_selected_session_id')
+        if (preselected) {
+          sessionStorage.removeItem('meeting_copilot_selected_session_id')
+          return preselected
+        }
+      }
+    } catch {}
     const list = getSavedSessions()
     return list.length > 0 ? list[0].id : ''
   })
@@ -33,6 +42,19 @@ export function useSessionHistoryData(
   useEffect(() => {
     let isSubscribed = true
 
+    // 1. Immediately sync with current in-memory cache upon mount
+    const current = getSavedSessions()
+    if (current && current.length > 0) {
+      setSessions([...current])
+      setSelectedSessionId((curr) => {
+        if (!curr || !current.some((s) => s.id === curr)) {
+          return current[0].id
+        }
+        return curr
+      })
+    }
+
+    // 2. Subscribe to real-time session updates
     const unsubscribe = subscribeSessions((updated) => {
       if (!isSubscribed) return
       setSessions([...updated])
@@ -48,10 +70,11 @@ export function useSessionHistoryData(
       }
     })
 
+    // 3. Ensure async init completes if still in-flight
     initSessionStorage().then((loaded) => {
       if (!isSubscribed) return
       const currentSaved = getSavedSessions()
-      const effective = loaded && loaded.length > 0 ? loaded : currentSaved
+      const effective = currentSaved.length > 0 ? currentSaved : (loaded && loaded.length > 0 ? loaded : [])
       setSessions([...effective])
       if (effective.length > 0) {
         setSelectedSessionId((curr) => {
@@ -69,23 +92,36 @@ export function useSessionHistoryData(
     }
   }, [])
 
-  // Lazy-load full session details (transcripts & suggestions) on demand
+  // Async lazy full-session loader
   useEffect(() => {
     if (!selectedSessionId) return
-    const current = sessions.find((s) => s.id === selectedSessionId)
-    if (current && !current._isFullyLoaded) {
-      loadFullSession(selectedSessionId).then((full) => {
-        if (full) {
-          setSessions((prev) => prev.map((s) => (s.id === full.id ? full : s)))
-        }
-      })
-    }
-  }, [selectedSessionId, sessions])
+    let isMounted = true
 
+    loadFullSession(selectedSessionId).then((full) => {
+      if (!isMounted || !full) return
+      setSessions((prev) => {
+        const idx = prev.findIndex((s) => s.id === selectedSessionId)
+        if (idx === -1) return prev
+        if (prev[idx]._isFullyLoaded) return prev
+        const clone = [...prev]
+        clone[idx] = full
+        return clone
+      })
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedSessionId])
+
+  // Current selected session instance
   const currentSession = useMemo(() => {
-    const selected = sessions.find((s) => s.id === selectedSessionId)
-    if (selected) return selected
-    return selectedSessionId ? null : (filteredFallbackSessions && filteredFallbackSessions[0]) || null
+    const found = sessions.find((s) => s.id === selectedSessionId)
+    if (found) return found
+    if (filteredFallbackSessions && filteredFallbackSessions.length > 0) {
+      return filteredFallbackSessions[0]
+    }
+    return sessions.length > 0 ? sessions[0] : null
   }, [sessions, selectedSessionId, filteredFallbackSessions])
 
   const handleRetentionChange = useCallback((days: number) => {
@@ -107,4 +143,3 @@ export function useSessionHistoryData(
     handleRetentionChange,
   }
 }
-

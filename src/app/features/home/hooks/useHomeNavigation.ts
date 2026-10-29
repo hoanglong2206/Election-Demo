@@ -29,6 +29,7 @@ export interface UseHomeNavigationReturn {
   meetingError: string | null
   setMeetingError: (err: string | null) => void
   handleLaunchMeeting: () => void
+  handleOpenSession: (sessionId: string) => void
 }
 
 export function useHomeNavigation({
@@ -59,14 +60,25 @@ export function useHomeNavigation({
   )
 
   useEffect(() => {
+    // 1. Immediately sync with latest in-memory cache upon mount
+    const current = getSavedSessions()
+    setRecentSessions(current.slice(0, 2))
+    setTotalSessionsCount(current.length)
+
+    // 2. Subscribe to real-time session changes
     const unsubscribe = subscribeSessions((updated) => {
       setRecentSessions(updated.slice(0, 2))
       setTotalSessionsCount(updated.length)
     })
+
+    // 3. Ensure async init completes if it was still in flight
     initSessionStorage().then((loaded) => {
-      setRecentSessions(loaded.slice(0, 2))
-      setTotalSessionsCount(loaded.length)
+      const latest = getSavedSessions()
+      const effective = latest.length > 0 ? latest : loaded
+      setRecentSessions(effective.slice(0, 2))
+      setTotalSessionsCount(effective.length)
     })
+
     return unsubscribe
   }, [])
 
@@ -84,7 +96,7 @@ export function useHomeNavigation({
 
     setMeetingError(null)
 
-    // Flush any pending debounced sync
+    // Flush any pending debounced sync synchronously before proceeding
     flushPendingContextSync()
 
     // Ensure keywords exist if text is present
@@ -102,18 +114,37 @@ export function useHomeNavigation({
       keywords: finalKeywords,
     }
 
-    // Persist immediately to meeting context storage and profile
-    saveMeetingContext(snapshotData)
-    if (mode === 'interview' && activeProfile) {
-      profileContextService.updateProfile(activeProfile.id, {
-        jobDescription: snapshotData.jobDescription,
-        resumeContext: snapshotData.cvSummary,
-        keywords: finalKeywords,
-      })
+    try {
+      // Persist immediately to meeting context storage and profile
+      saveMeetingContext(snapshotData)
+      if (mode === 'interview' && activeProfile) {
+        profileContextService.updateProfile(activeProfile.id, {
+          jobDescription: snapshotData.jobDescription,
+          resumeContext: snapshotData.cvSummary,
+          keywords: finalKeywords,
+        })
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('meeting-context-updated'))
+      }
+      onViewChange('meeting')
+    } catch (err) {
+      console.error('[useHomeNavigation] Failed to persist meeting context before launch:', err)
+      setMeetingError('Không thể lưu dữ liệu ngữ cảnh cuộc họp. Vui lòng thử lại.')
     }
-
-    onViewChange('meeting')
   }, [mode, contextData, activeProfile, onViewChange, onInterviewTabChange, flushPendingContextSync])
+
+  const handleOpenSession = useCallback(
+    (sessionId: string) => {
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('meeting_copilot_selected_session_id', sessionId)
+        }
+      } catch {}
+      onViewChange('history')
+    },
+    [onViewChange]
+  )
 
   return {
     recentSessions,
@@ -122,5 +153,6 @@ export function useHomeNavigation({
     meetingError,
     setMeetingError,
     handleLaunchMeeting,
+    handleOpenSession,
   }
 }
