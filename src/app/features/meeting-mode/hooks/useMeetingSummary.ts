@@ -25,6 +25,7 @@ export function useMeetingSummary(): UseMeetingSummaryReturn {
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [copiedSummary, setCopiedSummary] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const summaryRequestIdRef = useRef(0)
 
   useEffect(() => {
     isMountedRef.current = true
@@ -44,16 +45,19 @@ export function useMeetingSummary(): UseMeetingSummaryReturn {
         setSummaryError('Chưa có transcript để tóm tắt.')
         return null
       }
+      if (isSummarizing) {
+        return null
+      }
 
+      const reqId = ++summaryRequestIdRef.current
       setIsSummarizing(true)
       setSummaryError(null)
 
       try {
         const summary = await summarizeMeetingTranscripts(linesToSummarize, mode, responseLang)
-        if (!isMountedRef.current) return null
+        if (!isMountedRef.current || reqId !== summaryRequestIdRef.current) return null
 
         if (!summary) {
-          setMeetingSummary(null)
           setSummaryError(
             'Không nhận được tóm tắt từ LLM. Kiểm tra API Key trong tab Cài đặt rồi bấm "Tóm tắt lại".'
           )
@@ -61,21 +65,22 @@ export function useMeetingSummary(): UseMeetingSummaryReturn {
         }
 
         setMeetingSummary(summary)
+        setSummaryError(null)
         return summary
       } catch (err) {
         console.warn('[useMeetingSummary] summarize error:', err)
-        if (isMountedRef.current) {
-          setMeetingSummary(null)
+        if (isMountedRef.current && reqId === summaryRequestIdRef.current) {
+          // Do not wipe existing summary to avoid layout jumping
           setSummaryError((err as Error)?.message || 'Lỗi khi gọi LLM tóm tắt.')
         }
         return null
       } finally {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && reqId === summaryRequestIdRef.current) {
           setIsSummarizing(false)
         }
       }
     },
-    []
+    [isSummarizing]
   )
 
   const handleCopySummary = useCallback(() => {
@@ -90,6 +95,7 @@ export function useMeetingSummary(): UseMeetingSummaryReturn {
   }, [meetingSummary])
 
   const resetSummary = useCallback(() => {
+    summaryRequestIdRef.current++
     setMeetingSummary(null)
     setSummaryError(null)
     setIsSummarizing(false)

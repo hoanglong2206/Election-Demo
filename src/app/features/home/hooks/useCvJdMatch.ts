@@ -18,9 +18,11 @@ export interface UseCvJdMatchReturn {
   isMatchDialogOpen: boolean
   matchResult: CvJdMatchResult | null
   isAnalyzingMatch: boolean
+  analysisError: string | null
   setIsMatchDialogOpen: (open: boolean) => void
   handleOpenMatchAnalysis: () => Promise<void>
   handleReAnalyzeWithAI: () => Promise<void>
+  clearAnalysisError: () => void
 }
 
 export function useCvJdMatch({
@@ -33,7 +35,9 @@ export function useCvJdMatch({
   const [isMatchDialogOpen, setIsMatchDialogOpen] = useState(false)
   const [matchResult, setMatchResult] = useState<CvJdMatchResult | null>(null)
   const [isAnalyzingMatch, setIsAnalyzingMatch] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
   const isMountedRef = useRef(true)
+  const matchRequestIdRef = useRef(0)
 
   useEffect(() => {
     isMountedRef.current = true
@@ -55,53 +59,78 @@ export function useCvJdMatch({
       setTimeout(() => {
         if (isMountedRef.current) {
           setMatchResult(null)
+          setAnalysisError(null)
         }
       }, 0)
     }
   }, [mode, hasCV, hasJD, cvSummary, jobDescription])
 
+  const clearAnalysisError = useCallback(() => {
+    setAnalysisError(null)
+  }, [])
+
   const handleOpenMatchAnalysis = useCallback(async () => {
     setIsMatchDialogOpen(true)
-    if (hasCV && hasJD && (!matchResult || !matchResult.isAI)) {
+    setAnalysisError(null)
+    if (hasCV && hasJD && (!matchResult || !matchResult.isAI) && !isAnalyzingMatch) {
+      const reqId = ++matchRequestIdRef.current
       setIsAnalyzingMatch(true)
       try {
         const aiRes = await analyzeCvJdMatchWithAI(cvSummary, jobDescription)
-        if (isMountedRef.current) {
+        if (isMountedRef.current && reqId === matchRequestIdRef.current) {
           setMatchResult(aiRes)
+          if (!aiRes.isAI) {
+            setAnalysisError('Không kết nối được AI để phân tích sâu. Đang hiển thị kết quả phân tích nhanh (Heuristic).')
+          }
         }
       } catch (err) {
-        console.warn('[useCvJdMatch] AI match analysis error:', err)
+        if (isMountedRef.current && reqId === matchRequestIdRef.current) {
+          console.warn('[useCvJdMatch] AI match analysis error:', err)
+          setAnalysisError((err as Error)?.message || 'Lỗi khi kết nối dịch vụ AI.')
+        }
       } finally {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && reqId === matchRequestIdRef.current) {
           setIsAnalyzingMatch(false)
         }
       }
     }
-  }, [hasCV, hasJD, matchResult, cvSummary, jobDescription])
+  }, [hasCV, hasJD, matchResult, isAnalyzingMatch, cvSummary, jobDescription])
 
   const handleReAnalyzeWithAI = useCallback(async () => {
-    if (!hasCV || !hasJD) return
+    if (!hasCV || !hasJD || isAnalyzingMatch) return
+    const reqId = ++matchRequestIdRef.current
     setIsAnalyzingMatch(true)
+    setAnalysisError(null)
     try {
       const aiRes = await analyzeCvJdMatchWithAI(cvSummary, jobDescription, true)
-      if (isMountedRef.current) {
+      if (isMountedRef.current && reqId === matchRequestIdRef.current) {
         setMatchResult(aiRes)
+        if (!aiRes.isAI) {
+          setAnalysisError('AI không phản hồi hoặc gặp lỗi. Đang hiển thị kết quả phân tích nhanh (Heuristic).')
+        } else {
+          setAnalysisError(null)
+        }
       }
     } catch (err) {
-      console.warn('[useCvJdMatch] Re-analyze error:', err)
+      if (isMountedRef.current && reqId === matchRequestIdRef.current) {
+        console.warn('[useCvJdMatch] Re-analyze error:', err)
+        setAnalysisError((err as Error)?.message || 'Lỗi khi phân tích lại bằng AI.')
+      }
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && reqId === matchRequestIdRef.current) {
         setIsAnalyzingMatch(false)
       }
     }
-  }, [hasCV, hasJD, cvSummary, jobDescription])
+  }, [hasCV, hasJD, isAnalyzingMatch, cvSummary, jobDescription])
 
   return {
     isMatchDialogOpen,
     matchResult,
     isAnalyzingMatch,
+    analysisError,
     setIsMatchDialogOpen,
     handleOpenMatchAnalysis,
     handleReAnalyzeWithAI,
+    clearAnalysisError,
   }
 }

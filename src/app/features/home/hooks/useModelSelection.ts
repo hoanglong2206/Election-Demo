@@ -35,6 +35,7 @@ export interface UseModelSelectionReturn {
   isPinging: boolean
   livePing: number
   displayedInspectedPing: number
+  pingError: string | null
   modelDropdownRef: React.RefObject<HTMLDivElement | null>
   setIsModelDropdownOpen: (open: boolean | ((prev: boolean) => boolean)) => void
   handleModelInspectChange: (modelId: string) => void
@@ -45,6 +46,7 @@ export interface UseModelSelectionReturn {
   isSTTPinging: boolean
   liveSTTLatency: number
   displayedInspectedSTTLatency: number
+  sttPingError: string | null
   sttDropdownRef: React.RefObject<HTMLDivElement | null>
   setIsSTTDropdownOpen: (open: boolean | ((prev: boolean) => boolean)) => void
   handleSTTInspectChange: (sttId: string) => void
@@ -65,7 +67,7 @@ export function useModelSelection(): UseModelSelectionReturn {
   const [settingModelId, setSettingModelId] = useState<string>(getSavedAIModelId)
   const [settingSTTId, setSettingSTTId] = useState<string>(getSavedSTTEngineId)
   const [aiModels, setAiModels] = useState<AIModelConfig[]>(getAllAIModels)
-  const [sttEngines] = useState<STTEngineConfig[]>(getAvailableSTTEngines)
+  const [sttEngines, setSttEngines] = useState<STTEngineConfig[]>(getAvailableSTTEngines)
 
   const settingModel = getSelectedModelConfig(settingModelId)
   const settingSTTEngine = sttEngines.find((e) => e.id === settingSTTId) || sttEngines[0]
@@ -84,6 +86,7 @@ export function useModelSelection(): UseModelSelectionReturn {
 
   // LLM Ping & Dropdown
   const [isPinging, setIsPinging] = useState(false)
+  const [pingError, setPingError] = useState<string | null>(null)
   const [livePing, setLivePing] = useState<number>(() => {
     const cached = getCachedLatency(effectiveInspectedModelId)
     return cached ?? inspectedModel.pingMs ?? 120
@@ -98,6 +101,7 @@ export function useModelSelection(): UseModelSelectionReturn {
   const [isSTTDropdownOpen, setIsSTTDropdownOpen] = useState(false)
   const sttDropdownRef = useRef<HTMLDivElement>(null)
   const [isSTTPinging, setIsSTTPinging] = useState(false)
+  const [sttPingError, setSttPingError] = useState<string | null>(null)
   const [liveSTTLatency, setLiveSTTLatency] = useState<number>(() => {
     const cached = getCachedLatency(inspectedSTTId)
     return cached ?? inspectedSTTEngine?.latencyMs ?? 150
@@ -110,6 +114,7 @@ export function useModelSelection(): UseModelSelectionReturn {
   useEffect(() => {
     const handleModelsUpdate = () => {
       setAiModels(getAllAIModels())
+      setSttEngines(getAvailableSTTEngines())
       setSettingModelId(getSavedAIModelId())
       setSettingSTTId(getSavedSTTEngineId())
     }
@@ -135,37 +140,25 @@ export function useModelSelection(): UseModelSelectionReturn {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleModelInspectChange = useCallback((modelId: string) => {
-    setInspectedModelId(modelId)
-    setIsModelDropdownOpen(false)
-    const cached = getCachedLatency(modelId)
-    if (cached) {
-      setLivePing(cached)
-    }
-  }, [])
-
-  const handleSTTInspectChange = useCallback((sttId: string) => {
-    setInspectedSTTId(sttId)
-    setIsSTTDropdownOpen(false)
-    const cached = getCachedLatency(sttId)
-    if (cached) {
-      setLiveSTTLatency(cached)
-    }
-  }, [])
-
   const handleTestPing = useCallback(async (targetId?: string) => {
-    const idToTest = targetId || effectiveInspectedModelId
+    const idToTest =
+      typeof targetId === 'string' && targetId.trim()
+        ? targetId.trim()
+        : effectiveInspectedModelId
     if (!idToTest) return
     const reqId = ++pingRequestIdRef.current
     setIsPinging(true)
+    setPingError(null)
     try {
       const realLatency = await measureRealAIPing(idToTest)
       if (isMountedRef.current && reqId === pingRequestIdRef.current) {
         setLivePing(realLatency)
         setCachedLatency(idToTest, realLatency)
+        setPingError(null)
       }
     } catch {
       if (isMountedRef.current && reqId === pingRequestIdRef.current) {
+        setPingError('Không đo được ping')
         const cached = getCachedLatency(idToTest)
         if (cached) {
           setLivePing(cached)
@@ -180,6 +173,17 @@ export function useModelSelection(): UseModelSelectionReturn {
       }
     }
   }, [effectiveInspectedModelId])
+
+  const handleModelInspectChange = useCallback((modelId: string) => {
+    setInspectedModelId(modelId)
+    setIsModelDropdownOpen(false)
+    setPingError(null)
+    const cached = getCachedLatency(modelId)
+    if (cached) {
+      setLivePing(cached)
+    }
+    void handleTestPing(modelId)
+  }, [handleTestPing])
 
   // Auto-measure real ping if not cached
   useEffect(() => {
@@ -197,18 +201,24 @@ export function useModelSelection(): UseModelSelectionReturn {
   }, [effectiveInspectedModelId, handleTestPing])
 
   const handleTestSTTPing = useCallback(async (targetId?: string) => {
-    const idToTest = targetId || inspectedSTTId
+    const idToTest =
+      typeof targetId === 'string' && targetId.trim()
+        ? targetId.trim()
+        : inspectedSTTId
     if (!idToTest) return
     const reqId = ++sttPingRequestIdRef.current
     setIsSTTPinging(true)
+    setSttPingError(null)
     try {
       const realLatency = await measureRealSTTLatency(idToTest)
       if (isMountedRef.current && reqId === sttPingRequestIdRef.current) {
         setLiveSTTLatency(realLatency)
         setCachedLatency(idToTest, realLatency)
+        setSttPingError(null)
       }
     } catch {
       if (isMountedRef.current && reqId === sttPingRequestIdRef.current) {
+        setSttPingError('Không đo được độ trễ')
         const cached = getCachedLatency(idToTest)
         if (cached) {
           setLiveSTTLatency(cached)
@@ -223,6 +233,17 @@ export function useModelSelection(): UseModelSelectionReturn {
       }
     }
   }, [inspectedSTTId, sttEngines])
+
+  const handleSTTInspectChange = useCallback((sttId: string) => {
+    setInspectedSTTId(sttId)
+    setIsSTTDropdownOpen(false)
+    setSttPingError(null)
+    const cached = getCachedLatency(sttId)
+    if (cached) {
+      setLiveSTTLatency(cached)
+    }
+    void handleTestSTTPing(sttId)
+  }, [handleTestSTTPing])
 
   // Auto-measure real STT latency if not cached
   useEffect(() => {
@@ -256,6 +277,7 @@ export function useModelSelection(): UseModelSelectionReturn {
     isPinging,
     livePing,
     displayedInspectedPing,
+    pingError,
     modelDropdownRef,
     setIsModelDropdownOpen,
     handleModelInspectChange,
@@ -264,6 +286,7 @@ export function useModelSelection(): UseModelSelectionReturn {
     isSTTPinging,
     liveSTTLatency,
     displayedInspectedSTTLatency,
+    sttPingError,
     sttDropdownRef,
     setIsSTTDropdownOpen,
     handleSTTInspectChange,

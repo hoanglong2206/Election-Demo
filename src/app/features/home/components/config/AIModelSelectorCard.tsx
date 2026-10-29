@@ -18,6 +18,7 @@ export interface AIModelSelectorCardProps {
   isModelDropdownOpen: boolean
   isPinging: boolean
   livePing: number
+  pingError?: string | null
   modelDropdownRef: React.RefObject<HTMLDivElement | null>
   onToggleDropdown: () => void
   onModelChange: (id: string) => void
@@ -36,6 +37,7 @@ export interface AIModelSelectorCardProps {
   onOpenAudioTest?: () => void
   isSTTPinging?: boolean
   liveSTTLatency?: number
+  sttPingError?: string | null
   onTestSTTPing?: () => void
 }
 
@@ -48,6 +50,7 @@ export function AIModelSelectorCard({
   isModelDropdownOpen,
   isPinging,
   livePing,
+  pingError,
   modelDropdownRef,
   onToggleDropdown,
   onModelChange,
@@ -64,6 +67,7 @@ export function AIModelSelectorCard({
   onOpenAudioTest,
   isSTTPinging = false,
   liveSTTLatency,
+  sttPingError,
   onTestSTTPing,
 }: AIModelSelectorCardProps) {
   const [activeEngineTab, setActiveEngineTab] = useState<'llm' | 'stt'>('llm')
@@ -152,6 +156,7 @@ export function AIModelSelectorCard({
           isModelDropdownOpen={isModelDropdownOpen}
           isPinging={isPinging}
           livePing={livePing}
+          pingError={pingError}
           modelDropdownRef={modelDropdownRef}
           onToggleDropdown={onToggleDropdown}
           onModelChange={onModelChange}
@@ -171,6 +176,7 @@ export function AIModelSelectorCard({
           onOpenAudioTest={onOpenAudioTest}
           isSTTPinging={isSTTPinging}
           liveSTTLatency={liveSTTLatency}
+          sttPingError={sttPingError}
           onTestSTTPing={onTestSTTPing}
         />
       )}

@@ -142,10 +142,11 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
             isModelDropdownOpen={model.isModelDropdownOpen}
             isPinging={model.isPinging}
             livePing={model.displayedInspectedPing}
+            pingError={model.pingError}
             modelDropdownRef={model.modelDropdownRef}
             onToggleDropdown={() => model.setIsModelDropdownOpen(!model.isModelDropdownOpen)}
             onModelChange={model.handleModelInspectChange}
-            onTestPing={model.handleTestPing}
+            onTestPing={() => void model.handleTestPing()}
             onOpenSettings={() => onViewChange('settings')}
             onOpenBenchmark={() => {
               onViewChange('ai-diagnostic')
@@ -159,7 +160,8 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
             onSTTChange={model.handleSTTInspectChange}
             isSTTPinging={model.isSTTPinging}
             liveSTTLatency={model.displayedInspectedSTTLatency}
-            onTestSTTPing={model.handleTestSTTPing}
+            sttPingError={model.sttPingError}
+            onTestSTTPing={() => void model.handleTestSTTPing()}
             onOpenAudioTest={() => {
               onViewChange('audio-test')
             }}
@@ -170,6 +172,7 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
             recentSessions={nav.recentSessions}
             totalSessionsCount={nav.totalSessionsCount}
             onViewAllHistory={() => onViewChange('history')}
+            onOpenSession={nav.handleOpenSession}
           />
         </div>
       </div>
@@ -179,8 +182,10 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
         open={match.isMatchDialogOpen}
         result={match.matchResult}
         isAnalyzing={match.isAnalyzingMatch}
+        analysisError={match.analysisError}
         onClose={() => match.setIsMatchDialogOpen(false)}
         onReAnalyzeWithAI={match.handleReAnalyzeWithAI}
+        onClearError={match.clearAnalysisError}
       />
 
       {/* Profile Preset Create / Edit Dialog */}

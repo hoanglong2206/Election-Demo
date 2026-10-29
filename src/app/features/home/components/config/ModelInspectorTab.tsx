@@ -1,4 +1,4 @@
-import { Cpu, ChevronDown, Check, ExternalLink, Activity, Zap, ArrowRight } from 'lucide-react'
+import { Cpu, ChevronDown, Check, ExternalLink, Activity, Zap, ArrowRight, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AIModelConfig } from '@/services/ai-model/aiModels'
 
@@ -10,6 +10,7 @@ export interface ModelInspectorTabProps {
   isModelDropdownOpen: boolean
   isPinging: boolean
   livePing: number
+  pingError?: string | null
   modelDropdownRef: React.RefObject<HTMLDivElement | null>
   onToggleDropdown: () => void
   onModelChange: (id: string) => void
@@ -26,6 +27,7 @@ export function ModelInspectorTab({
   isModelDropdownOpen,
   isPinging,
   livePing,
+  pingError,
   modelDropdownRef,
   onToggleDropdown,
   onModelChange,
@@ -150,23 +152,34 @@ export function ModelInspectorTab({
       </div>
 
       {/* Ping latency & test button */}
-      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/[0.05]">
-        <div className="flex items-center gap-1">
-          <Activity className="w-3 h-3 text-emerald-400" />
+      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/[0.05] h-6">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Activity className="w-3 h-3 text-emerald-400 shrink-0" />
           <span className="text-white/40">Ping:</span>
-          <span className="text-emerald-300 font-mono font-semibold">
-            {hasModels ? `${livePing}ms` : '---'}
-          </span>
+          {isPinging ? (
+            <span className="text-amber-300 font-mono text-[9.5px] flex items-center gap-1">
+              <Loader2 className="w-2.5 h-2.5 animate-spin text-amber-400 shrink-0" />
+              <span>Đang đo...</span>
+            </span>
+          ) : pingError ? (
+            <span className="text-rose-400 font-mono text-[9px] truncate" title={pingError}>
+              Lỗi đo ({livePing}ms)
+            </span>
+          ) : (
+            <span className="text-emerald-300 font-mono font-semibold">
+              {hasModels ? `${livePing}ms` : '---'}
+            </span>
+          )}
         </div>
         <button
           id="btn-test-ping"
           type="button"
-          onClick={onTestPing}
+          onClick={() => onTestPing()}
           disabled={isPinging}
-          className="text-[9.5px] text-white/40 hover:text-white flex items-center gap-1 underline underline-offset-2 whitespace-nowrap shrink-0"
+          className="text-[9.5px] text-white/40 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 underline underline-offset-2 whitespace-nowrap shrink-0 transition-opacity"
         >
           <Zap className={cn('w-2.5 h-2.5 text-amber-400', isPinging && 'animate-spin')} />
-          <span>{isPinging ? 'Đo ping...' : 'Đo lại'}</span>
+          <span>{isPinging ? 'Đang đo...' : 'Đo lại'}</span>
         </button>
       </div>
 

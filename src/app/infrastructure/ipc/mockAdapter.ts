@@ -219,6 +219,7 @@ export class MockIpcAdapter implements IIpcClient {
       message: 'Verified successfully (mock)',
       modelCount: 1,
       models: [{ id: 'mock-model', name: 'Mock Model' }],
+      sttModels: provider === 'groq' ? [{ id: 'whisper-large-v3-turbo', name: 'Groq Whisper Large v3 Turbo', provider: 'Groq' }] : [],
     }),
     testModelAvailability: async () => ({ available: true, message: 'Available' }),
     callLLM: async (params) => ({

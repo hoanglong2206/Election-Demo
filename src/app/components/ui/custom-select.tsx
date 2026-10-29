@@ -24,6 +24,8 @@ interface CustomSelectProps {
   align?: 'left' | 'right'
   icon?: ReactNode
   themeColor?: 'violet' | 'cyan' | 'emerald'
+  title?: string
+  ariaLabel?: string
 }
 
 export function CustomSelect({
@@ -40,6 +42,8 @@ export function CustomSelect({
   align = 'left',
   icon,
   themeColor = 'violet',
+  title,
+  ariaLabel,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -127,19 +131,21 @@ export function CustomSelect({
       {/* Trigger Button */}
       <button
         type="button"
+        title={title}
+        aria-label={ariaLabel || title}
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={cn(
           'w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-all select-none',
           'bg-black/50 border border-white/15 text-white shadow-inner',
           'hover:bg-white/[0.06] hover:border-white/25',
+          triggerClassName,
           isOpen && themeClasses.activeBorder,
-          disabled && 'opacity-40 cursor-not-allowed hover:bg-black/50 hover:border-white/15',
-          triggerClassName
+          disabled && 'opacity-40 cursor-not-allowed hover:bg-black/50 hover:border-white/15'
         )}
       >
         <div className="flex items-center gap-1.5 min-w-0 truncate">
-          {icon && <span className="shrink-0 text-white/50">{icon}</span>}
+          {icon && <span className="shrink-0 flex items-center text-white/60">{icon}</span>}
           {selectedOption ? (
             <span className="truncate text-white/90">
               {selectedOption.badge && (

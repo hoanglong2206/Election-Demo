@@ -1,4 +1,4 @@
-import { Mic, ChevronDown, Check, Gauge, Zap, ArrowRight } from 'lucide-react'
+import { Mic, ChevronDown, Check, Gauge, Zap, ArrowRight, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { STTEngineConfig } from '@/services/ai-model/types'
 
@@ -13,6 +13,7 @@ export interface SttInspectorTabProps {
   onOpenAudioTest?: () => void
   isSTTPinging?: boolean
   liveSTTLatency?: number
+  sttPingError?: string | null
   onTestSTTPing?: () => void
 }
 
@@ -27,6 +28,7 @@ export function SttInspectorTab({
   onOpenAudioTest,
   isSTTPinging = false,
   liveSTTLatency,
+  sttPingError,
   onTestSTTPing,
 }: SttInspectorTabProps) {
   return (
@@ -98,11 +100,11 @@ export function SttInspectorTab({
           </code>
         </div>
         <div className="flex items-center justify-between text-[9.5px]">
-          <span className="text-white/40">Phương thức:</span>
-          <span className="text-cyan-300 font-mono">
+          <span className="text-white/40">Loại xử lý:</span>
+          <span className="text-white/80 font-mono">
             {currentSTTEngine?.provider === 'Local'
-              ? 'C++ Offline (Bảo mật)'
-              : 'Cloud API (Groq)'}
+              ? 'Local C++ (offline)'
+              : 'Cloud API (Groq/OpenAI)'}
           </span>
         </div>
         <div className="flex items-center justify-between text-[9.5px]">
@@ -122,22 +124,33 @@ export function SttInspectorTab({
         </div>
       </div>
 
-      {/* Latency row */}
-      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/[0.05]">
-        <div className="flex items-center gap-1">
-          <Gauge className="w-3 h-3 text-cyan-400" />
-          <span className="text-white/40">Độ trễ xử lý:</span>
-          <span className="text-cyan-300 font-mono font-semibold">
-            ~{liveSTTLatency ?? currentSTTEngine?.latencyMs ?? 150}ms
-          </span>
+      {/* STT Latency row & test button */}
+      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/[0.05] h-6">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Gauge className="w-3 h-3 text-cyan-400 shrink-0" />
+          <span className="text-white/40">Độ trễ:</span>
+          {isSTTPinging ? (
+            <span className="text-cyan-300 font-mono text-[9.5px] flex items-center gap-1">
+              <Loader2 className="w-2.5 h-2.5 animate-spin text-cyan-400 shrink-0" />
+              <span>Đang đo...</span>
+            </span>
+          ) : sttPingError ? (
+            <span className="text-rose-400 font-mono text-[9px] truncate" title={sttPingError}>
+              Lỗi đo (~{liveSTTLatency ?? currentSTTEngine?.latencyMs ?? 150}ms)
+            </span>
+          ) : (
+            <span className="text-cyan-300 font-mono font-semibold">
+              ~{liveSTTLatency ?? currentSTTEngine?.latencyMs ?? 150}ms
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
             id="btn-test-stt-ping"
             type="button"
-            onClick={onTestSTTPing}
+            onClick={() => onTestSTTPing?.()}
             disabled={isSTTPinging}
-            className="text-[9.5px] text-white/40 hover:text-white flex items-center gap-1 underline underline-offset-2 whitespace-nowrap shrink-0 cursor-pointer"
+            className="text-[9.5px] text-white/40 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 underline underline-offset-2 whitespace-nowrap shrink-0 cursor-pointer transition-opacity"
             title="Đo lại độ trễ thực tế của mô hình STT"
           >
             <Zap className={cn('w-2.5 h-2.5 text-cyan-400', isSTTPinging && 'animate-spin')} />

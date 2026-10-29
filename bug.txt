@@ -1,19 +1,302 @@
-Trang Home:
-AI Model Selector		-> khi chọn các mô hình -> không đo lại -> mong muốn khi chọn mô hình nào tự đông đo lại mô hình đó
-						-> khi bấm đo lại -> không có animation và LLM đang bị mắc định 180 -> mong muốn thêm animation và không gán cứng mặc định
+BUG ANALYSIS & SOLUTION
+=======================
 
-Context Editor Card		-> ở chế độ interview khi nhập hết CV và JD -> qua trang meeting vẫn báo không có CV và JD -> kiểm tra lại luồng này
-	
-CV-JD Match Analysis	-> khi bấm phân tích lại bằng AI -> đợi một lúc bấm mới được có animation và bấm tiếp thì bị đứng phải đợi một lúc móiw bấm được và chưa phân tích lại bằng AI -> xem lại logic bấm nút phân tích lại sao cho có animation và phân tích lại bằng AI được ngay
+Phạm vi: Home, Meeting, CV-JD Match Analysis, Recent Sessions và Copilot
+Suggestion Pane.
 
-Recent Sessions			-> khi lưu phiên ở meeting hoặc xóa ở session history -> không cập nhật ngay và khi bấm vào chưa chuyển qua lịch sử phiên đó -> mong muốn sau khi lưu hoặc xóa thì cập nhật ngay và khi bấm chuyển qua lịch sử phiên đó
-						-> khi có 2 cuộc họp trở lên -> hiển thị 2 cuộc hợp nhưng UI đang kéo cả trang scroll -> mong muốn hiển thị 2 cuộc họp sao cho không bị scroll, nhảy chữ và lệch UI
+Nguyên tắc chung
+-----------------
+- Không thay đổi chuỗi hiển thị, hợp đồng IPC hoặc trải nghiệm hiện tại ngoài các
+  trạng thái loading/error cần thiết.
+- Mọi thao tác gọi AI phải có trạng thái đang xử lý, chống request trùng/chậm
+  ghi đè kết quả mới, và hiển thị lỗi rõ ràng thay vì chỉ fallback im lặng.
+- Khi dữ liệu thay đổi, nguồn dữ liệu dùng để vào Meeting phải là snapshot mới
+  nhất sau khi đã flush các thay đổi debounce.
+- Mỗi hạng mục cần có test hook/component cho success, loading, lỗi và thao tác
+  liên tiếp.
 
-Trang Meeting:
-Live Transcript Pane	-> hiện tại khi thu âm hệ xong và transcript lời thoại -> chưa dịch sang tiếng việt -> mong muốn vừa transcript vừa dịch
-						-> không thấy hoặc không biết hiển thị thanh tìm kiếm từ khóa transcript ở đâu -> xem lại logic
-						-> khi bấm tóm tắt lại -> đợi một lúc bấm mới được có animation và bấm tiếp thì bị đứng phải đợi một lúc mới bấm được và bị nhảy UI -> xem lại logic khi bấm tóm tắt lại và không bị nhảy UI
+1. Trang Home - AI Model Selector
+----------------------------------
 
-Copilot SuggestionPane	-> tương tự khi bấm nút thử lại khi chưa tạo được nội dung từ AI
-						-> ở chế độ interview thì phần từ dòng 255-290 đang bị ghi đè phần chụp câu hỏi -> cải thiện UI
-						-> tương tự từ dòng 293-303 cũng đang ghi đè phần chụp câu hỏi -> cải thiện UI
+Triệu chứng
+- Chọn model mới chỉ đổi model đang inspect; không tự đo lại latency.
+- Bấm đo lại không có animation đáng tin cậy.
+- Giá trị latency mặc định/cấu hình (`pingMs`, `120`) làm người dùng tưởng đã
+  đo thành công.
+
+Nguyên nhân kỹ thuật
+- `handleModelInspectChange` chỉ cập nhật `inspectedModelId` và cache hiện có,
+  chưa gọi đo ping cho model vừa chọn.
+- Effect tự đo chỉ chạy khi model chưa có cache. Nếu đã có cache thì không đo
+  lại, trái với mong muốn đo model được chọn ngay.
+- `handleTestPing` dùng giá trị fallback khi lỗi nhưng không trả trạng thái lỗi
+  cho UI; việc này che khuất việc đo thất bại.
+
+Giải pháp
+- Khi chọn model, đóng dropdown, xóa/đánh dấu latency đang hiển thị là stale và
+  gọi `handleTestPing(modelId)` ngay lập tức.
+- Trong thời gian đo, giữ layout cố định, hiển thị `Loader2`/animation và khóa
+  nút đo lại; không cho request cũ ghi đè kết quả model mới.
+- Dùng request id hoặc AbortController cho từng model; chỉ cập nhật state nếu
+  request còn hiệu lực và component còn mounted.
+- Tách rõ `measuredLatency` và `fallbackLatency`: fallback chỉ là trạng thái
+  chưa đo/lỗi, không ghi vào cache như kết quả đo thật. Bổ sung `pingError` để
+  hiển thị lỗi và cho phép thử lại.
+- Nếu hành vi “chọn model” cũng phải đổi model đang sử dụng, lưu model qua
+  service hiện có; nếu chỉ là inspect thì giữ nguyên setting hiện tại và chỉ đo
+  model được chọn.
+
+Tiêu chí nghiệm thu
+- Chọn bất kỳ model nào luôn tạo đúng một lần đo tự động, kể cả model đã có
+  cache.
+- Trong lúc đo có animation; không thể bấm tạo thêm request.
+- Đo model A rồi chuyển nhanh sang B không để kết quả A hiển thị cho B.
+- Lỗi mạng/API hiển thị rõ; latency fallback không được ghi nhận là latency
+  thực tế.
+
+2. Trang Home - Context Editor sang Meeting
+--------------------------------------------
+
+Triệu chứng
+- Ở chế độ interview đã nhập đủ CV và JD, nhưng sang Meeting vẫn báo thiếu
+  context.
+
+Nguyên nhân kỹ thuật
+- `useProfileContext` có debounce 300 ms và có `pendingSyncRef`; dữ liệu có thể
+  chưa được ghi xong khi chuyển trang nếu chỉ dựa vào state/render hiện tại.
+- `MeetingMode` lấy `getSavedMeetingContext()` và
+  `profileContextService.getActiveSnapshot()` trong lần render/`useMemo` đầu
+  tiên. Snapshot profile được tạo với dependency rỗng nên có thể giữ dữ liệu cũ.
+- Luồng Home đang đồng thời có context storage và profile storage, dễ xảy ra
+  lệch nguồn đọc sau khi cập nhật.
+
+Giải pháp
+- Trước `onViewChange('meeting')`, bắt buộc gọi `flushPendingContextSync()` rồi
+  tạo một context snapshot từ dữ liệu mới nhất; lưu snapshot này qua cùng một
+  service/storage.
+- Chỉ chuyển trang sau khi thao tác flush/persist hoàn tất theo contract của
+  service; không dùng timeout để “chờ” storage.
+- Khi Meeting khởi tạo, đọc context sau lần persist cuối cùng và lấy profile
+  snapshot mới; không memo hóa snapshot profile với `[]` nếu service có thể thay
+  đổi trước khi khởi tạo.
+- Chuẩn hóa một nguồn ưu tiên cho interview: profile đang chọn sau khi đã sync,
+  sau đó mới fallback sang meeting context. Kiểm tra CV/JD bằng cùng một hàm
+  validation ở Home và Meeting.
+- Thêm log/error state nếu persist thất bại; không chuyển sang Meeting với trạng
+  thái thành công giả.
+
+Tiêu chí nghiệm thu
+- Nhập/sửa CV và JD rồi bấm vào Meeting ngay lập tức vẫn nhận đúng cả hai.
+- Đã có dữ liệu nhưng đang chờ debounce vẫn được flush trước khi chuyển trang.
+- Đổi profile liên tiếp không làm Meeting dùng CV/JD của profile trước.
+- Các test kiểm tra `flush -> persist -> navigate` và validation giống nhau ở
+  hai trang.
+
+3. CV-JD Match Analysis - Phân tích lại bằng AI
+------------------------------------------------
+
+Triệu chứng
+- Bấm “phân tích lại bằng AI” phải chờ lâu mới phản hồi.
+- Không có animation rõ ràng; bấm tiếp có thể làm UI đứng hoặc tạo request
+  chồng nhau.
+- Kết quả đôi khi không phải phân tích AI mới.
+
+Nguyên nhân kỹ thuật
+- Hook có `isAnalyzingMatch` nhưng chưa có cơ chế request id/abort để chống hai
+  lần phân tích chạy đồng thời.
+- Hàm service có thể fallback về heuristic khi LLM lỗi, response rỗng hoặc
+  JSON lỗi. UI nhận kết quả bình thường mà không biết đó không phải AI result.
+- Lỗi ở hook chỉ `console.warn`, không có `error` state để thông báo.
+- Việc phân tích lại vẫn phụ thuộc vào call LLM/cache path; cần xác định rõ
+  `forceRefresh=true` và đảm bảo request được khởi động ngay khi click.
+
+Giải pháp
+- Khi click, set loading synchronously trước khi gọi service; hiển thị overlay/
+  skeleton trong dialog, giữ kích thước dialog cố định để không nhảy UI.
+- Trong lúc `isAnalyzingMatch`, disable nút phân tích lại và chống double-click.
+- Dùng request id hoặc AbortController; kết quả chỉ được commit nếu là request
+  mới nhất và CV/JD đầu vào vẫn khớp.
+- Giữ `forceRefresh=true` cho thao tác phân tích lại, bỏ cache cũ đúng phạm vi
+  của cặp CV/JD hiện tại.
+- Phân biệt `isAI` và heuristic fallback. Nếu LLM lỗi, trả error state rõ ràng
+  (kèm kết quả heuristic nếu UX cần), không gắn nhãn kết quả đó là AI.
+- Thêm `analysisError`, nút thử lại và thông báo lỗi có thể đọc được; không chỉ
+  ghi warning vào console.
+
+Tiêu chí nghiệm thu
+- Click lần đầu lập tức có loading/animation và nút bị khóa.
+- Click liên tục chỉ tạo một request; request cũ không ghi đè request mới.
+- Phân tích lại trả về kết quả có `isAI=true` khi LLM thành công và cập nhật
+  nội dung ngay khi hoàn tất.
+- Khi LLM lỗi, UI nói rõ lỗi/fallback; trạng thái loading luôn được tắt.
+
+4. Recent Sessions và Session History
+---------------------------------------
+
+Triệu chứng
+- Sau khi lưu phiên ở Meeting hoặc xóa trong Session History, Home không cập
+  nhật ngay.
+- Bấm vào phiên gần đây chưa mở đúng lịch sử chi tiết.
+- Có từ hai phiên trở lên thì card gây scroll toàn trang, chữ nhảy hoặc lệch
+  layout.
+
+Nguyên nhân kỹ thuật
+- Home phụ thuộc `subscribeSessions`; mọi đường lưu/xóa phải phát event sau khi
+  storage hoàn tất. Nếu một đường đi chỉ ghi storage mà không notify subscriber,
+  state `recentSessions` vẫn cũ.
+- `RecentSessionsCard` hiện chỉ có callback “Xem tất cả”; từng card chưa có
+  callback mở session detail.
+- Card Home nằm trong container `overflow-y-auto`; chiều cao item cố định,
+  grid/flex chưa khóa overflow nội bộ nên nội dung có thể đẩy chiều cao trang.
+
+Giải pháp
+- Chuẩn hóa repository session-history thành các thao tác `save/delete` phát
+  cùng một event/subscription sau khi ghi thành công; tránh mỗi màn hình tự đọc
+  storage riêng.
+- Sau save/delete, cập nhật state từ danh sách đã ghi hoặc nhận event ngay,
+  đồng thời giữ `totalSessionsCount` và danh sách recent nhất quán.
+- Thêm `onOpenSession(sessionId)` từ Home qua `RecentSessionsCard`; click vùng
+  card mở đúng detail, còn nút export dùng `stopPropagation`.
+- Giới hạn danh sách Home tối đa 2 phiên trong vùng có `min-h-0`, `overflow-y-
+  hidden`; dùng grid hàng co giãn, `min-w-0`, `truncate`/line-clamp và chiều cao
+  ổn định. Không để card con làm tăng chiều cao toàn trang.
+- Giữ nút “Xem tất cả” để đi Session History như hiện tại.
+
+Tiêu chí nghiệm thu
+- Save hoặc delete xong, Home cập nhật số lượng và danh sách không cần reload.
+- Click một phiên mở đúng phiên đó; export không làm chuyển trang.
+- Hiển thị 0, 1 hoặc 2 phiên không tạo scroll ngoài ý muốn, không tràn chữ,
+  không nhảy layout ở kích thước cửa sổ hỗ trợ.
+
+5. Meeting - Live Transcript Pane
+----------------------------------
+
+5.1. Transcript song ngữ / dịch tiếng Việt
+
+Triệu chứng
+- Transcript có lời thoại nhưng chưa thấy bản dịch tiếng Việt rõ ràng.
+
+Hiện trạng cần lưu ý
+- `TranscriptLine` đã có `original` và `translated`, và pane đang render cả hai.
+- `useVietnameseTranslation` hiện chủ yếu phục vụ summary/answer; không nên
+  gọi dịch lại từng dòng nếu STT đã trả `translated`.
+
+Giải pháp
+- Xác định contract của STT: mỗi line phải luôn có `original` và `translated`.
+  Nếu STT trả text tiếng Anh/không có bản dịch, đưa line qua hàng đợi dịch
+  bất đồng bộ và cập nhật theo `line.id`, không chặn transcript mới.
+- Hiển thị nhãn nhất quán “Nguyên văn” và “Tiếng Việt”; line đang dịch có
+  skeleton nhỏ, không làm thay đổi chiều cao lớn của pane.
+- Có giới hạn/dedupe theo line id, hủy request khi clear transcript hoặc
+  unmount, và hiển thị lỗi dịch riêng thay vì thay text bằng chuỗi rỗng.
+- Kiểm tra `sttLang` chỉ là ngôn ngữ nhận diện, không coi nó là bản dịch.
+
+5.2. Tìm kiếm từ khóa transcript
+
+Triệu chứng
+- Không thấy hoặc không biết thanh tìm kiếm transcript ở đâu.
+
+Giải pháp
+- Bổ sung nút/toggle tìm kiếm ngay header “Live Transcript”, có label hoặc
+  tooltip rõ ràng và phím tắt nếu hệ thống đã có chuẩn.
+- Thêm state `searchQuery`, `currentMatchIndex`; lọc/highlight trên cả
+  `original`, `translated`, speaker và timestamp.
+- Có nút next/previous, tổng số kết quả, trạng thái “không tìm thấy”, và nút
+  xóa query. Khi chọn kết quả, scroll tới line tương ứng.
+- Không phá virtualization/sliding window; tìm kiếm toàn bộ `validLines`, sau đó
+  mở rộng window/đưa line vào vùng nhìn thấy.
+
+5.3. Nút “Tóm tắt lại”
+
+Triệu chứng
+- Phải chờ lâu mới bấm được, thiếu animation; bấm tiếp gây đứng và UI nhảy.
+
+Nguyên nhân kỹ thuật
+- Hook đã có `isSummarizing` nhưng chưa có request id/cancel; các lần gọi có
+  thể chồng nhau và kết quả cũ ghi đè kết quả mới.
+- Khu vực summary dùng `max-h` thay đổi theo `isSummaryExpanded`, nên nội dung
+  loading/kết quả thay đổi có thể làm transcript nhảy.
+
+Giải pháp
+- Set `isSummarizing` trước request, disable nút ngay lập tức, chống double-
+  click và chỉ commit request mới nhất.
+- Giữ khung summary với chiều cao/min-height ổn định; skeleton nằm trong khung,
+  không thay đổi layout khi chuyển giữa loading/error/content.
+- Cho phép retry sau lỗi, hiển thị `summaryError` trong pane; không reset
+  summary cũ thành rỗng trước khi có kết quả mới nếu điều đó gây nhảy UI.
+- Khi clear transcript hoặc đổi session, cancel/invalid request đang chạy.
+
+Tiêu chí nghiệm thu
+- Bấm “Tóm tắt lại” có animation tức thì, nút bị khóa trong lúc xử lý.
+- Một lần click chỉ có một request; kết quả cuối cùng thuộc transcript mới nhất.
+- Loading, lỗi và kết quả không làm nhảy kích thước pane.
+- Transcript vẫn nhận line mới bình thường trong lúc tóm tắt.
+
+6. Meeting - Copilot Suggestion Pane
+-------------------------------------
+
+6.1. Nút “Thử lại” khi AI chưa tạo được nội dung
+
+Triệu chứng
+- Khi AI không tạo được nội dung, retry phản hồi chậm/không rõ trạng thái;
+  bấm nhiều lần có thể làm request chồng nhau.
+
+Giải pháp
+- Dùng chung state machine cho `idle -> generating -> success/error`, hoặc
+  ít nhất khóa retry ngay khi bắt đầu và hiển thị spinner trong nút/card.
+- Retry phải dùng transcript/exchange hiện tại, hủy stream trước đó nếu còn
+  chạy, và request id chỉ cho phép kết quả mới nhất cập nhật pane.
+- Giữ thông báo lỗi, phân biệt thiếu API key, timeout, rate limit và lỗi parse;
+  không nuốt lỗi hoặc hiển thị success-shaped fallback.
+- Khi retry, giữ kích thước vùng kết quả và placeholder để không nhảy UI.
+
+6.2. Visual question ghi đè vùng chụp câu hỏi trong interview
+
+Triệu chứng
+- Ở interview, nội dung khoảng dòng 255-290 và 293-303 bị chồng lên phần
+  chụp câu hỏi.
+
+Nguyên nhân kỹ thuật
+- `VisualQuestionCard` được render trong cùng flow với suggestion body, card có
+  nội dung mở rộng, thumbnail/answer/code và `shrink-0`; khi vùng chứa thiếu
+  chiều cao, các khối cạnh tranh với nhau.
+- Pane dùng layout flex/overflow lồng nhau nhưng chưa có vùng chiều cao/scroll
+  độc lập cho visual question và suggestion.
+
+Giải pháp
+- Tách visual question thành một vùng/card độc lập trong suggestion pane, có
+  `flex-none`, `min-w-0`, `max-h` và `overflow-y-auto` nội bộ.
+- Đảm bảo suggestion body là vùng `flex-1 min-h-0 overflow-y-auto`; không dùng
+  absolute positioning cho nội dung câu hỏi/chụp ảnh.
+- Khi có visual question, giữ khoảng cách cố định với câu trả lời AI; thumbnail,
+  answer, code và key insights phải wrap đúng chiều rộng.
+- Cho phép thu gọn card và giữ trạng thái thu gọn khi suggestion cập nhật; khi
+  ảnh đang phân tích hiển thị skeleton cùng kích thước.
+- Kiểm tra cả hai vùng được nêu (255-290 và 293-303) bằng screenshot/responsive
+  test ở interview, discussion và khi có/không có visual question.
+
+Tiêu chí nghiệm thu
+- Visual question không che, không bị che và không ghi đè transcript/suggestion.
+- Chỉ vùng cần scroll cuộn; trang/pane ngoài không bị kéo theo.
+- Retry/loading/visual analysis không làm mất hoặc nhảy vị trí các card khác.
+- Nội dung dài, code dài và bản dịch đều wrap hoặc scroll trong card của nó.
+
+Thứ tự triển khai đề xuất
+--------------------------
+1. Chuẩn hóa async state/request id và error handling cho model ping, CV-JD
+   match, summary và Copilot retry.
+2. Sửa context snapshot/persist trước khi chuyển Home -> Meeting.
+3. Chuẩn hóa event subscription của session history và callback mở session.
+4. Bổ sung transcript translation contract và tìm kiếm/highlight.
+5. Tách layout visual question, khóa overflow và hoàn thiện responsive UI.
+
+Kiểm thử bắt buộc sau khi triển khai
+-------------------------------------
+- `bun run arch:check`
+- `bun run size:report`
+- `bun run build:electron`
+- `bun x tsc -p tsconfig.app.json --noEmit`
+- `bun x tsc -p tsconfig.node.json --noEmit`
+- `bun test src/`
+- `bun run build:vite`
+

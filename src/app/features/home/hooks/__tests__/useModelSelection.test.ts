@@ -38,4 +38,25 @@ describe('useModelSelection Hook', () => {
     expect(result.current.inspectedSTTId).toBe('local-whisper')
     expect(result.current.isSTTDropdownOpen).toBe(false)
   })
+
+  it('triggers handleTestPing and handleTestSTTPing safely even when invoked without args or event-like args', async () => {
+    const { result } = renderHook(() => useModelSelection())
+
+    await act(async () => {
+      await result.current.handleTestPing()
+    })
+    expect(result.current.isPinging).toBe(false)
+
+    await act(async () => {
+      await (result.current.handleTestPing as unknown as (e: unknown) => Promise<void>)({
+        preventDefault: () => {},
+      })
+    })
+    expect(result.current.isPinging).toBe(false)
+
+    await act(async () => {
+      await result.current.handleTestSTTPing()
+    })
+    expect(result.current.isSTTPinging).toBe(false)
+  })
 })

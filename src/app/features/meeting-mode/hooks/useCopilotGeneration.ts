@@ -1,36 +1,33 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect } from "react";
 import type {
   TranscriptLine,
   AISuggestion,
   InterviewVariation,
   UseCopilotGenerationProps,
   UseCopilotGenerationReturn,
-} from '../types'
+} from "../types";
 import {
   type CopilotState,
   transitionCopilotState,
-} from '../machines/copilotStateMachine'
-import { useStreamingAnswer } from './useStreamingAnswer'
-import {
-  generateDiscussionOptions,
-  
-} from '@/services/ai-model/copilot/discussion'
+} from "../machines/copilotStateMachine";
+import { useStreamingAnswer } from "./useStreamingAnswer";
+import { generateDiscussionOptions } from "@/services/ai-model/copilot/discussion";
 import {
   getSavedResponseLanguage,
   saveResponseLanguage,
   normalizeResponseLanguage,
   type ResponseLanguage,
-} from '@/services/ai-model/aiModels'
-import type { AnswerStrategyId } from '@/services/ai-model/strategy'
-import type { AssembledExchange as ScannedExchangeResult } from '@/services/ai-model/copilot/exchangeAssembler'
+} from "@/services/ai-model/aiModels";
+import type { AnswerStrategyId } from "@/services/ai-model/strategy";
+import type { AssembledExchange as ScannedExchangeResult } from "@/services/ai-model/copilot/exchangeAssembler";
 import {
   runGroundingValidation,
   journalInterviewSuggestion,
   journalDiscussionSuggestions,
-} from '../controllers/copilotResponseHelpers'
-import { useCopilotCopy } from './useCopilotCopy'
+} from "../controllers/copilotResponseHelpers";
+import { useCopilotCopy } from "./useCopilotCopy";
 
-export type { UseCopilotGenerationProps, UseCopilotGenerationReturn }
+export type { UseCopilotGenerationProps, UseCopilotGenerationReturn };
 
 export function useCopilotGeneration({
   mode,
@@ -44,94 +41,100 @@ export function useCopilotGeneration({
   aiSuggestionsHistoryRef,
   setContextUsage,
 }: UseCopilotGenerationProps): UseCopilotGenerationReturn {
-  const isMountedRef = useRef(true)
-  const isMounted = useCallback(() => isMountedRef.current, [])
-  const [copilotState, setCopilotState] = useState<CopilotState>('idle')
+  const isMountedRef = useRef(true);
+  const isMounted = useCallback(() => isMountedRef.current, []);
+  const [copilotState, setCopilotState] = useState<CopilotState>("idle");
 
-  const [customInterviewAnswer, setCustomInterviewAnswer] = useState<InterviewVariation | null>(null)
-  const [customDiscussionSuggestions, setCustomDiscussionSuggestions] = useState<AISuggestion[] | null>(null)
-  const [isShortened, setIsShortened] = useState(false)
-  const [isRegenerating, setIsRegenerating] = useState(false)
-  const [aiError, setAiError] = useState<string | null>(null)
+  const [customInterviewAnswer, setCustomInterviewAnswer] =
+    useState<InterviewVariation | null>(null);
+  const [customDiscussionSuggestions, setCustomDiscussionSuggestions] =
+    useState<AISuggestion[] | null>(null);
+  const [isShortened, setIsShortened] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const [responseLang, setResponseLang] = useState<ResponseLanguage>(() =>
-    normalizeResponseLanguage(getSavedResponseLanguage())
-  )
-  const [answerStrategyOverride, setAnswerStrategyOverride] = useState<AnswerStrategyId | undefined>()
+    normalizeResponseLanguage(getSavedResponseLanguage()),
+  );
+  const [answerStrategyOverride, setAnswerStrategyOverride] = useState<
+    AnswerStrategyId | undefined
+  >();
 
-  const streamingAnswer = useStreamingAnswer()
+  const streamingAnswer = useStreamingAnswer();
 
   const isGeneratingAIResponse =
-    copilotState === 'generating' || copilotState === 'streaming'
+    copilotState === "generating" || copilotState === "streaming";
 
   const activeAnswerContent = customInterviewAnswer
     ? isShortened
       ? customInterviewAnswer.shortContent
       : customInterviewAnswer.content
-    : ''
+    : "";
 
   const suggestions: AISuggestion[] =
-    mode === 'discussion'
-      ? customDiscussionSuggestions ?? []
+    mode === "discussion"
+      ? (customDiscussionSuggestions ?? [])
       : customInterviewAnswer
-      ? [
-          {
-            id: customInterviewAnswer.id,
-            type: 'answer',
-            label: customInterviewAnswer.label,
-            content: activeAnswerContent,
-            confidence: customInterviewAnswer.confidence,
-          },
-        ]
-      : []
+        ? [
+            {
+              id: customInterviewAnswer.id,
+              type: "answer",
+              label: customInterviewAnswer.label,
+              content: activeAnswerContent,
+              confidence: customInterviewAnswer.confidence,
+            },
+          ]
+        : [];
 
-  const {
-    copiedAnswer,
-    copiedOptionId,
-    handleCopyAnswer,
-    handleCopyOption,
-  } = useCopilotCopy({
-    mode,
-    activeAnswerContent,
-    suggestions,
-    isMounted,
-  })
+  const { copiedAnswer, copiedOptionId, handleCopyAnswer, handleCopyOption } =
+    useCopilotCopy({
+      mode,
+      activeAnswerContent,
+      suggestions,
+      isMounted,
+    });
 
   const cancelStream = useCallback(() => {
-    streamingAnswer.cancelStream()
-    setCopilotState((prev) => transitionCopilotState(prev, { type: 'INTERRUPT' }))
-  }, [streamingAnswer])
+    streamingAnswer.cancelStream();
+    setCopilotState((prev) =>
+      transitionCopilotState(prev, { type: "INTERRUPT" }),
+    );
+  }, [streamingAnswer]);
 
   const handleGenerateCopilotResponse = useCallback(
     async (
       lines: TranscriptLine[],
       summaryOverride?: string | null,
-      scannedOverride?: ScannedExchangeResult | null
+      scannedOverride?: ScannedExchangeResult | null,
     ) => {
       if (!lines || lines.length === 0) {
-        setAiError('Chưa có nội dung transcript. Hãy thu âm cuộc họp rồi bấm Dừng để AI phân tích.')
-        return
+        setAiError(
+          "Chưa có nội dung transcript. Hãy thu âm cuộc họp rồi bấm Dừng để AI phân tích.",
+        );
+        return;
       }
 
-      const currentExchange = scannedOverride
+      const currentExchange = scannedOverride;
       const exchangeOriginalText = (
         currentExchange?.original ||
         lines[lines.length - 1].original ||
-        ''
-      ).trim()
+        ""
+      ).trim();
 
-      const isQ = currentExchange?.isQuestion ?? false
+      const isQ = currentExchange?.isQuestion ?? false;
 
-      setCopilotState((prev) => transitionCopilotState(prev, { type: 'START_GENERATION' }))
-      setAiError(null)
+      setCopilotState((prev) =>
+        transitionCopilotState(prev, { type: "START_GENERATION" }),
+      );
+      setAiError(null);
 
       try {
-        if (mode === 'interview') {
-          const questionText = exchangeOriginalText
-          const activeCvBg = cvAnalysis || ''
-          const answerId = Date.now()
+        if (mode === "interview") {
+          const questionText = exchangeOriginalText;
+          const activeCvBg = cvAnalysis || "";
+          const answerId = Date.now();
 
-          streamingAnswer.cancelStream()
+          streamingAnswer.cancelStream();
 
           await streamingAnswer.startStream(
             {
@@ -147,42 +150,46 @@ export function useCopilotGeneration({
             },
             {
               onInit: (init) => {
-                if (!isMounted()) return
-                setContextUsage(init.contextUsage)
+                if (!isMounted()) return;
+                setContextUsage(init.contextUsage);
                 setCustomInterviewAnswer({
                   id: answerId,
-                  type: 'answer',
+                  type: "answer",
                   label: init.label,
-                  content: '',
-                  shortContent: '',
+                  content: "",
+                  shortContent: "",
                   confidence: 97,
                   contextUsage: init.contextUsage,
                   strategy: init.strategy,
                   retrieval: init.retrieval,
                   isStreaming: true,
-                  streamingState: 'connecting',
-                })
+                  streamingState: "connecting",
+                });
               },
               onFirstToken: () => {
-                if (!isMounted()) return
-                setCopilotState((prev) => transitionCopilotState(prev, { type: 'FIRST_TOKEN' }))
+                if (!isMounted()) return;
+                setCopilotState((prev) =>
+                  transitionCopilotState(prev, { type: "FIRST_TOKEN" }),
+                );
               },
               onDelta: (_delta, currentFullText) => {
-                if (!isMounted()) return
+                if (!isMounted()) return;
                 setCustomInterviewAnswer((prev) =>
                   prev && prev.id === answerId
                     ? {
                         ...prev,
                         content: currentFullText,
                         isStreaming: true,
-                        streamingState: 'streaming',
+                        streamingState: "streaming",
                       }
-                    : prev
-                )
+                    : prev,
+                );
               },
               onDone: (res) => {
-                if (!isMounted()) return
-                setCopilotState((prev) => transitionCopilotState(prev, { type: 'FINISH_STREAM' }))
+                if (!isMounted()) return;
+                setCopilotState((prev) =>
+                  transitionCopilotState(prev, { type: "FINISH_STREAM" }),
+                );
 
                 setCustomInterviewAnswer((prev) =>
                   prev && prev.id === answerId
@@ -194,10 +201,10 @@ export function useCopilotGeneration({
                         routing: res.routing,
                         failover: res.failover,
                         isStreaming: false,
-                        streamingState: 'done',
+                        streamingState: "done",
                       }
-                    : prev
-                )
+                    : prev,
+                );
 
                 void runGroundingValidation({
                   answerId,
@@ -207,7 +214,7 @@ export function useCopilotGeneration({
                   lines,
                   isMounted,
                   updateAnswer: setCustomInterviewAnswer,
-                })
+                });
 
                 journalInterviewSuggestion({
                   sessionId,
@@ -215,16 +222,18 @@ export function useCopilotGeneration({
                   lines,
                   res,
                   aiSuggestionsHistoryRef,
-                })
+                });
               },
               onError: (err, partialText) => {
-                if (!isMounted()) return
-                setCopilotState((prev) => transitionCopilotState(prev, { type: 'FAIL' }))
+                if (!isMounted()) return;
+                setCopilotState((prev) =>
+                  transitionCopilotState(prev, { type: "FAIL" }),
+                );
 
-                if (err.message?.includes('Intent Gate')) {
-                  setCustomInterviewAnswer(null)
-                  setAiError(null)
-                  return
+                if (err.message?.includes("Intent Gate")) {
+                  setCustomInterviewAnswer(null);
+                  setAiError(null);
+                  return;
                 }
 
                 if (partialText && partialText.trim()) {
@@ -234,21 +243,21 @@ export function useCopilotGeneration({
                           ...prev,
                           content: partialText,
                           isStreaming: false,
-                          streamingState: 'interrupted',
+                          streamingState: "interrupted",
                         }
-                      : prev
-                  )
+                      : prev,
+                  );
                 } else {
-                  setCustomInterviewAnswer(null)
-                  setAiError(err?.message || 'Không gọi được LLM.')
+                  setCustomInterviewAnswer(null);
+                  setAiError(err?.message || "Không gọi được LLM.");
                 }
               },
-            }
-          )
+            },
+          );
         } else {
           // Discussion mode
-          const summaryText = summaryOverride ?? meetingSummary ?? ''
-          const activeDiscussionBg = discussionAnalysis || ''
+          const summaryText = summaryOverride ?? meetingSummary ?? "";
+          const activeDiscussionBg = discussionAnalysis || "";
 
           const options = await generateDiscussionOptions({
             latestLine: exchangeOriginalText,
@@ -259,35 +268,43 @@ export function useCopilotGeneration({
             transcriptLines: lines,
             language: responseLang,
             sessionId,
-          })
+          });
 
-          if (!isMounted()) return
+          if (!isMounted()) return;
 
           if (!options || options.length === 0) {
-            setCustomDiscussionSuggestions(null)
-            setCopilotState((prev) => transitionCopilotState(prev, { type: 'FAIL' }))
-            setAiError('Không gọi được LLM.')
-            return
+            setCustomDiscussionSuggestions(null);
+            setCopilotState((prev) =>
+              transitionCopilotState(prev, { type: "FAIL" }),
+            );
+            setAiError("Không gọi được LLM.");
+            return;
           }
 
           if (options[0]?.contextUsage) {
-            setContextUsage(options[0].contextUsage)
+            setContextUsage(options[0].contextUsage);
           }
 
-          setCustomDiscussionSuggestions(options)
-          setCopilotState((prev) => transitionCopilotState(prev, { type: 'FINISH_STREAM' }))
+          setCustomDiscussionSuggestions(options);
+          setCopilotState((prev) =>
+            transitionCopilotState(prev, { type: "FINISH_STREAM" }),
+          );
 
           journalDiscussionSuggestions({
             lines,
             options,
             aiSuggestionsHistoryRef,
-          })
+          });
         }
       } catch (err) {
-        console.warn('[useCopilotGeneration] Copilot response error:', err)
+        console.warn("[useCopilotGeneration] Copilot response error:", err);
         if (isMounted()) {
-          setCopilotState((prev) => transitionCopilotState(prev, { type: 'FAIL' }))
-          setAiError((err as Error)?.message || 'Lỗi không xác định khi gọi LLM.')
+          setCopilotState((prev) =>
+            transitionCopilotState(prev, { type: "FAIL" }),
+          );
+          setAiError(
+            (err as Error)?.message || "Lỗi không xác định khi gọi LLM.",
+          );
         }
       }
     },
@@ -306,65 +323,67 @@ export function useCopilotGeneration({
       discussionAnalysis,
       discussionTopic,
       isMounted,
-    ]
-  )
+    ],
+  );
 
   const handleRegenerate = useCallback(
     async (lines: TranscriptLine[], scanned?: ScannedExchangeResult | null) => {
-      if (lines.length === 0) return
-      setIsRegenerating(true)
-      setIsShortened(false)
+      if (lines.length === 0 || isRegenerating) return;
+      cancelStream();
+      setAiError(null);
+      setIsRegenerating(true);
+      setIsShortened(false);
       try {
-        await handleGenerateCopilotResponse(lines, null, scanned)
+        await handleGenerateCopilotResponse(lines, null, scanned);
       } finally {
         if (isMounted()) {
-          setIsRegenerating(false)
+          setIsRegenerating(false);
         }
       }
     },
-    [handleGenerateCopilotResponse, isMounted]
-  )
+    [handleGenerateCopilotResponse, cancelStream, isRegenerating, isMounted],
+  );
 
   const handleToggleShorten = useCallback(() => {
-    setIsShortened((prev) => !prev)
-  }, [])
+    setIsShortened((prev) => !prev);
+  }, []);
 
   const handleToggleCorrectedAnswer = useCallback(() => {
     setCustomInterviewAnswer((prev) => {
-      if (!prev || !prev.grounding?.correctedAnswer) return prev
-      const applied = !prev.appliedCorrected
+      if (!prev || !prev.grounding?.correctedAnswer) return prev;
+      const applied = !prev.appliedCorrected;
       return {
         ...prev,
         appliedCorrected: applied,
         content: applied
           ? prev.grounding.correctedAnswer
           : prev.grounding.originalAnswer || prev.content,
-      }
-    })
-  }, [])
+      };
+    });
+  }, []);
 
   const handleResponseLangChange = useCallback((lang: ResponseLanguage) => {
-    setResponseLang(lang)
-    saveResponseLanguage(lang)
-    setCustomInterviewAnswer(null)
-    setCustomDiscussionSuggestions(null)
-    setAiError(null)
-  }, [])
+    setResponseLang(lang);
+    saveResponseLanguage(lang);
+    setCustomInterviewAnswer(null);
+    setCustomDiscussionSuggestions(null);
+    setAiError(null);
+  }, []);
 
   const resetCopilot = useCallback(() => {
-    cancelStream()
-    setCustomInterviewAnswer(null)
-    setCustomDiscussionSuggestions(null)
-    setAiError(null)
-    setCopilotState('idle')
-  }, [cancelStream])
+    cancelStream();
+    setCustomInterviewAnswer(null);
+    setCustomDiscussionSuggestions(null);
+    setAiError(null);
+    setCopilotState("idle");
+  }, [cancelStream]);
 
   useEffect(() => {
-    isMountedRef.current = true
+    isMountedRef.current = true;
     return () => {
-      isMountedRef.current = false
-    }
-  }, [])
+      isMountedRef.current = false;
+    };
+  }, []);
 
   return {
     copilotState,
@@ -391,5 +410,5 @@ export function useCopilotGeneration({
     handleCopyOption,
     cancelStream,
     resetCopilot,
-  }
+  };
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import type { AppMode } from '@/types/electron.d'
 import { getSavedMeetingContext, isValidCvContent, isValidJdContent } from '@/services/meeting-context'
 import {
@@ -55,7 +55,28 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const mode = controlledMode ?? internalMode
 
   // Persistent settings & configs
-  const contextData = getSavedMeetingContext()
+  const [contextData, setContextData] = useState(() => getSavedMeetingContext())
+  const [profileSnapshot, setProfileSnapshot] = useState<ProfilePresetSnapshot>(
+    () => profileContextService.getActiveSnapshot()
+  )
+
+  useEffect(() => {
+    const handleContextUpdate = () => {
+      setContextData(getSavedMeetingContext())
+      setProfileSnapshot(profileContextService.getActiveSnapshot())
+    }
+    const unsubProfile = profileContextService.subscribe(() => {
+      handleContextUpdate()
+    })
+    window.addEventListener('meeting-context-updated', handleContextUpdate)
+    window.addEventListener('storage', handleContextUpdate)
+    return () => {
+      unsubProfile()
+      window.removeEventListener('meeting-context-updated', handleContextUpdate)
+      window.removeEventListener('storage', handleContextUpdate)
+    }
+  }, [])
+
   const selectedModelId = getSavedAIModelId()
   const currentModel = getSelectedModelConfig(selectedModelId)
   const selectedDeviceId = getSavedAudioDeviceId()
@@ -67,12 +88,6 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const currentSTTEngine =
     availableSTTEngines.find((e) => e.id === savedSTTEngineId) || availableSTTEngines[0]
   const sttEngineLabel = currentSTTEngine ? currentSTTEngine.name.split(' (')[0] : 'Whisper'
-
-  // Snapshot active profile upon entering the meeting (immutable snapshot)
-  const profileSnapshot = useMemo<ProfilePresetSnapshot>(
-    () => profileContextService.getActiveSnapshot(),
-    []
-  )
 
   const activeCV =
     mode === 'interview'
