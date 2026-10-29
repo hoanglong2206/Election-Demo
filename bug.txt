@@ -1,0 +1,19 @@
+Trang Home:
+AI Model Selector		-> khi chọn các mô hình -> không đo lại -> mong muốn khi chọn mô hình nào tự đông đo lại mô hình đó
+						-> khi bấm đo lại -> không có animation và LLM đang bị mắc định 180 -> mong muốn thêm animation và không gán cứng mặc định
+
+Context Editor Card		-> ở chế độ interview khi nhập hết CV và JD -> qua trang meeting vẫn báo không có CV và JD -> kiểm tra lại luồng này
+	
+CV-JD Match Analysis	-> khi bấm phân tích lại bằng AI -> đợi một lúc bấm mới được có animation và bấm tiếp thì bị đứng phải đợi một lúc móiw bấm được và chưa phân tích lại bằng AI -> xem lại logic bấm nút phân tích lại sao cho có animation và phân tích lại bằng AI được ngay
+
+Recent Sessions			-> khi lưu phiên ở meeting hoặc xóa ở session history -> không cập nhật ngay và khi bấm vào chưa chuyển qua lịch sử phiên đó -> mong muốn sau khi lưu hoặc xóa thì cập nhật ngay và khi bấm chuyển qua lịch sử phiên đó
+						-> khi có 2 cuộc họp trở lên -> hiển thị 2 cuộc hợp nhưng UI đang kéo cả trang scroll -> mong muốn hiển thị 2 cuộc họp sao cho không bị scroll, nhảy chữ và lệch UI
+
+Trang Meeting:
+Live Transcript Pane	-> hiện tại khi thu âm hệ xong và transcript lời thoại -> chưa dịch sang tiếng việt -> mong muốn vừa transcript vừa dịch
+						-> không thấy hoặc không biết hiển thị thanh tìm kiếm từ khóa transcript ở đâu -> xem lại logic
+						-> khi bấm tóm tắt lại -> đợi một lúc bấm mới được có animation và bấm tiếp thì bị đứng phải đợi một lúc mới bấm được và bị nhảy UI -> xem lại logic khi bấm tóm tắt lại và không bị nhảy UI
+
+Copilot SuggestionPane	-> tương tự khi bấm nút thử lại khi chưa tạo được nội dung từ AI
+						-> ở chế độ interview thì phần từ dòng 255-290 đang bị ghi đè phần chụp câu hỏi -> cải thiện UI
+						-> tương tự từ dòng 293-303 cũng đang ghi đè phần chụp câu hỏi -> cải thiện UI
