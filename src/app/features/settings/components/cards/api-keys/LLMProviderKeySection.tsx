@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   ExternalLink,
   CheckCircle2,
@@ -59,6 +59,8 @@ export function LLMProviderKeySection({
   const [llmPreview, setLlmPreview] = useState<KeyPreviewData | null>(null)
   const [isCheckingAllLlmModels, setIsCheckingAllLlmModels] = useState(false)
   const [testingModelId, setTestingModelId] = useState<string | null>(null)
+  const [keyError, setKeyError] = useState<string | null>(null)
+  const verifiedCacheRef = useRef<any>(null)
 
   const isLlmConfigured = Boolean(llmStatus?.configured && llmStatus?.maskedKey)
 
@@ -69,52 +71,74 @@ export function LLMProviderKeySection({
     detectedProvider !== 'Unknown' &&
     detectedProvider !== llmProvider
 
-  const mergePreviewModels = (models: any[] = [], previous: PreviewModelItem[] = []): PreviewModelItem[] => {
-    const previousMap = new Map(previous.map((model) => [model.id, model]))
-    return models.map((model: any) => {
-      const previousModel = previousMap.get(model.id)
-      return {
-        ...model,
-        availability: previousModel?.availability ?? 'unchecked',
-      }
-    })
+  const handleKeyChange = (val: string) => {
+    setInputLlmKey(val)
+    if (llmStep !== 'idle') {
+      setLlmStep('idle')
+      setLlmPreview(null)
+      verifiedCacheRef.current = null
+    }
+    if (keyError) setKeyError(null)
+  }
+
+  const handleProviderSelect = (provider: LLMProviderOption) => {
+    onLlmProviderChange(provider)
+    if (llmStep !== 'idle') {
+      setLlmStep('idle')
+      setLlmPreview(null)
+      verifiedCacheRef.current = null
+      setKeyError(null)
+    }
   }
 
   const handleCheckLlm = async () => {
     if (!inputLlmKey.trim()) return
     setLlmStep('checking')
+    setKeyError(null)
     const targetProvider = resolveTargetLlmProvider(inputLlmKey, llmProvider)
     try {
       const res = await onVerifyRawKey(targetProvider, inputLlmKey.trim())
       if (res.valid) {
         setLlmStep('verified')
-        setLlmPreview({
-          provider: res.provider || targetProvider,
-          models: mergePreviewModels(res.models || [], llmPreview?.models || []),
-          message: res.message,
-        })
+        verifiedCacheRef.current = res
+        // Yêu cầu: "hợp lệ sẽ hiện nút đồng bộ -> bấm vào sẽ hiện danh sách model"
+        setLlmPreview(null)
       } else {
         setLlmStep('idle')
+        verifiedCacheRef.current = null
+        setKeyError(res.message || 'Khóa API không hợp lệ. Vui lòng kiểm tra lại.')
       }
-    } catch {
+    } catch (err: any) {
       setLlmStep('idle')
+      verifiedCacheRef.current = null
+      setKeyError(err?.message || 'Không thể kết nối đến nhà cung cấp LLM.')
     }
   }
 
   const handleSyncLlm = async () => {
     setLlmStep('syncing')
+    setKeyError(null)
     const targetProvider = resolveTargetLlmProvider(inputLlmKey, llmProvider)
     try {
-      const result = await onVerifyRawKey(targetProvider, inputLlmKey.trim())
-      if (!result.valid) throw new Error(result.message || 'Không thể tải lại danh sách model.')
-      setLlmPreview((prev) => ({
+      let result = verifiedCacheRef.current
+      if (!result || !result.valid) {
+        result = await onVerifyRawKey(targetProvider, inputLlmKey.trim())
+      }
+      if (!result.valid) throw new Error(result.message || 'Không thể tải danh sách model.')
+
+      const rawModels = result.models || []
+      setLlmPreview({
         provider: result.provider || targetProvider,
-        models: mergePreviewModels(result.models || [], prev?.models || []),
+        models: rawModels.map((m: any) => ({
+          ...m,
+          availability: 'unchecked',
+        })),
         message: result.message,
-      }))
+      })
       setLlmStep('synced')
-    } catch {
+    } catch (err: any) {
       setLlmStep('verified')
+      setKeyError(err?.message || 'Không thể đồng bộ danh sách model.')
     }
   }
 
@@ -150,6 +174,9 @@ export function LLMProviderKeySection({
     setIsCheckingAllLlmModels(true)
     try {
       for (const model of llmPreview.models) {
+        if (model.availability === 'available' || model.availability === 'unavailable') {
+          continue
+        }
         await handleCheckModel(model.id)
       }
     } finally {
@@ -157,20 +184,27 @@ export function LLMProviderKeySection({
     }
   }
 
+  // Yêu cầu: "khi kiểm tra xong hết mới được lưu"
   const allLlmModelsChecked = Boolean(
-    llmPreview?.models.length &&
-      llmPreview.models.every((m) => m.availability === 'available' || m.availability === 'unavailable')
+    llmPreview &&
+      (llmPreview.models.length === 0 ||
+        llmPreview.models.every((m) => m.availability === 'available' || m.availability === 'unavailable'))
   )
   const checkedLlmCount =
     llmPreview?.models.filter((m) => m.availability === 'available' || m.availability === 'unavailable').length || 0
+  const canSaveLlm = allLlmModelsChecked && !isCheckingAllLlmModels && llmStep !== 'saving'
 
   const handleSaveLlm = async () => {
-    if (!inputLlmKey.trim() || !allLlmModelsChecked || isCheckingAllLlmModels) return
+    if (!canSaveLlm || !inputLlmKey.trim()) return
     setLlmStep('saving')
     const targetProvider = resolveTargetLlmProvider(inputLlmKey, llmProvider)
     try {
       const confirmedModels = llmPreview?.models.filter((m) => m.availability === 'available') || []
-      const success = await onSaveLLMKey(targetProvider, inputLlmKey.trim(), confirmedModels)
+      const availableModels =
+        confirmedModels.length > 0
+          ? confirmedModels
+          : llmPreview?.models.filter((m) => m.availability !== 'unavailable') || []
+      const success = await onSaveLLMKey(targetProvider, inputLlmKey.trim(), availableModels)
       if (success) {
         setLlmStep('saved')
         setTimeout(() => {
@@ -178,6 +212,8 @@ export function LLMProviderKeySection({
           setInputLlmKey('')
           setLlmStep('idle')
           setLlmPreview(null)
+          verifiedCacheRef.current = null
+          setKeyError(null)
         }, 1200)
       } else {
         setLlmStep('synced')
@@ -185,6 +221,15 @@ export function LLMProviderKeySection({
     } catch {
       setLlmStep('synced')
     }
+  }
+
+  const handleResetForm = () => {
+    setIsEditingLlm(false)
+    setInputLlmKey('')
+    setLlmStep('idle')
+    setLlmPreview(null)
+    verifiedCacheRef.current = null
+    setKeyError(null)
   }
 
   return (
@@ -259,29 +304,37 @@ export function LLMProviderKeySection({
             setInputLlmKey('')
             setLlmStep('idle')
             setLlmPreview(null)
+            verifiedCacheRef.current = null
+            setKeyError(null)
           }}
           onDeleteRequest={onDeleteRequest}
         />
       ) : (
         <div className="space-y-2.5">
-          <KeyBreadcrumbs step={llmStep} />
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <KeyBreadcrumbs step={llmStep} />
+            {llmStep === 'verified' && (
+              <Badge
+                variant="outline"
+                className="text-[9px] px-2 py-0.5 bg-emerald-500/15 text-emerald-300 border-emerald-500/30 flex items-center gap-1 animate-fade-in font-medium"
+              >
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>Key hợp lệ! Hãy bấm Đồng bộ model</span>
+              </Badge>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <ProviderSelectorDropdown
               llmProvider={llmProvider}
-              onLlmProviderChange={onLlmProviderChange}
+              onLlmProviderChange={handleProviderSelect}
             />
 
             <input
               type="password"
               value={inputLlmKey}
-              onChange={(e) => {
-                setInputLlmKey(e.target.value)
-                if (llmStep !== 'idle') {
-                  setLlmStep('idle')
-                  setLlmPreview(null)
-                }
-              }}
+              onChange={(e) => handleKeyChange(e.target.value)}
+              onInput={(e) => handleKeyChange(e.currentTarget.value)}
               placeholder={llmProvider === 'OpenAI' ? 'sk-...' : llmProvider === 'Google' ? 'AIza...' : 'sk-... hoặc AIza...'}
               className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-[11.5px] text-white placeholder-white/30 focus:outline-none focus:border-violet-500/60 font-mono"
             />
@@ -294,7 +347,14 @@ export function LLMProviderKeySection({
                 disabled={!inputLlmKey.trim() || llmStep === 'checking'}
                 className="h-8 text-[11px] px-3 bg-blue-600 hover:bg-blue-500 text-white font-medium shrink-0"
               >
-                {llmStep === 'checking' ? <><RotateCcw className="w-3 h-3 animate-spin mr-1" /><span>Đang thử...</span></> : <span>Kiểm tra</span>}
+                {llmStep === 'checking' ? (
+                  <>
+                    <RotateCcw className="w-3 h-3 animate-spin mr-1" />
+                    <span>Đang kiểm tra...</span>
+                  </>
+                ) : (
+                  <span>Kiểm tra hợp lệ</span>
+                )}
               </Button>
             )}
 
@@ -304,10 +364,20 @@ export function LLMProviderKeySection({
                 size="sm"
                 onClick={handleSyncLlm}
                 disabled={llmStep === 'syncing'}
-                title="Lấy danh sách model thực tế từ nhà cung cấp bằng key vừa nhập, rồi bạn có thể lưu key và chọn model phù hợp"
-                className="h-8 text-[11px] px-3 bg-violet-600 hover:bg-violet-500 text-white font-medium shrink-0"
+                title="Lấy danh sách model thực tế từ nhà cung cấp bằng key vừa nhập"
+                className="h-8 text-[11px] px-3 bg-violet-600 hover:bg-violet-500 text-white font-medium shrink-0 animate-fade-in"
               >
-                {llmStep === 'syncing' ? <><RotateCcw className="w-3 h-3 animate-spin mr-1" /><span>Đang nạp...</span></> : <><Sparkles className="w-3 h-3 mr-1" /><span>Đồng bộ model</span></>}
+                {llmStep === 'syncing' ? (
+                  <>
+                    <RotateCcw className="w-3 h-3 animate-spin mr-1" />
+                    <span>Đang đồng bộ...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    <span>Đồng bộ model</span>
+                  </>
+                )}
               </Button>
             )}
 
@@ -316,12 +386,17 @@ export function LLMProviderKeySection({
                 type="button"
                 size="sm"
                 onClick={handleSaveLlm}
-                disabled={!allLlmModelsChecked || isCheckingAllLlmModels || llmStep === 'saving'}
+                disabled={!canSaveLlm}
+                title={
+                  !allLlmModelsChecked
+                    ? `Vui lòng kiểm tra tất cả model (${checkedLlmCount}/${llmPreview?.models.length || 0}) trước khi lưu`
+                    : 'Lưu cấu hình LLM API Key và model vào OS Secure Store'
+                }
                 className={cn(
-                  'h-8 text-[11px] px-3 font-medium shrink-0 transition-all',
-                  allLlmModelsChecked && !isCheckingAllLlmModels
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
-                    : 'bg-white/10 text-white/40 cursor-not-allowed'
+                  'h-8 text-[11px] px-3 font-medium shrink-0 transition-all animate-fade-in',
+                  canSaveLlm
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm cursor-pointer'
+                    : 'bg-white/10 text-white/40 cursor-not-allowed border border-white/5'
                 )}
               >
                 {llmStep === 'saving' ? (
@@ -345,18 +420,20 @@ export function LLMProviderKeySection({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  setIsEditingLlm(false)
-                  setInputLlmKey('')
-                  setLlmStep('idle')
-                  setLlmPreview(null)
-                }}
+                onClick={handleResetForm}
                 className="h-8 text-[10.5px] px-2.5 bg-white/5 border-white/10 text-white/60 hover:text-white"
               >
                 Hủy
               </Button>
             )}
           </div>
+
+          {keyError && (
+            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-2.5 flex items-center gap-2 text-[11px] text-rose-300 animate-fade-in shadow-sm">
+              <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <span>{keyError}</span>
+            </div>
+          )}
 
           {isProviderMismatch && (
             <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-2.5 flex items-center justify-between gap-2.5 text-[11px] text-rose-300 animate-fade-in shadow-sm">
@@ -366,7 +443,7 @@ export function LLMProviderKeySection({
               </span>
               <button
                 type="button"
-                onClick={() => onLlmProviderChange(detectedProvider as LLMProviderOption)}
+                onClick={() => handleProviderSelect(detectedProvider as LLMProviderOption)}
                 className="px-2.5 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 text-[10.5px] font-medium"
               >
                 Chọn {PROVIDER_NAMES[detectedProvider]}
@@ -374,7 +451,8 @@ export function LLMProviderKeySection({
             </div>
           )}
 
-          {llmPreview && (
+          {/* Chỉ hiển thị danh sách model sau khi bấm đồng bộ (synced) */}
+          {(llmStep === 'synced' || llmStep === 'saving' || llmStep === 'saved') && llmPreview && (
             <ModelAvailabilityList
               models={llmPreview.models}
               providerName={llmPreview.provider}

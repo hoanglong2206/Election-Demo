@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   ExternalLink,
   CheckCircle2,
@@ -48,44 +48,70 @@ export function GroqApiKeySection({
   const [groqPreview, setGroqPreview] = useState<KeyPreviewData | null>(null)
   const [isCheckingAllGroqModels, setIsCheckingAllGroqModels] = useState(false)
   const [testingModelId, setTestingModelId] = useState<string | null>(null)
+  const [keyError, setKeyError] = useState<string | null>(null)
+  const verifiedCacheRef = useRef<any>(null)
 
   const isGroqConfigured = Boolean(groqStatus?.configured && groqStatus?.maskedKey)
+
+  const handleKeyChange = (val: string) => {
+    setInputGroqKey(val)
+    if (groqStep !== 'idle') {
+      setGroqStep('idle')
+      setGroqPreview(null)
+      verifiedCacheRef.current = null
+    }
+    if (keyError) setKeyError(null)
+  }
 
   const handleCheckGroq = async () => {
     if (!inputGroqKey.trim()) return
     setGroqStep('checking')
+    setKeyError(null)
     try {
       const res = await onVerifyRawKey('groq', inputGroqKey.trim())
       if (res.valid) {
         setGroqStep('verified')
-        setGroqPreview({
-          provider: 'Groq',
-          models: (res.models || []).map((model: any) => ({ ...model, availability: 'unchecked' })),
-          sttModels: res.sttModels || [],
-          message: res.message,
-        })
+        verifiedCacheRef.current = res
+        // Yêu cầu: "hợp lệ sẽ hiện nút đồng bộ -> bấm vào sẽ hiện danh sách model"
+        // Chưa hiện danh sách model ở bước này
+        setGroqPreview(null)
       } else {
         setGroqStep('idle')
+        verifiedCacheRef.current = null
+        setKeyError(res.message || 'Khóa Groq API không hợp lệ. Vui lòng kiểm tra lại.')
       }
-    } catch {
+    } catch (err: any) {
       setGroqStep('idle')
+      verifiedCacheRef.current = null
+      setKeyError(err?.message || 'Không thể kết nối đến máy chủ Groq.')
     }
   }
 
   const handleSyncGroq = async () => {
     setGroqStep('syncing')
+    setKeyError(null)
     try {
-      const result = await onVerifyRawKey('groq', inputGroqKey.trim())
-      if (!result.valid) throw new Error(result.message || 'Không thể tải lại danh sách model Groq.')
+      let result = verifiedCacheRef.current
+      if (!result || !result.valid) {
+        result = await onVerifyRawKey('groq', inputGroqKey.trim())
+      }
+      if (!result.valid) throw new Error(result.message || 'Không thể tải danh sách model Groq.')
+
+      const rawModels = result.models || []
+      const sttModels = result.sttModels || []
       setGroqPreview({
         provider: result.provider || 'Groq',
-        models: (result.models || []).map((model: any) => ({ ...model, availability: 'unchecked' })),
-        sttModels: result.sttModels || [],
+        models: rawModels.map((m: any) => ({
+          ...m,
+          availability: 'unchecked',
+        })),
+        sttModels,
         message: result.message,
       })
       setGroqStep('synced')
-    } catch {
+    } catch (err: any) {
       setGroqStep('verified')
+      setKeyError(err?.message || 'Không thể đồng bộ danh sách model Groq.')
     }
   }
 
@@ -131,6 +157,9 @@ export function GroqApiKeySection({
     setIsCheckingAllGroqModels(true)
     try {
       for (const model of groqPreview.models) {
+        if (model.availability === 'available' || model.availability === 'unavailable') {
+          continue
+        }
         await handleCheckModel(model.id)
       }
     } finally {
@@ -138,18 +167,25 @@ export function GroqApiKeySection({
     }
   }
 
+  // Yêu cầu: "khi kiểm tra xong hết mới được lưu"
   const allGroqModelsChecked = Boolean(
-    groqPreview?.models.length &&
-      groqPreview.models.every((m) => m.availability === 'available' || m.availability === 'unavailable')
+    groqPreview &&
+      (groqPreview.models.length === 0 ||
+        groqPreview.models.every((m) => m.availability === 'available' || m.availability === 'unavailable'))
   )
   const checkedGroqCount =
     groqPreview?.models.filter((m) => m.availability === 'available' || m.availability === 'unavailable').length || 0
+  const canSaveGroq = allGroqModelsChecked && !isCheckingAllGroqModels && groqStep !== 'saving'
 
   const handleSaveGroq = async () => {
-    if (!inputGroqKey.trim() || !allGroqModelsChecked || isCheckingAllGroqModels) return
+    if (!canSaveGroq || !inputGroqKey.trim()) return
     setGroqStep('saving')
     try {
-      const availableModels = groqPreview?.models.filter((m) => m.availability === 'available') || []
+      const confirmedModels = groqPreview?.models.filter((m) => m.availability === 'available') || []
+      const availableModels =
+        confirmedModels.length > 0
+          ? confirmedModels
+          : groqPreview?.models.filter((m) => m.availability !== 'unavailable') || []
       const success = await onSaveGroqKey(inputGroqKey.trim(), groqPreview?.sttModels || [], availableModels)
       if (success) {
         setGroqStep('saved')
@@ -158,6 +194,8 @@ export function GroqApiKeySection({
           setInputGroqKey('')
           setGroqStep('idle')
           setGroqPreview(null)
+          verifiedCacheRef.current = null
+          setKeyError(null)
         }, 1200)
       } else {
         setGroqStep('synced')
@@ -165,6 +203,15 @@ export function GroqApiKeySection({
     } catch {
       setGroqStep('synced')
     }
+  }
+
+  const handleResetForm = () => {
+    setIsEditingGroq(false)
+    setInputGroqKey('')
+    setGroqStep('idle')
+    setGroqPreview(null)
+    verifiedCacheRef.current = null
+    setKeyError(null)
   }
 
   return (
@@ -233,24 +280,32 @@ export function GroqApiKeySection({
             setInputGroqKey('')
             setGroqStep('idle')
             setGroqPreview(null)
+            verifiedCacheRef.current = null
+            setKeyError(null)
           }}
           onDeleteRequest={onDeleteRequest}
         />
       ) : (
         <div className="space-y-2.5">
-          <KeyBreadcrumbs step={groqStep} />
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <KeyBreadcrumbs step={groqStep} />
+            {groqStep === 'verified' && (
+              <Badge
+                variant="outline"
+                className="text-[9px] px-2 py-0.5 bg-emerald-500/15 text-emerald-300 border-emerald-500/30 flex items-center gap-1 animate-fade-in font-medium"
+              >
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>Key hợp lệ! Hãy bấm Đồng bộ model</span>
+              </Badge>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <input
               type="password"
               value={inputGroqKey}
-              onChange={(e) => {
-                setInputGroqKey(e.target.value)
-                if (groqStep !== 'idle') {
-                  setGroqStep('idle')
-                  setGroqPreview(null)
-                }
-              }}
+              onChange={(e) => handleKeyChange(e.target.value)}
+              onInput={(e) => handleKeyChange(e.currentTarget.value)}
               placeholder="gsk_..."
               className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-[11.5px] text-white placeholder-white/30 focus:outline-none focus:border-violet-500/60 font-mono"
             />
@@ -266,10 +321,10 @@ export function GroqApiKeySection({
                 {groqStep === 'checking' ? (
                   <>
                     <RotateCcw className="w-3 h-3 animate-spin mr-1" />
-                    <span>Đang thử...</span>
+                    <span>Đang kiểm tra...</span>
                   </>
                 ) : (
-                  <span>Kiểm tra</span>
+                  <span>Kiểm tra hợp lệ</span>
                 )}
               </Button>
             )}
@@ -280,17 +335,17 @@ export function GroqApiKeySection({
                 size="sm"
                 onClick={handleSyncGroq}
                 disabled={groqStep === 'syncing'}
-                className="h-8 text-[11px] px-3 bg-violet-600 hover:bg-violet-500 text-white font-medium shrink-0"
+                className="h-8 text-[11px] px-3 bg-violet-600 hover:bg-violet-500 text-white font-medium shrink-0 animate-fade-in"
               >
                 {groqStep === 'syncing' ? (
                   <>
                     <RotateCcw className="w-3 h-3 animate-spin mr-1" />
-                    <span>Đang nạp...</span>
+                    <span>Đang đồng bộ...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-3 h-3 mr-1" />
-                    <span>Đồng bộ</span>
+                    <span>Đồng bộ model</span>
                   </>
                 )}
               </Button>
@@ -301,12 +356,17 @@ export function GroqApiKeySection({
                 type="button"
                 size="sm"
                 onClick={handleSaveGroq}
-                disabled={!allGroqModelsChecked || isCheckingAllGroqModels || groqStep === 'saving'}
+                disabled={!canSaveGroq}
+                title={
+                  !allGroqModelsChecked
+                    ? `Vui lòng kiểm tra tất cả model (${checkedGroqCount}/${groqPreview?.models.length || 0}) trước khi lưu`
+                    : 'Lưu cấu hình Groq API Key và model vào OS Secure Store'
+                }
                 className={cn(
-                  'h-8 text-[11px] px-3 font-medium shrink-0 transition-all',
-                  allGroqModelsChecked && !isCheckingAllGroqModels
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
-                    : 'bg-white/10 text-white/40 cursor-not-allowed'
+                  'h-8 text-[11px] px-3 font-medium shrink-0 transition-all animate-fade-in',
+                  canSaveGroq
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm cursor-pointer'
+                    : 'bg-white/10 text-white/40 cursor-not-allowed border border-white/5'
                 )}
               >
                 {groqStep === 'saving' ? (
@@ -330,12 +390,7 @@ export function GroqApiKeySection({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  setIsEditingGroq(false)
-                  setInputGroqKey('')
-                  setGroqStep('idle')
-                  setGroqPreview(null)
-                }}
+                onClick={handleResetForm}
                 className="h-8 text-[10.5px] px-2.5 bg-white/5 border-white/10 text-white/60 hover:text-white"
               >
                 Hủy
@@ -343,7 +398,15 @@ export function GroqApiKeySection({
             )}
           </div>
 
-          {groqPreview && (
+          {keyError && (
+            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-2.5 flex items-center gap-2 text-[11px] text-rose-300 animate-fade-in shadow-sm">
+              <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <span>{keyError}</span>
+            </div>
+          )}
+
+          {/* Chỉ hiển thị danh sách model sau khi bấm đồng bộ (synced) */}
+          {(groqStep === 'synced' || groqStep === 'saving' || groqStep === 'saved') && groqPreview && (
             <ModelAvailabilityList
               models={groqPreview.models}
               providerName="Groq"

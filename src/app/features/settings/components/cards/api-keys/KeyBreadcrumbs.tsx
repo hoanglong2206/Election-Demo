@@ -19,7 +19,7 @@ export function KeyBreadcrumbs({ step }: KeyBreadcrumbsProps) {
         )}
       >
         <span>1. Kiểm tra key</span>
-        {(step === 'verified' || step === 'syncing' || step === 'synced') && (
+        {(step === 'verified' || step === 'syncing' || step === 'synced' || step === 'saving' || step === 'saved') && (
           <Check className="w-2.5 h-2.5 text-blue-400" />
         )}
       </span>
@@ -33,7 +33,7 @@ export function KeyBreadcrumbs({ step }: KeyBreadcrumbsProps) {
         )}
       >
         <span>2. Đồng bộ model</span>
-        {step === 'synced' && <Check className="w-2.5 h-2.5 text-violet-400" />}
+        {(step === 'synced' || step === 'saving' || step === 'saved') && <Check className="w-2.5 h-2.5 text-violet-400" />}
       </span>
       <span className="text-white/20">→</span>
       <span

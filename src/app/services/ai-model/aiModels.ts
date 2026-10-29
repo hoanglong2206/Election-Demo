@@ -127,6 +127,10 @@ export function getAvailableSTTEngines(customGroqKey?: string): STTEngineConfig[
         }
       }
     } catch {}
+
+    // Không sử dụng fallback tĩnh DEFAULT_GROQ_STT_ENGINES.
+    // Chỉ nạp model STT thật khi đã call qua API key từ Groq.
+    return list
   }
 
   return list

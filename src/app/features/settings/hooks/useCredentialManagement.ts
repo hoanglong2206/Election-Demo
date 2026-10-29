@@ -3,7 +3,7 @@ import { credentialsPort } from '@/infrastructure/ipc'
 import {
   getAllAIModels,
   getAvailableSTTEngines,
-  syncActiveAIModels,
+    syncActiveAIModels,
   saveAIModelId,
   type AIModelConfig,
   type STTEngineConfig,
@@ -167,20 +167,25 @@ export function useCredentialManagement({
       setGroqVerify({ state: 'checking' })
       const res = await credentialsPort.saveApiKey('groq', key)
       if (res.success) {
+        const groqSTTModels = sttModels && sttModels.length > 0 ? sttModels : []
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem('groq_configured', 'true')
-          if (sttModels.length > 0) {
-            localStorage.setItem('cached_groq_stt_models', JSON.stringify(sttModels))
+          if (groqSTTModels.length > 0) {
+            localStorage.setItem('cached_groq_stt_models', JSON.stringify(groqSTTModels))
+          } else {
+            localStorage.removeItem('cached_groq_stt_models')
           }
         }
-        modelRegistryService.mergeProviderModels({ provider: 'Groq', models: availableModels, sttModels })
+        modelRegistryService.mergeProviderModels({ provider: 'Groq', models: availableModels, sttModels: groqSTTModels })
         const statuses = await credentialsPort.getAllStatuses()
         setCredentialStatuses(statuses)
         setGroqVerify({ state: 'valid', message: 'Khóa Groq API đã được lưu an toàn (DPAPI).' })
-        callbacksRef.current.setSttEnginesList(getAvailableSTTEngines('groq_configured'))
+        const updatedSTT = getAvailableSTTEngines('groq_configured')
+        callbacksRef.current.setSttEnginesList(updatedSTT)
         syncModelsSelection(getAllAIModels())
         setSyncStatus(null)
         setSyncMeta(modelRegistryService.getSyncState())
+        window.dispatchEvent(new CustomEvent('ai-models-updated'))
         return true
       }
       setGroqVerify({ state: 'invalid', message: res.error || 'Lỗi khi lưu khóa' })
@@ -209,6 +214,7 @@ export function useCredentialManagement({
       syncModelsSelection(getAllAIModels())
       setSyncStatus(null)
       setSyncMeta(modelRegistryService.getSyncState())
+      window.dispatchEvent(new CustomEvent('ai-models-updated'))
       return true
     }
     return false

@@ -65,6 +65,7 @@ export function useSettingsForm() {
   useEffect(() => {
     const handleModelsUpdate = () => {
       setModelsList(getAllAIModels())
+      setSttEnginesList(getAvailableSTTEngines())
     }
     window.addEventListener('ai-models-updated', handleModelsUpdate)
     return () => window.removeEventListener('ai-models-updated', handleModelsUpdate)
