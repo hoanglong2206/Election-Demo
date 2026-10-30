@@ -1,22 +1,37 @@
 /**
- * Convert Blob to Base64 data URL string.
+ * Convert Blob to Base64 string (stripping data URL prefix if present).
  */
-export function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      resolve(reader.result as string)
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
+export async function blobToBase64(blob: Blob): Promise<string> {
+  if (typeof Buffer !== 'undefined') {
+    const arrayBuffer = await blob.arrayBuffer()
+    return Buffer.from(arrayBuffer).toString('base64')
+  }
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const res = reader.result as string
+        const clean = res ? res.replace(/^data:[^;]+;base64,/, '').trim() : ''
+        resolve(clean)
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  }
+  const arrayBuffer = await blob.arrayBuffer()
+  const bytes = new Uint8Array(arrayBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
 }
 
 /**
  * Convert Base64 string to Blob.
  */
 export function base64ToBlob(base64: string, mime = 'audio/wav'): Blob {
-  const cleanBase64 = base64.replace(/^data:audio\/\w+;base64,/, '')
+  const cleanBase64 = (base64 || '').replace(/^data:[^;]+;base64,/, '').trim()
   const byteChars = atob(cleanBase64)
   const byteNumbers = new Array(byteChars.length)
   for (let i = 0; i < byteChars.length; i++) {

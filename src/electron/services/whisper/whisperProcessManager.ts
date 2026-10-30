@@ -848,6 +848,13 @@ export class WhisperProcessManager {
       await this.startServer(targetModelId)
     }
 
+    if (this.engineMode === 'server' && (this.state === 'STARTING' || this.isStartingServer)) {
+      const waitStart = Date.now()
+      while ((this.state === 'STARTING' || this.isStartingServer) && Date.now() - waitStart < 8000) {
+        await new Promise((r) => setTimeout(r, 100))
+      }
+    }
+
     if (this.engineMode === 'server' && this.state === 'READY' && this.serverPort > 0) {
       await this.executeViaServer(job, queueWaitMs)
     } else {
@@ -871,7 +878,7 @@ export class WhisperProcessManager {
         formData.append('temperature', '0.0')
         formData.append('response_format', 'json')
 
-        if (job.options?.language && job.options.language !== 'auto') {
+        if (job.options?.language) {
           formData.append('language', job.options.language)
         }
         if (job.options?.prompt && job.options.prompt.trim()) {
@@ -999,7 +1006,7 @@ export class WhisperProcessManager {
       ]
 
       if (job.options?.prompt && job.options.prompt.trim()) {
-        args.push('-p', job.options.prompt.trim())
+        args.push('--prompt', job.options.prompt.trim())
       }
 
       this.setState('BUSY')

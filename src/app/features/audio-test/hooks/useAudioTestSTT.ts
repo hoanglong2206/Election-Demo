@@ -58,17 +58,22 @@ export function useAudioTestSTT({
     sourceTypeRef.current = sourceType
   }, [sttLang, selectedSTT, sourceType])
 
-  // Reset sample pointer when capture state toggles
+  // Reset sample pointer, session ID & queue when capture state toggles
   useEffect(() => {
     if (isTestingActive) {
+      const newSessionId = 'audiotest_' + Date.now()
+      sessionIdRef.current = newSessionId
+      sequenceIdRef.current = 1
       lastProcessedSampleRef.current = 0
+      sttJobQueue.reset(newSessionId)
     }
   }, [isTestingActive])
 
-  // Revert sttJobQueue provider back to settings configuration when unmounting
+  // Revert sttJobQueue provider back to settings configuration & cancel pending jobs when unmounting
   useEffect(() => {
     return () => {
-      sttJobQueue.handleProviderSwitch(getSavedSTTEngineId())
+      sttJobQueue.handleProviderSwitch(getSavedSTTEngineId(), { cancelPending: true })
+      sttJobQueue.clear()
     }
   }, [])
 
@@ -127,7 +132,7 @@ export function useAudioTestSTT({
     sttJobQueue.resume()
 
     const intervalTimer = setInterval(() => {
-      const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 1.2)
+      const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 0.8)
       if (!segment) return
 
       lastProcessedSampleRef.current = segment.endSample

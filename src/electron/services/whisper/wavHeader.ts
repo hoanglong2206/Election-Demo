@@ -93,7 +93,7 @@ export function createWavBuffer(input: RawAudioInput, sampleRate = TARGET_SAMPLE
   let pcmBytes: Buffer
 
   if (typeof input === 'string') {
-    const cleanBase64 = input.replace(/^data:audio\/\w+;base64,/, '')
+    const cleanBase64 = input.replace(/^data:[^;]+;base64,/, '').trim()
     const rawBuffer = Buffer.from(cleanBase64, 'base64')
     if (hasWavHeader(rawBuffer)) {
       return rawBuffer

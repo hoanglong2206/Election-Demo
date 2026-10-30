@@ -172,6 +172,17 @@ export function STTPreviewPanel({
           />
         </div>
 
+        {/* STT Error Banner if lastResult failed */}
+        {queueMetrics?.lastResult && !queueMetrics.lastResult.success && queueMetrics.lastResult.error && (
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-2.5 flex items-start gap-2 text-rose-300 text-xs animate-fade-in">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-0.5">
+              <div className="font-semibold text-rose-200">Lỗi chuyển ngữ (STT Error):</div>
+              <div className="text-white/80 break-words">{queueMetrics.lastResult.error}</div>
+            </div>
+          </div>
+        )}
+
         {/* Subtitles Stream Container */}
         <STTSubtitlesStream
           scrollRef={scrollRef}

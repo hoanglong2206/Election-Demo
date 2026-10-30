@@ -19,6 +19,7 @@ import {
 
 export interface UseTranscriptProps {
   responseLang: ResponseLanguage
+  sessionId?: string
 }
 
 export interface UseTranscriptReturn {
@@ -32,7 +33,7 @@ export interface UseTranscriptReturn {
   handleSttLangChange: (lang: 'auto' | 'vi' | 'en') => void
 }
 
-export function useTranscript({ responseLang }: UseTranscriptProps): UseTranscriptReturn {
+export function useTranscript({ responseLang, sessionId }: UseTranscriptProps): UseTranscriptReturn {
   const transcriptLines = useSyncExternalStore(
     transcriptStore.subscribe,
     transcriptStore.getSnapshot
@@ -61,6 +62,13 @@ export function useTranscript({ responseLang }: UseTranscriptProps): UseTranscri
   useEffect(() => {
     sttJobQueue.handleProviderSwitch(savedSTTEngineId)
   }, [savedSTTEngineId])
+
+  // Reset chunkProducer & sttJobQueue whenever entering or switching meeting session
+  useEffect(() => {
+    if (sessionId) {
+      chunkProducer.resetAll(sessionId)
+    }
+  }, [sessionId])
 
   // Subscribe to STTJobQueue metrics & Transcript commits
   useEffect(() => {
@@ -109,8 +117,8 @@ export function useTranscript({ responseLang }: UseTranscriptProps): UseTranscri
 
   const handleClearTranscript = useCallback(() => {
     transcriptStore.clear()
-    chunkProducer.reset()
-  }, [])
+    chunkProducer.resetAll(sessionId)
+  }, [sessionId])
 
   return {
     transcriptLines,

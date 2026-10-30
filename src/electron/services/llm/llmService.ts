@@ -860,12 +860,52 @@ export class ElectronLlmService {
       throw new Error('Chưa có Groq API Key trong OS Credential Store.')
     }
 
+    const cleanBase64 = (audioBase64 || '').replace(/^data:[^;]+;base64,/, '').trim()
+    if (!cleanBase64) {
+      return { text: '', latencyMs: 0 }
+    }
+
+    const buffer = Buffer.from(cleanBase64, 'base64')
+    if (buffer.length === 0) {
+      return { text: '', latencyMs: 0 }
+    }
+
+    // Determine container format and MIME type from header magic bytes
+    let fileName = 'audio.wav'
+    let mimeType = 'audio/wav'
+
+    if (buffer.length >= 4) {
+      if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+        fileName = 'audio.webm'
+        mimeType = 'audio/webm'
+      } else if (buffer.toString('ascii', 0, 4) === 'OggS') {
+        fileName = 'audio.ogg'
+        mimeType = 'audio/ogg'
+      } else if (buffer.toString('ascii', 0, 4) === 'fLaC') {
+        fileName = 'audio.flac'
+        mimeType = 'audio/flac'
+      } else if (
+        buffer.toString('ascii', 0, 3) === 'ID3' ||
+        (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0)
+      ) {
+        fileName = 'audio.mp3'
+        mimeType = 'audio/mpeg'
+      } else if (buffer.toString('ascii', 0, 4) === 'RIFF') {
+        fileName = 'audio.wav'
+        mimeType = 'audio/wav'
+      }
+    }
+
+    // If it's a WAV file with only a 44-byte header and no data samples, skip API call
+    if (fileName === 'audio.wav' && buffer.length <= 44) {
+      return { text: '', latencyMs: 0 }
+    }
+
     const startTime = Date.now()
-    const buffer = Buffer.from(audioBase64, 'base64')
-    const blob = new Blob([new Uint8Array(buffer)], { type: 'audio/wav' })
+    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType })
 
     const formData = new FormData()
-    formData.append('file', blob, 'audio.wav')
+    formData.append('file', blob, fileName)
     formData.append('model', modelId)
     formData.append('response_format', 'json')
     formData.append('temperature', '0')

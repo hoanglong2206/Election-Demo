@@ -271,12 +271,15 @@ export class STTJobQueue {
 
       const engineId = job.engineId || getSavedSTTEngineId()
       const lang = job.language || 'auto'
+      const engines = getAvailableSTTEngines()
+      const engine = engines.find((e) => e.id === engineId)
+      const isGroq = engine?.provider === 'Groq' || this.provider === 'Groq'
 
       // For Local Whisper, pass Int16Array/Blob directly across IPC (no wav encode needed)
       // For Cloud Groq, normalize to WAV Blob if Int16Array
       let audioPayload: any = job.audioBuffer
-      if (this.provider !== 'Local' && !(job.audioBuffer instanceof Blob)) {
-        audioPayload = encodeWavBlob(job.audioBuffer as any, 16000)
+      if (isGroq && !(job.audioBuffer instanceof Blob) && job.audioBuffer instanceof Int16Array) {
+        audioPayload = encodeWavBlob(job.audioBuffer, 16000)
       }
 
       const result = await transcribeAudio(audioPayload, engineId, lang, job.prompt, job.sessionId)

@@ -1,6 +1,7 @@
 import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
 import type { TranscribeResult } from './types'
 import { base64ToBlob, blobToBase64 } from './audioUtils'
+import { encodeWavBlob } from '@/core/audio'
 import { usageTrackerService } from '../../usage-tracker'
 import { whisperPort, credentialsPort } from '@/infrastructure/ipc'
 
@@ -48,7 +49,19 @@ export async function transcribeAudio(
 ): Promise<TranscribeResult> {
   const engineId = customEngineId || getSavedSTTEngineId()
   const available = getAvailableSTTEngines()
-  const engine = available.find((e) => e.id === engineId) || available[0]
+  let engine = available.find((e) => e.id === engineId)
+  if (!engine) {
+    if (engineId.startsWith('whisper-') || engineId.includes('groq') || engineId.includes('turbo')) {
+      engine = {
+        id: engineId,
+        name: engineId,
+        provider: 'Groq',
+        latencyMs: 180,
+      } as any
+    } else {
+      engine = available[0]
+    }
+  }
   const startTime = performance.now()
   const durationSec = estimateAudioDurationSeconds(audioData)
 
@@ -90,7 +103,7 @@ export async function transcribeAudio(
       const translatedVi = ''
 
       return {
-        success: res.success && Boolean(cleanText),
+        success: Boolean(res.success),
         text: cleanText,
         translatedVi,
         latencyMs: res.latencyMs || elapsed,
@@ -131,12 +144,23 @@ export async function transcribeAudio(
           blob = audioData
         } else if (typeof audioData === 'string') {
           blob = base64ToBlob(audioData)
+        } else if (audioData instanceof Int16Array) {
+          blob = encodeWavBlob(audioData, 16000)
+        } else if (audioData instanceof ArrayBuffer) {
+          blob = encodeWavBlob(new Int16Array(audioData), 16000)
+        } else if (ArrayBuffer.isView(audioData)) {
+          const view = audioData as ArrayBufferView
+          blob = encodeWavBlob(
+            new Int16Array(view.buffer, view.byteOffset, Math.floor(view.byteLength / 2)),
+            16000
+          )
         } else {
           blob = new Blob([audioData as any], { type: 'audio/wav' })
         }
-        const audioBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(blob)
+        const rawBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(blob)
+        const audioBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '').trim()
         const res = await credentialsPort.transcribeGroq(audioBase64, engineId, language, prompt)
-        if (res && res.text) {
+        if (res) {
           try {
             usageTrackerService.trackUsage({
               sessionId,
@@ -147,18 +171,18 @@ export async function transcribeAudio(
             })
           } catch {}
 
-          const cleanText = res.text.trim()
+          const cleanText = (res.text || '').trim()
           // Translation is handled asynchronously by TranslationService on transcript commit
           const translatedVi = ''
           return {
-            success: Boolean(cleanText),
+            success: true,
             text: cleanText,
             translatedVi,
             latencyMs: res.latencyMs || Math.round(performance.now() - startTime),
             engineId,
             engineName: engine.name,
             provider: 'Groq',
-            confidence: 98,
+            confidence: cleanText ? 98 : 0,
           }
         }
       } catch (err: any) {

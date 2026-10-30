@@ -175,6 +175,7 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   // 6. Transcript
   const transcript = useTranscript({
     responseLang: copilot.responseLang,
+    sessionId: session.sessionId,
   })
 
   // 7. Intent Trigger

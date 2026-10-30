@@ -5,6 +5,7 @@ import {
   transitionAudioState,
 } from '../machines/audioStateMachine'
 import { chunkProducer, type ChunkDispatchContext } from '../controllers/chunkProducer'
+import { sttJobQueue } from '@/services/ai-model/stt'
 import { whisperPort } from '@/infrastructure/ipc'
 import {
   getEffectiveVadEnergyThreshold,
@@ -122,8 +123,13 @@ export function useAudioCapture({
   // Connect Audio Frames loop to ChunkProducer
   useEffect(() => {
     if (!isCapturing || !isListening) {
+      sttJobQueue.pause()
       return
     }
+
+    // Initialize STT queue and chunk producer aligned to this meeting session
+    chunkProducer.resetAll(sessionId)
+    sttJobQueue.resume()
 
     const currentSettings = settingsManager.getSettings()
     const silenceEndMs = currentSettings.audio.silenceEndMs || 400
@@ -146,8 +152,9 @@ export function useAudioCapture({
       unsubFrames()
       chunkProducer.flush(getDispatchContext())
       chunkProducer.reset()
+      sttJobQueue.pause()
     }
-  }, [isCapturing, isListening, selectedDeviceId, subscribeAudioFrames, getDispatchContext])
+  }, [isCapturing, isListening, sessionId, selectedDeviceId, subscribeAudioFrames, getDispatchContext])
 
   const handleToggleListening = useCallback(async () => {
     if (isTogglingRef.current) return
