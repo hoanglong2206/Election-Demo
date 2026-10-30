@@ -75,7 +75,7 @@ export function AIModelSelectorCard({
   return (
     <Card
       className={cn(
-        'bg-white/[0.03] border-white/[0.07] shadow-none p-3 gap-2 flex flex-col justify-between h-[255px] shrink-0 relative',
+        'bg-white/[0.03] border-white/[0.07] shadow-none p-2.5 gap-2 flex flex-col justify-between h-[255px] shrink-0 relative',
         className
       )}
     >

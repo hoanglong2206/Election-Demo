@@ -21,9 +21,9 @@ export function RecentSessionsCard({
   onOpenSession,
 }: RecentSessionsCardProps) {
   return (
-    <Card className={cn('bg-white/[0.03] border-white/[0.07] shadow-none p-2.5 sm:p-3 flex flex-col justify-between gap-2 min-w-0 min-h-0 overflow-hidden', className)}>
+    <Card className={cn('bg-white/[0.03] border-white/[0.07] shadow-none px-2.5 pt-2 pb-1 flex flex-col justify-between gap-2 min-w-0 min-h-0 overflow-hidden', className)}>
       {/* ── Top Header ── */}
-      <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.05] gap-2 shrink-0">
+      <div className="flex items-center justify-between pb-1 border-b border-white/[0.05] gap-1 shrink-0">
         <div className="flex items-center gap-1.5 min-w-0 shrink-0">
           <History className="w-3.5 h-3.5 text-violet-400 shrink-0" />
           <span className="text-[11.5px] font-semibold text-white/90 whitespace-nowrap">
@@ -56,7 +56,7 @@ export function RecentSessionsCard({
 
       {/* ── Sessions Content ── */}
       {recentSessions.length > 0 ? (
-        <div className="grid grid-cols-1 gap-2 flex-1 min-h-0 overflow-hidden">
+        <div className="grid grid-cols-1 gap-1 flex-1 min-h-0 overflow-hidden">
           {recentSessions.slice(0, 2).map((s) => (
             <div
               key={s.id}

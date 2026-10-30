@@ -78,43 +78,18 @@ export function CostTracker() {
       <CostOverviewMetrics summary={summary} budget={budget} />
 
       {/* ── Tab Content Container with Min Height to Prevent Vertical Jerk ── */}
-      <div className="min-h-[500px]">
-        {currentTab === 'overview' && (
-          <div key="overview" className="space-y-4 animate-tab-pane">
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-              <div className="xl:col-span-7">
-                <DailyUsageTrendChart days={chartDays} onDaysChange={setChartDays} />
-              </div>
-              <div className="xl:col-span-5">
-                <DistributionCharts summary={summary} />
-              </div>
+      {currentTab === 'overview' && (
+        <div key="overview" className="space-y-4 animate-tab-pane">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+            <div className="xl:col-span-7">
+              <DailyUsageTrendChart days={chartDays} onDaysChange={setChartDays} />
             </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-              <BudgetManagementCard
-                budget={budget}
-                summary={summary}
-                onBudgetUpdated={setBudget}
-              />
-              <ModelPricingConfigCard />
+            <div className="xl:col-span-5">
+              <DistributionCharts summary={summary} />
             </div>
           </div>
-        )}
 
-        {currentTab === 'charts' && (
-          <div key="charts" className="space-y-4 animate-tab-pane">
-            <DailyUsageTrendChart days={chartDays} onDaysChange={setChartDays} />
-          </div>
-        )}
-
-        {currentTab === 'distribution' && (
-          <div key="distribution" className="space-y-4 animate-tab-pane">
-            <DistributionCharts summary={summary} />
-          </div>
-        )}
-
-        {currentTab === 'budget' && (
-          <div key="budget" className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start animate-tab-pane">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             <BudgetManagementCard
               budget={budget}
               summary={summary}
@@ -122,20 +97,43 @@ export function CostTracker() {
             />
             <ModelPricingConfigCard />
           </div>
-        )}
+        </div>
+      )}
 
-        {currentTab === 'pricing' && (
-          <div key="pricing" className="space-y-4 animate-tab-pane">
-            <ModelPricingConfigCard />
-          </div>
-        )}
+      {currentTab === 'charts' && (
+        <div key="charts" className="space-y-4 animate-tab-pane">
+          <DailyUsageTrendChart days={chartDays} onDaysChange={setChartDays} />
+        </div>
+      )}
 
-        {currentTab === 'logs' && (
-          <div key="logs" className="space-y-4 animate-tab-pane">
-            <RecentUsageLogsTable records={records} />
-          </div>
-        )}
-      </div>
+      {currentTab === 'distribution' && (
+        <div key="distribution" className="space-y-4 animate-tab-pane">
+          <DistributionCharts summary={summary} />
+        </div>
+      )}
+
+      {currentTab === 'budget' && (
+        <div key="budget" className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start animate-tab-pane">
+          <BudgetManagementCard
+            budget={budget}
+            summary={summary}
+            onBudgetUpdated={setBudget}
+          />
+          <ModelPricingConfigCard />
+        </div>
+      )}
+
+      {currentTab === 'pricing' && (
+        <div key="pricing" className="space-y-4 animate-tab-pane">
+          <ModelPricingConfigCard />
+        </div>
+      )}
+
+      {currentTab === 'logs' && (
+        <div key="logs" className="space-y-4 animate-tab-pane">
+          <RecentUsageLogsTable records={records} />
+        </div>
+      )}
 
       {/* ── Privacy & Security Footer ── */}
       <div className="flex items-start gap-2.5 bg-white/[0.02] border border-white/[0.05] p-3 rounded-xl text-[10.5px] text-white/50 leading-relaxed">

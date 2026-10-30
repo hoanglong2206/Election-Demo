@@ -29,7 +29,7 @@ export function AudioDeviceSelectorCard({
   onOpenAudioTest,
 }: AudioDeviceSelectorCardProps) {
   return (
-    <Card className="bg-white/[0.03] border-white/[0.07] shadow-none p-3 gap-2 relative h-[105px] flex flex-col justify-between shrink-0">
+    <Card className="bg-white/[0.03] border-white/[0.07] shadow-none p-2.5 gap-2 relative h-[105px] flex flex-col justify-between shrink-0">
       <div className="flex items-center justify-between">
         <span className="text-[11.5px] font-semibold text-white/85 flex items-center gap-1.5 whitespace-nowrap shrink-0">
           <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
