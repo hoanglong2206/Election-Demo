@@ -61,8 +61,8 @@ export function useAudioCapture({
     setVadEnergyThreshold,
   } = useAudioPipeline()
 
-  const isMeetingActive = isCapturing && (captureOwner === 'meeting' || captureOwner === null)
-  const isListening = (audioState === 'listening' || audioState === 'switching') && isMeetingActive
+  const isMeetingCapturing = isCapturing && captureOwner === 'meeting'
+  const isListening = (audioState === 'listening' || audioState === 'switching') && isMeetingCapturing
 
   // Context for chunk producer dispatch
   const getDispatchContext = useCallback((): ChunkDispatchContext => {
@@ -113,7 +113,7 @@ export function useAudioCapture({
 
   // Synchronize state if capture stops externally (e.g. mic unplugged) or owner changes
   useEffect(() => {
-    const isOwnerLost = !isCapturing || (Boolean(captureOwner) && captureOwner !== 'meeting')
+    const isOwnerLost = !isCapturing || captureOwner !== 'meeting'
     if (isOwnerLost && (audioState === 'listening' || audioState === 'starting') && !isTogglingRef.current) {
       setAudioState((prev) => transitionAudioState(prev, { type: 'STOP' }))
       setAudioState((prev) => transitionAudioState(prev, { type: 'STOPPED' }))
@@ -122,7 +122,7 @@ export function useAudioCapture({
 
   // Connect Audio Frames loop to ChunkProducer
   useEffect(() => {
-    if (!isCapturing || !isListening) {
+    if (!isMeetingCapturing || !isListening) {
       sttJobQueue.pause()
       return
     }
@@ -144,7 +144,7 @@ export function useAudioCapture({
     })
 
     const unsubFrames = subscribeAudioFrames((pcm16, totalSamples) => {
-      if (!isMountedRef.current || !isCapturing || !isListening) return
+      if (!isMountedRef.current || !isMeetingCapturing || !isListening) return
       chunkProducer.feedPcmFrames(pcm16, totalSamples, getDispatchContext())
     })
 
@@ -161,9 +161,9 @@ export function useAudioCapture({
     isTogglingRef.current = true
 
     try {
-      if (isListening || isCapturing) {
+      if (isListening || isMeetingCapturing) {
         setAudioState((prev) => transitionAudioState(prev, { type: 'STOP' }))
-        stopCapture()
+        stopCapture('meeting')
         chunkProducer.flush(getDispatchContext())
         setAudioState((prev) => transitionAudioState(prev, { type: 'STOPPED' }))
 
@@ -219,8 +219,8 @@ export function useAudioCapture({
 
       setSourceType(newType)
 
-      if (isCapturing) {
-        stopCapture()
+      if (isMeetingCapturing) {
+        stopCapture('meeting')
         switchTimerRef.current = setTimeout(async () => {
           if (!isMountedRef.current) return
           try {
@@ -251,7 +251,7 @@ export function useAudioCapture({
   return {
     audioState,
     isListening,
-    isCapturing,
+    isCapturing: isMeetingCapturing,
     sourceType,
     handleToggleListening,
     handleSwitchSource,

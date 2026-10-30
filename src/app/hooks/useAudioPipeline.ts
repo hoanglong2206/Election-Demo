@@ -1,6 +1,7 @@
 import { useSyncExternalStore, useMemo, useCallback } from 'react'
 import {
   AudioPipelineController,
+  isOwnedCapture,
   type AudioPipelineState,
 } from '@/infrastructure/audio/AudioPipelineController'
 import { getSavedAudioDeviceId } from '@/services/audio-devices'
@@ -16,6 +17,7 @@ import type {
 import type { AudioCaptureOwner } from '@/infrastructure/audio/types'
 
 export type { AudioSourceType, PipelineStageInfo, AudioEngineType, AudioPipelineState, AudioCaptureOwner }
+export { isOwnedCapture }
 
 /**
  * Shared application-level audio pipeline controller singleton.
@@ -32,7 +34,7 @@ export interface AudioPipelineActions {
     sourceType?: AudioSourceType,
     options?: { deviceId?: string; owner?: AudioCaptureOwner }
   ) => Promise<void>
-  stopCapture: () => void
+  stopCapture: (owner?: AudioCaptureOwner) => void
   switchDevice: (deviceId: string) => Promise<void>
   playBuffer: () => Promise<void>
   stopPlayback: () => void
@@ -77,7 +79,7 @@ export function useAudioPipeline(
         sourceType?: AudioSourceType,
         options?: { deviceId?: string; owner?: AudioCaptureOwner }
       ) => controller.start(sourceType, options),
-      stopCapture: () => controller.stop(),
+      stopCapture: (owner?: AudioCaptureOwner) => controller.stop(owner),
       switchDevice: (deviceId: string) => controller.switchDevice(deviceId),
       playBuffer: () => controller.playBuffer(),
       stopPlayback: () => controller.stopPlayback(),

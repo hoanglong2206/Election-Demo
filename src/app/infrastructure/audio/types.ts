@@ -12,6 +12,14 @@ import type {
 
 export type AudioCaptureOwner = 'meeting' | 'audio-test' | null
 
+export function isOwnedCapture(
+  state: { isCapturing?: boolean; captureOwner?: AudioCaptureOwner } | null | undefined,
+  owner: NonNullable<AudioCaptureOwner>
+): boolean {
+  if (!state || !state.isCapturing) return false
+  return state.captureOwner === owner
+}
+
 export type AudioPipelineLifecycleState =
   | 'idle'
   | 'starting'
@@ -64,7 +72,7 @@ export interface AudioPipelineActions {
     sourceType?: AudioSourceType,
     options?: { deviceId?: string; owner?: AudioCaptureOwner }
   ) => Promise<void>
-  stopCapture: () => void
+  stopCapture: (owner?: AudioCaptureOwner) => void
   switchDevice: (deviceId: string) => Promise<void>
   playBuffer: () => Promise<void>
   stopPlayback: () => void

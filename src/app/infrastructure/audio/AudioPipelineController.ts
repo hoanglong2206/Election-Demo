@@ -18,6 +18,7 @@ import type {
   AudioPipelineControllerDeps,
   AudioCaptureOwner,
 } from './types'
+import { isOwnedCapture } from './types'
 import { computePipelineStages } from './pipelineStages'
 
 export * from './types'
@@ -255,7 +256,15 @@ export class AudioPipelineController {
     }
   }
 
-  public stop(): void {
+  public isOwnedCapture(owner: NonNullable<AudioCaptureOwner>): boolean {
+    return isOwnedCapture(this.state, owner)
+  }
+
+  public stop(owner?: AudioCaptureOwner): void {
+    if (owner && this.state.captureOwner && this.state.captureOwner !== owner) {
+      return
+    }
+
     if (this.presenceTimer) {
       clearInterval(this.presenceTimer)
       this.presenceTimer = null

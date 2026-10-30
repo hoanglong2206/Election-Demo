@@ -234,4 +234,43 @@ describe('AudioPipelineController', () => {
 
     controller.destroy()
   })
+
+  it('isolates capture ownership between meeting and audio-test and ignores mismatched stop calls', async () => {
+    const controller = new AudioPipelineController({
+      captureService: mockCaptureService,
+      bufferManager: mockBufferManager,
+      playbackService: mockPlaybackService,
+    })
+
+    // 1. Start meeting capture
+    await controller.start('system', { owner: 'meeting' })
+    expect(controller.getState().isCapturing).toBe(true)
+    expect(controller.getState().captureOwner).toBe('meeting')
+    expect(controller.isOwnedCapture('meeting')).toBe(true)
+    expect(controller.isOwnedCapture('audio-test')).toBe(false)
+
+    // 2. Audio-test calls stop('audio-test') on unmount: should NOT stop meeting!
+    controller.stop('audio-test')
+    expect(controller.getState().isCapturing).toBe(true)
+    expect(controller.getState().captureOwner).toBe('meeting')
+
+    // 3. Meeting stops its own session
+    controller.stop('meeting')
+    expect(controller.getState().isCapturing).toBe(false)
+    expect(controller.getState().captureOwner).toBeNull()
+
+    // 4. Start audio-test capture
+    await controller.start('mic', { owner: 'audio-test' })
+    expect(controller.getState().isCapturing).toBe(true)
+    expect(controller.getState().captureOwner).toBe('audio-test')
+    expect(controller.isOwnedCapture('audio-test')).toBe(true)
+    expect(controller.isOwnedCapture('meeting')).toBe(false)
+
+    // 5. Meeting unmount/exit calling stop('meeting') must NOT stop audio-test!
+    controller.stop('meeting')
+    expect(controller.getState().isCapturing).toBe(true)
+    expect(controller.getState().captureOwner).toBe('audio-test')
+
+    controller.destroy()
+  })
 })

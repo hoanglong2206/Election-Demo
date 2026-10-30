@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { useAudioPipeline } from '@/hooks/useAudioPipeline'
+import { computePipelineStages } from '@/infrastructure/audio/pipelineStages'
 import type { AudioTestProps } from './types'
 import { AudioTestHeader } from './components/header'
 import { AudioControlsToolbar } from './components/controls'
@@ -45,6 +46,29 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
   // Phân quyền thu âm: AudioTest chỉ kích hoạt khi captureOwner là 'audio-test'
   const isAudioTestRecording = isCapturing && captureOwner === 'audio-test'
   const isMeetingRecording = isCapturing && captureOwner === 'meeting'
+
+  // Khi unmount AudioTest, chỉ dừng capture nếu AudioTest đang là owner
+  useEffect(() => {
+    return () => {
+      stopCapture('audio-test')
+    }
+  }, [stopCapture])
+
+  // Pipeline stages phản ánh riêng phiên Audio Test
+  const audioTestPipelineStages = isAudioTestRecording
+    ? pipelineStages
+    : computePipelineStages({
+        isCapturing: false,
+        sourceType,
+        isAudioDetected: false,
+        engineType,
+        hasBuffer: false,
+        bufferedSeconds: 0,
+        bufferSizeBytes: 0,
+        bufferDurationSec: 0,
+        estimatedMemoryMb: 0,
+        chunks: [],
+      })
 
   // ── UI States ──
   const [showTip, setShowTip] = useState(true)
@@ -167,17 +191,19 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
         sourceType={sourceType}
         setSourceType={setSourceType}
         isCapturing={isAudioTestRecording}
-        isStarting={isStarting}
+        isStarting={isStarting && captureOwner === 'audio-test'}
         isAudioDetected={isAudioTestRecording ? isAudioDetected : false}
         startCapture={handleStartAudioTestCapture}
-        stopCapture={stopCapture}
-        isPlaying={isPlaying}
+        stopCapture={() => stopCapture('audio-test')}
+        isPlaying={isPlaying && (isAudioTestRecording || captureOwner === 'audio-test')}
         playBuffer={playBuffer}
         stopPlayback={stopPlayback}
-        hasBuffer={hasBuffer}
-        bufferDurationSec={bufferDurationSec}
+        hasBuffer={isAudioTestRecording ? hasBuffer : false}
+        bufferDurationSec={isAudioTestRecording ? bufferDurationSec : 0}
         downloadWav={downloadWav}
-        clearBuffer={clearBuffer}
+        clearBuffer={() => {
+          if (isAudioTestRecording || !isCapturing) clearBuffer()
+        }}
         onOpenCalibration={() => setIsCalibrating(true)}
         calibratedDb={calibratedRecord?.speechThresholdDbfs}
         availableDevices={availableDevices}
@@ -213,15 +239,15 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
 
         <div className="lg:col-span-5 space-y-3.5">
           <PipelineStagesCard
-            pipelineStages={pipelineStages}
-            bufferDurationSec={bufferDurationSec}
-            bufferSizeBytes={bufferSizeBytes}
-            chunks={chunks}
+            pipelineStages={audioTestPipelineStages}
+            bufferDurationSec={isAudioTestRecording ? bufferDurationSec : 0}
+            bufferSizeBytes={isAudioTestRecording ? bufferSizeBytes : 0}
+            chunks={isAudioTestRecording ? chunks : []}
             queueMetrics={queueMetrics}
-            isCapturing={isCapturing}
-            isStarting={isStarting}
+            isCapturing={isAudioTestRecording}
+            isStarting={isStarting && captureOwner === 'audio-test'}
             sourceType={sourceType}
-            isAudioDetected={isAudioDetected}
+            isAudioDetected={isAudioTestRecording ? isAudioDetected : false}
             captureError={error}
             inputSampleRateHz={inputSampleRateHz}
           />
@@ -235,9 +261,9 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
         activeDeviceId={selectedDeviceId}
         activeDeviceName={activeDeviceName}
         getAudioMetrics={getAudioMetrics}
-        startCapture={startCapture}
-        stopCapture={stopCapture}
-        isCapturing={isCapturing}
+        startCapture={handleStartAudioTestCapture}
+        stopCapture={() => stopCapture('audio-test')}
+        isCapturing={isAudioTestRecording}
         sourceType={sourceType}
         setSourceType={setSourceType}
         getRecentPcmSamples={getRecentPcmSamples}
