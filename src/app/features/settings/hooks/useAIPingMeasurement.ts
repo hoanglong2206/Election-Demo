@@ -29,6 +29,17 @@ export function useAIPingMeasurement({
   sttEnginesList,
 }: UseAIPingMeasurementProps) {
   const isMountedRef = useRef(true)
+  const modelsListRef = useRef(modelsList)
+  const sttEnginesListRef = useRef(sttEnginesList)
+  const selectedLLMRef = useRef(selectedLLM)
+  const selectedSTTRef = useRef(selectedSTT)
+
+  useEffect(() => {
+    modelsListRef.current = modelsList
+    sttEnginesListRef.current = sttEnginesList
+    selectedLLMRef.current = selectedLLM
+    selectedSTTRef.current = selectedSTT
+  })
 
   useEffect(() => {
     isMountedRef.current = true
@@ -65,7 +76,7 @@ export function useAIPingMeasurement({
 
   const handleTestLLMPing = useCallback(
     async (targetModelId?: string) => {
-      const idToTest = targetModelId || selectedLLM
+      const idToTest = targetModelId || selectedLLMRef.current
       if (!idToTest || !isLikelyLLMModelId(idToTest)) return
       const reqId = ++llmPingReqRef.current
       setIsPingingLLM(true)
@@ -76,7 +87,7 @@ export function useAIPingMeasurement({
         }
       } catch {
         if (isMountedRef.current && reqId === llmPingReqRef.current) {
-          const target = modelsList.find((m) => m.id === idToTest)
+          const target = modelsListRef.current.find((m) => m.id === idToTest)
           setLiveLLMPing(target?.pingMs || 120)
         }
       } finally {
@@ -85,12 +96,19 @@ export function useAIPingMeasurement({
         }
       }
     },
-    [modelsList, selectedLLM]
+    []
   )
 
   const handleTestGroqSTTPing = useCallback(
     async (targetSTTId?: string) => {
-      const idToTest = targetSTTId || selectedSTT || 'whisper-large-v3-turbo'
+      const idToTest = targetSTTId || selectedSTTRef.current || 'whisper-large-v3-turbo'
+      const active = sttEnginesListRef.current.find((e) => e.id === idToTest)
+      if (active?.provider === 'Local' || idToTest.includes('local') || idToTest.includes('ggml')) {
+        setGroqSTTTestResult(null)
+        setIsCheckingGroqSTT(false)
+        return
+      }
+
       const reqId = ++groqPingReqRef.current
       setIsCheckingGroqSTT(true)
       try {
@@ -103,7 +121,7 @@ export function useAIPingMeasurement({
         }
       } catch {
         if (isMountedRef.current && reqId === groqPingReqRef.current) {
-          const found = sttEnginesList.find((e) => e.id === idToTest)
+          const found = sttEnginesListRef.current.find((e) => e.id === idToTest)
           setGroqSTTTestResult({
             latencyMs: found?.latencyMs || 180,
             text: `Ping Groq LPU: ~${found?.latencyMs || 180}ms`,
@@ -115,11 +133,11 @@ export function useAIPingMeasurement({
         }
       }
     },
-    [selectedSTT, sttEnginesList]
+    []
   )
 
   // Auto-ping only when the selected LLM actually changes.
-  // Do not trigger when STT changes, even if the parent re-renders.
+  // Strictly decoupled: does not trigger when STT changes or when parent re-renders.
   useEffect(() => {
     if (selectedLLM && isLikelyLLMModelId(selectedLLM)) {
       const timer = setTimeout(() => {
@@ -127,23 +145,29 @@ export function useAIPingMeasurement({
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [selectedLLM])
+  }, [selectedLLM, handleTestLLMPing])
 
-  // Auto-ping when selected STT changes
+  // Auto-ping only when selected STT changes.
+  // Strictly decoupled: does not trigger when LLM changes or when parent re-renders.
   useEffect(() => {
-    const active = sttEnginesList.find((e) => e.id === selectedSTT)
-    if (active && active.provider !== 'Local') {
+    const active = sttEnginesListRef.current.find((e) => e.id === selectedSTT)
+    const isLocal = active?.provider === 'Local' || selectedSTT.includes('local') || selectedSTT.includes('ggml')
+
+    if (!isLocal && selectedSTT) {
       const timer = setTimeout(() => {
         void handleTestGroqSTTPing(selectedSTT)
       }, 0)
       return () => clearTimeout(timer)
     } else {
       const timer = setTimeout(() => {
-        if (isMountedRef.current) setGroqSTTTestResult(null)
+        if (isMountedRef.current) {
+          setGroqSTTTestResult(null)
+          setIsCheckingGroqSTT(false)
+        }
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [selectedSTT, sttEnginesList, handleTestGroqSTTPing])
+  }, [selectedSTT, handleTestGroqSTTPing])
 
   return {
     liveLLMPing,
@@ -154,4 +178,3 @@ export function useAIPingMeasurement({
     handleTestGroqSTTPing,
   }
 }
-
