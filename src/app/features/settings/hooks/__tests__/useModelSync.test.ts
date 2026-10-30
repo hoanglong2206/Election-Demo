@@ -1,7 +1,8 @@
 import '@/test/setupDom'
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { useModelSync } from '../useModelSync'
+import * as aiModels from '@/services/ai-model/aiModels'
 
 describe('useModelSync Hook', () => {
   beforeEach(() => {
@@ -26,6 +27,7 @@ describe('useModelSync Hook', () => {
 
     expect(result.current.syncMeta).toBeDefined()
     expect(result.current.isSyncing).toBe(false)
+    expect(result.current.syncActionState).toBe('idle')
     expect(result.current.syncStatus).toBeNull()
   })
 
@@ -58,7 +60,13 @@ describe('useModelSync Hook', () => {
     expect(currentSelected).toBe('model-1')
   })
 
-  it('handles sync models execution gracefully', async () => {
+  it('handles sync models execution gracefully with distinct action states', async () => {
+    const syncSpy = spyOn(aiModels, 'syncActiveAIModels').mockResolvedValue({
+      success: true,
+      totalLoaded: 5,
+      providerBreakdown: 'Groq: 5',
+    })
+
     const { result } = renderHook(() =>
       useModelSync({
         selectedLLM: '',
@@ -72,7 +80,38 @@ describe('useModelSync Hook', () => {
     })
 
     expect(result.current.isSyncing).toBe(false)
-    // syncStatus or syncMeta should be updated
-    expect(result.current.syncMeta).toBeDefined()
+    expect(result.current.syncActionState).toBe('success')
+    expect(result.current.syncStatus?.isError).toBe(false)
+    expect(result.current.syncStatus?.text).toContain('Đồng bộ API thành công')
+
+    syncSpy.mockRestore()
+  })
+
+  it('handles sync errors without disguised success state', async () => {
+    const syncSpy = spyOn(aiModels, 'syncActiveAIModels').mockResolvedValue({
+      success: false,
+      totalLoaded: 0,
+      providerBreakdown: '',
+      error: 'Network timeout',
+    })
+
+    const { result } = renderHook(() =>
+      useModelSync({
+        selectedLLM: '',
+        setSelectedLLM: () => {},
+        setModelsList: () => {},
+      })
+    )
+
+    await act(async () => {
+      await result.current.handleSyncModels()
+    })
+
+    expect(result.current.isSyncing).toBe(false)
+    expect(result.current.syncActionState).toBe('error')
+    expect(result.current.syncStatus?.isError).toBe(true)
+    expect(result.current.syncStatus?.text).toContain('Network timeout')
+
+    syncSpy.mockRestore()
   })
 })

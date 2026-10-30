@@ -186,6 +186,7 @@ export function GroqApiKeySection({
         confirmedModels.length > 0
           ? confirmedModels
           : groqPreview?.models.filter((m) => m.availability !== 'unavailable') || []
+      setKeyError(null)
       const success = await onSaveGroqKey(inputGroqKey.trim(), groqPreview?.sttModels || [], availableModels)
       if (success) {
         setGroqStep('saved')
@@ -199,9 +200,11 @@ export function GroqApiKeySection({
         }, 1200)
       } else {
         setGroqStep('synced')
+        setKeyError('Không thể lưu Groq API key vào OS Credential Store. Vui lòng thử lại.')
       }
-    } catch {
+    } catch (err: any) {
       setGroqStep('synced')
+      setKeyError(err?.message || 'Lỗi khi lưu Groq API key vào OS Credential Store.')
     }
   }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Key, ShieldCheck, RotateCcw, Sparkles, ShieldAlert } from 'lucide-react'
+import { Key, ShieldCheck, RotateCcw, Sparkles, ShieldAlert, Check, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,7 @@ export interface APIKeysCardProps {
   ) => Promise<{ available: boolean; status?: number; code?: string; message: string }>
 
   isSyncing: boolean
+  syncActionState?: 'idle' | 'loading' | 'success' | 'error'
   syncStatus: { text: string; isError: boolean; isWarning?: boolean } | null
   onSyncModels: () => void
 }
@@ -66,6 +67,8 @@ export function APIKeysCard({
   onVerifyRawKey,
   onTestModelAvailability,
   isSyncing,
+  syncActionState = 'idle',
+  syncStatus,
   onSyncModels,
 }: APIKeysCardProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -114,8 +117,14 @@ export function APIKeysCard({
               onClick={onSyncModels}
               disabled={isSyncing || (!isGroqConfigured && !isLlmConfigured)}
               className={cn(
-                'h-7 text-[10.5px] px-2.5 gap-1.5 font-medium transition-all',
-                isGroqConfigured || isLlmConfigured
+                'h-7 text-[10.5px] px-2.5 gap-1.5 font-medium transition-all shrink-0',
+                isSyncing
+                  ? 'bg-violet-600/30 border-violet-500/50 text-violet-200 cursor-wait'
+                  : syncActionState === 'success'
+                  ? 'bg-emerald-600/25 border-emerald-500/40 text-emerald-300'
+                  : syncActionState === 'error'
+                  ? 'bg-rose-600/20 border-rose-500/40 text-rose-300 hover:bg-rose-600/30'
+                  : isGroqConfigured || isLlmConfigured
                   ? 'bg-violet-600/20 border-violet-500/40 text-violet-300 hover:bg-violet-600/30'
                   : 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
               )}
@@ -125,6 +134,16 @@ export function APIKeysCard({
                 <>
                   <RotateCcw className="w-3 h-3 animate-spin text-violet-400" />
                   <span>Đang đồng bộ...</span>
+                </>
+              ) : syncActionState === 'success' ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span>Đã đồng bộ!</span>
+                </>
+              ) : syncActionState === 'error' ? (
+                <>
+                  <RotateCcw className="w-3 h-3 text-rose-400" />
+                  <span>Thử lại</span>
                 </>
               ) : (
                 <>
@@ -137,6 +156,27 @@ export function APIKeysCard({
         </CardHeader>
 
         <CardContent className="p-0 space-y-3">
+          {syncStatus && (
+            <div
+              className={cn(
+                'rounded-lg p-2.5 text-[11px] border flex items-center justify-between gap-2 animate-fade-in',
+                syncStatus.isError
+                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                  : syncStatus.isWarning
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                {syncStatus.isError ? (
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                )}
+                <span>{syncStatus.text}</span>
+              </div>
+            </div>
+          )}
           {!secureStorageAvailable && (
             <div className="rounded-lg p-2.5 text-[11px] bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-start gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />

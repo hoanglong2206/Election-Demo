@@ -13,6 +13,8 @@ interface UseModelSyncProps {
   setModelsList: (models: AIModelConfig[]) => void
 }
 
+export type SyncActionState = 'idle' | 'loading' | 'success' | 'error'
+
 export function useModelSync({
   selectedLLM,
   setSelectedLLM,
@@ -20,6 +22,7 @@ export function useModelSync({
 }: UseModelSyncProps) {
   const isMountedRef = useRef(true)
   const callbacksRef = useRef({ setSelectedLLM, setModelsList })
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     callbacksRef.current = { setSelectedLLM, setModelsList }
@@ -29,11 +32,15 @@ export function useModelSync({
     isMountedRef.current = true
     return () => {
       isMountedRef.current = false
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current)
+      }
     }
   }, [])
 
   const [syncMeta, setSyncMeta] = useState(() => modelRegistryService.getSyncState())
   const [isSyncing, setIsSyncing] = useState(false)
+  const [syncActionState, setSyncActionState] = useState<SyncActionState>('idle')
   const [syncStatus, setSyncStatus] = useState<{
     text: string
     isError: boolean
@@ -55,16 +62,21 @@ export function useModelSync({
   )
 
   const handleSyncModels = useCallback(async () => {
+    if (isSyncing) return
+
+    if (successTimerRef.current) {
+      clearTimeout(successTimerRef.current)
+      successTimerRef.current = null
+    }
+
     setIsSyncing(true)
-    setSyncStatus((prev) =>
-      prev
-        ? {
-            text: 'Đang kết nối và đồng bộ danh sách mô hình từ API...',
-            isError: false,
-            isWarning: false,
-          }
-        : null
-    )
+    setSyncActionState('loading')
+    setSyncStatus({
+      text: 'Đang kết nối và đồng bộ danh sách mô hình từ API...',
+      isError: false,
+      isWarning: false,
+    })
+
     try {
       const res = await syncActiveAIModels()
       syncModelsSelection(getAllAIModels())
@@ -72,6 +84,7 @@ export function useModelSync({
       setSyncMeta(state)
 
       if (state.status === 'error' || !res.success) {
+        setSyncActionState('error')
         setSyncStatus({
           text:
             state.error ||
@@ -80,18 +93,31 @@ export function useModelSync({
           isError: true,
         })
       } else if (state.modelSource === 'mixed') {
+        setSyncActionState('success')
         setSyncStatus({
           text: `Đồng bộ một phần: ${state.providerBreakdown}. Một số model đang dùng cache từ lần đồng bộ trước.`,
           isError: false,
           isWarning: true,
         })
+        successTimerRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setSyncActionState('idle')
+          }
+        }, 2500)
       } else {
+        setSyncActionState('success')
         setSyncStatus({
           text: `Đồng bộ API thành công! Đã nạp ${res.totalLoaded} model (${res.providerBreakdown}).`,
           isError: false,
         })
+        successTimerRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setSyncActionState('idle')
+          }
+        }, 2500)
       }
     } catch (err) {
+      setSyncActionState('error')
       setSyncStatus({
         text: (err as Error)?.message || 'Lỗi khi đồng bộ danh sách model từ API.',
         isError: true,
@@ -101,12 +127,13 @@ export function useModelSync({
         setIsSyncing(false)
       }
     }
-  }, [syncModelsSelection])
+  }, [isSyncing, syncModelsSelection])
 
   return {
     syncMeta,
     setSyncMeta,
     isSyncing,
+    syncActionState,
     syncStatus,
     setSyncStatus,
     syncModelsSelection,

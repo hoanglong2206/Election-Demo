@@ -204,6 +204,7 @@ export function LLMProviderKeySection({
         confirmedModels.length > 0
           ? confirmedModels
           : llmPreview?.models.filter((m) => m.availability !== 'unavailable') || []
+      setKeyError(null)
       const success = await onSaveLLMKey(targetProvider, inputLlmKey.trim(), availableModels)
       if (success) {
         setLlmStep('saved')
@@ -217,9 +218,11 @@ export function LLMProviderKeySection({
         }, 1200)
       } else {
         setLlmStep('synced')
+        setKeyError(`Không thể lưu ${targetProvider} API key vào OS Credential Store. Vui lòng thử lại.`)
       }
-    } catch {
+    } catch (err: any) {
       setLlmStep('synced')
+      setKeyError(err?.message || `Lỗi khi lưu ${targetProvider} API key vào OS Credential Store.`)
     }
   }
 

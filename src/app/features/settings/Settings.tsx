@@ -60,6 +60,7 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
   const {
     syncMeta,
     isSyncing,
+    syncActionState,
     syncStatus,
     handleSyncModels,
   } = useModelSync({
@@ -152,6 +153,7 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
           onVerifyRawKey={handleVerifyRawKey}
           onTestModelAvailability={handleTestModelAvailability}
           isSyncing={isSyncing}
+          syncActionState={syncActionState}
           syncStatus={syncStatus}
           onSyncModels={handleSyncModels}
         />

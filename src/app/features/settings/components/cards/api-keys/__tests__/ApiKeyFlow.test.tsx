@@ -160,4 +160,56 @@ describe('ApiKeyFlow UX Workflow Test', () => {
     })
     expect(onSaveLLMKey).toHaveBeenCalled()
   })
-})
+
+  it('Groq save failure displays clear error and allows retry without disguising failure', async () => {
+    const onVerifyRawKey = mock(async () => ({
+      valid: true,
+      provider: 'Groq',
+      models: [{ id: 'llama-3.3-70b', name: 'Llama 3.3 70B' }],
+    }))
+    const onTestModelAvailability = mock(async () => ({ available: true }))
+    const onSaveGroqKey = mock(async () => false) // Fails!
+
+    let view: any
+    await act(async () => {
+      view = render(
+        <GroqApiKeySection
+          groqStatus={{ configured: false }}
+          groqVerify={{ state: 'idle' }}
+          onVerifyGroq={() => {}}
+          onSaveGroqKey={onSaveGroqKey}
+          onDeleteRequest={() => {}}
+          onVerifyRawKey={onVerifyRawKey}
+          onTestModelAvailability={onTestModelAvailability}
+        />
+      )
+    })
+
+    const input = view.container.querySelector('input[type="password"]') as HTMLInputElement
+    await act(async () => {
+      input.value = 'gsk_test12345'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    await act(async () => {
+      fireEvent.click(view.getByText('Kiểm tra hợp lệ'))
+    })
+
+    await act(async () => {
+      fireEvent.click(view.getByText('Đồng bộ model'))
+    })
+
+    await act(async () => {
+      fireEvent.click(view.getByText('Kiểm tra tất cả model'))
+    })
+
+    const saveBtn = view.getByText('Lưu OS Store').closest('button')
+    await act(async () => {
+      fireEvent.click(saveBtn!)
+    })
+
+    // Error message should be rendered, save button still present for retry
+    expect(view.getByText(/Không thể lưu Groq API key vào OS Credential Store/)).toBeDefined()
+    expect(view.getByText('Lưu OS Store')).toBeDefined()
+  })
+});
