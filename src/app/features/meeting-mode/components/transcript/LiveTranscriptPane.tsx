@@ -661,9 +661,6 @@ const totalLinesCount = validLines.length
                       <HighlightText text={line.original} query={searchQuery} />
                     </p>
                     <div className="text-[12px] leading-relaxed text-emerald-300 font-normal border-t border-white/[0.06] pt-1 flex items-start gap-1.5">
-                      <span className="text-[8.5px] uppercase font-mono tracking-wider text-emerald-400/90 font-semibold select-none shrink-0 mt-0.5 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">
-                        Tiếng Việt
-                      </span>
                       <span>
                         <HighlightText text={line.translated} query={searchQuery} />
                       </span>
@@ -676,7 +673,7 @@ const totalLinesCount = validLines.length
                     </p>
                     <div className="text-[11px] text-white/40 italic flex items-center gap-1.5 pt-0.5 select-none">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/70 animate-pulse" />
-                      <span>Đang dịch tiếng Việt...</span>
+                      <span>Đang dịch...</span>
                     </div>
                   </div>
                 ) : (

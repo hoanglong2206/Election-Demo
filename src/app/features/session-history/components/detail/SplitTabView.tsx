@@ -35,9 +35,6 @@ export function SplitTabView({
                 <div className="text-white/85">{t.original}</div>
                 {t.translated && t.translated !== t.original && (
                   <div className="text-[10.5px] text-emerald-300/90 leading-relaxed border-t border-white/[0.04] pt-1 flex items-start gap-1">
-                    <span className="text-[8px] uppercase font-mono tracking-wider text-emerald-400/90 font-semibold select-none shrink-0 mt-0.5 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">
-                      Tiếng Việt
-                    </span>
                     <span>{t.translated}</span>
                   </div>
                 )}
