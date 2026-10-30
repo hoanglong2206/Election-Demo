@@ -1,5 +1,8 @@
 import type { TranscriptLine } from '../types'
-import { stitchFragments } from '@/services/ai-model/copilot/exchangeAssembler'
+import {
+  stitchFragments,
+  endsWithSentencePunctuation,
+} from '@/services/ai-model/copilot/exchangeAssembler'
 import { detectLanguage } from '@/services/ai-model/translation'
 import { speechSegmentationTelemetry } from '@/core/audio'
 
@@ -19,6 +22,35 @@ export interface CommitResult {
   targetLineId: number
   textToTranslate: string
   isNew: boolean
+}
+
+/**
+ * Strips 2-5 word overlaps from the beginning of nextText if it repeats the end of prevText.
+ */
+function stripLeadingOverlap(prevText: string, nextText: string): string {
+  const prevClean = prevText.trim()
+  const nextClean = nextText.trim()
+  if (!prevClean || !nextClean) return nextClean
+
+  const prevWords = prevClean.split(/\s+/)
+  const nextWords = nextClean.split(/\s+/)
+  const maxWindow = Math.min(prevWords.length, nextWords.length, 5)
+
+  for (let k = maxWindow; k >= 2; k--) {
+    const prevSlice = prevWords
+      .slice(-k)
+      .map((w) => w.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''))
+      .join(' ')
+    const nextSlice = nextWords
+      .slice(0, k)
+      .map((w) => w.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''))
+      .join(' ')
+
+    if (prevSlice && prevSlice === nextSlice) {
+      return nextWords.slice(k).join(' ').trim()
+    }
+  }
+  return nextClean
 }
 
 export class TranscriptStore {
@@ -99,8 +131,18 @@ export class TranscriptStore {
 
     const lastLine = this.lines[this.lines.length - 1]
 
-    // 1. Continuation stitching (split at energy valley)
-    if (continuation && lastLine.speaker === newLine.speaker) {
+    // 1. Continuation stitching (split at energy valley mid-sentence)
+    // Only stitch onto previous bubble if the previous bubble did NOT complete a sentence
+    // AND has not grown beyond a readable card threshold (<= 130 chars).
+    const lastCompletedSentence = endsWithSentencePunctuation(lastLine.original)
+    const lastTooLong = lastLine.original.trim().length >= 130
+
+    if (
+      continuation &&
+      lastLine.speaker === newLine.speaker &&
+      !lastCompletedSentence &&
+      !lastTooLong
+    ) {
       const combinedOriginal = stitchFragments([lastLine.original, newLine.original])
       const combinedTranslated =
         lastLine.translated && newLine.translated
@@ -118,6 +160,17 @@ export class TranscriptStore {
         targetLineId: lastLine.id,
         textToTranslate: combinedOriginal,
         isNew: false,
+      }
+    }
+
+    // If starting a new line from the same speaker, clean any duplicate boundary overlap
+    if (lastLine.speaker === newLine.speaker) {
+      const cleanOriginal = stripLeadingOverlap(lastLine.original, newLine.original)
+      if (cleanOriginal) {
+        newLine.original = cleanOriginal
+        if (newLine.translated && !needsViTranslation) {
+          newLine.translated = cleanOriginal
+        }
       }
     }
 

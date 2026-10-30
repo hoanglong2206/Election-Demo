@@ -60,6 +60,47 @@ describe('TranscriptStore Controller', () => {
     expect(lines[0].original).toBe('Hôm nay chúng ta sẽ thảo luận về Redis cluster.')
   })
 
+  it('does NOT stitch if previous line ended with a full sentence (. ? !)', () => {
+    store.commitSegment({
+      result: { success: true, text: 'Hôm nay chúng ta sẽ thảo luận về Redis cluster.' },
+      speakerLabel: 'Interviewer',
+      timestampStr: '00:01',
+    })
+
+    const nextResult = store.commitSegment({
+      result: { success: true, text: 'Các bạn đã chuẩn bị tài liệu chưa?' },
+      speakerLabel: 'Interviewer',
+      timestampStr: '00:05',
+      continuation: true,
+    })
+
+    expect(nextResult?.isNew).toBe(true)
+    expect(store.getValidLines().length).toBe(2)
+    expect(store.getValidLines()[0].original).toBe('Hôm nay chúng ta sẽ thảo luận về Redis cluster.')
+    expect(store.getValidLines()[1].original).toBe('Các bạn đã chuẩn bị tài liệu chưa?')
+  })
+
+  it('does NOT stitch if previous line is already longer than 130 characters', () => {
+    store.commitSegment({
+      result: {
+        success: true,
+        text: 'Chúng tôi đang triển khai hệ thống kiến trúc phân tán với rất nhiều node backend và cơ chế caching nhiều tầng nhằm đạt throughput tối đa',
+      },
+      speakerLabel: 'Interviewer',
+      timestampStr: '00:01',
+    })
+
+    const nextResult = store.commitSegment({
+      result: { success: true, text: 'đồng thời kiểm soát chặt chẽ độ trễ' },
+      speakerLabel: 'Interviewer',
+      timestampStr: '00:06',
+      continuation: true,
+    })
+
+    expect(nextResult?.isNew).toBe(true)
+    expect(store.getValidLines().length).toBe(2)
+  })
+
   it('does NOT stitch if speaker changes even if continuation=true', () => {
     store.commitSegment({
       result: { success: true, text: 'Bạn có câu hỏi gì không?' },
