@@ -8,6 +8,10 @@ import {
   type ResponseLanguage,
 } from '../language'
 import { tieredContextManager, TieredContextManager } from '../context'
+import {
+  hasRepetitiveDegeneration,
+  pruneRepetitiveTail,
+} from './repetitionGuard'
 
 /**
  * Generates options for discussion mode using 4-Tier Context Architecture.
@@ -77,43 +81,65 @@ CONFIDENCE: 88
 CONTENT: nội dung đầy đủ viết liền trên một dòng`
 
   const prompt = isQuestion
-    ? `Bạn là AI trợ lý cố vấn trong cuộc họp. Người tham gia vừa ĐẶT CÂU HỎI:
+    ? `Người tham gia vừa ĐẶT CÂU HỎI:
 "${latestLine}"
 
 ${shared}
 
-Vì họ vừa đặt CÂU HỎI, hãy soạn 3 phương án TRẢ LỜI để tôi chọn và phản hồi ngay. Ba phương án phải khác nhau về góc tiếp cận:
+Vì họ vừa đặt CÂU HỎI, hãy soạn 3 phương án TRẢ LỜI để phản hồi ngay. Ba phương án tiếp cận:
 - Phương án 1: Trả lời trực diện vào đúng câu hỏi, dựa trên nội dung đang thảo luận.
 - Phương án 2: Trả lời kèm phân tích đánh đổi/rủi ro của chính phương án đang bàn trong transcript.
 - Phương án 3: Trả lời kèm ví dụ, kinh nghiệm thực chiến hoặc bước kiểm chứng cụ thể cho nội dung đang bàn.
 
-Điền nội dung của 3 phương án đó vào đúng định dạng ở trên (mỗi CONTENT là một câu trả lời hoàn chỉnh).`
-    : `Bạn là AI trợ lý cố vấn trong cuộc họp. Người tham gia vừa PHÁT BIỂU Ý KIẾN (không phải câu hỏi):
+Cấu trúc trả về (đúng 3 khối @@@ như mẫu trên):`
+    : `Người tham gia vừa PHÁT BIỂU Ý KIẾN (không phải câu hỏi):
 "${latestLine}"
 
 ${shared}
 
-Vì họ vừa PHÁT BIỂU, hãy soạn 3 CÂU HỎI GỢI Ý để tôi hỏi lại hoặc dẫn dắt thảo luận tiếp. Ba câu hỏi phải khác nhau về mục đích:
+Vì họ vừa PHÁT BIỂU, hãy soạn 3 CÂU HỎI GỢI Ý để hỏi lại hoặc dẫn dắt thảo luận tiếp. Ba câu hỏi tiếp cận:
 - Câu 1: Làm rõ một chi tiết còn mơ hồ trong chính phát biểu vừa rồi.
 - Câu 2: Đào sâu rủi ro/đánh đổi của đúng giải pháp đang được bàn.
 - Câu 3: Đề xuất bước tiếp theo cụ thể cho nội dung đang bàn.
 
-Điền nội dung của 3 câu hỏi đó vào đúng định dạng ở trên`
+Cấu trúc trả về (đúng 3 khối @@@ như mẫu trên):`
 
   // Without any real context there is nothing to ground on — bail out instead
   // of letting the model invent a generic agenda.
   if (!hasContext && !latestLine.trim()) return null
 
+  const systemPrompt =
+    'Bạn là AI trợ lý cố vấn cuộc họp chuyên nghiệp. Nhiệm vụ của bạn là đưa ra đúng 3 phương án phản hồi súc tích, bám sát diễn biến thực tế. Tuyệt đối không lặp lại câu từ hướng dẫn trong câu trả lời.'
+
   const rawRes = await callUniversalLLM(prompt, {
     maxTokens: 1000,
     temperature: 0.25,
+    systemPrompt,
     sessionId,
     feature: 'copilot_discussion',
   })
   if (!rawRes) return null
 
-  const text = stripCodeFences(rawRes.text)
+  let text = stripCodeFences(rawRes.text)
   if (!text) return null
+
+  // Guard against prompt echoing / loop degeneration
+  if (hasRepetitiveDegeneration(text)) {
+    console.warn('[discussion] LLM output exhibited loop degeneration or prompt echo. Retrying...')
+    const retryRes = await callUniversalLLM(prompt, {
+      maxTokens: 1000,
+      temperature: 0.35,
+      systemPrompt,
+      sessionId,
+      feature: 'copilot_discussion',
+    })
+    if (retryRes) {
+      const retryText = stripCodeFences(retryRes.text)
+      if (retryText && !hasRepetitiveDegeneration(retryText)) {
+        text = retryText
+      }
+    }
+  }
 
   const contextUsage = {
     totalTokens: assembled.estimatedTokens.total,
@@ -123,7 +149,14 @@ Vì họ vừa PHÁT BIỂU, hãy soạn 3 CÂU HỎI GỢI Ý để tôi hỏi 
   }
 
   // Parsing chain: delimited format -> JSON -> rescue of malformed JSON.
-  const parsed = (parseOptionResponse(text) ?? []).filter((o) => o.content.trim())
+  const rawParsed = parseOptionResponse(text) ?? []
+  const parsed = rawParsed
+    .map((o) => ({
+      ...o,
+      content: pruneRepetitiveTail(o.content.trim()),
+    }))
+    .filter((o) => o.content.trim() && !hasRepetitiveDegeneration(o.content))
+
   if (parsed.length > 0) {
     return parsed.map((o, idx) => ({
       id: idx + 1,
@@ -137,20 +170,24 @@ Vì họ vừa PHÁT BIỂU, hãy soạn 3 CÂU HỎI GỢI Ý để tôi hỏi 
     }))
   }
 
-  // The model answered with JSON we could not parse. Showing that blob raw in
-  // the UI is worse than showing an error, so refuse it.
-  if (rawRes.truncated || looksLikeJson(text)) {
-    console.warn('[discussion] LLM returned truncated or unparseable output — refusing to render it raw')
+  // Refuse truncated JSON or output infected with repetitive loop / prompt echo
+  if (rawRes.truncated || looksLikeJson(text) || hasRepetitiveDegeneration(text)) {
+    console.warn('[discussion] LLM returned truncated, unparseable, or degenerate output — refusing to render it raw')
     return null
   }
 
-  // Genuine prose answer (model ignored the format) — keep its real output.
+  // Clean prose answer (model ignored the format) — keep its real output if not degenerate.
+  const cleanProse = pruneRepetitiveTail(text)
+  if (!cleanProse || hasRepetitiveDegeneration(cleanProse)) {
+    return null
+  }
+
   return [
     {
       id: 1,
       type: 'option',
       label: isQuestion ? 'Phương án trả lời' : 'Câu hỏi gợi ý',
-      content: text,
+      content: cleanProse,
       confidence: 95,
       modelName: rawRes.modelName,
       isRealLLM: true,
