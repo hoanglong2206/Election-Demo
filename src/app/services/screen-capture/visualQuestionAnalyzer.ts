@@ -2,7 +2,7 @@ import type { VisualAnalysisResult, VisualContentType } from './types'
 import { settingsManager } from '../settings'
 import { modelRegistryService } from '../ai-model/model-registry'
 import { smartModelRouter } from '../ai-model/model-router'
-import { usageTrackerService } from '../usage-tracker'
+import { usageTrackerService, type AIUsageFeature } from '../usage-tracker'
 import { languageInstruction, type ResponseLanguage } from '../ai-model/language'
 import { credentialsPort } from '@/infrastructure/ipc'
 
@@ -38,6 +38,7 @@ export interface AnalyzeVisualOptions {
   sessionId?: string
   responseLanguage?: ResponseLanguage
   implementationLanguage?: string
+  feature?: AIUsageFeature
   languageContext?: string
 }
 
@@ -151,7 +152,7 @@ Nếu không có mã nguồn trong ảnh, extractedCode phải là null. solutio
         sessionId,
         provider,
         model: targetModelId,
-        feature: 'visual_question',
+        feature: options.feature || 'visual_question',
         inputTokens: usageInfo?.inputTokens,
         outputTokens: usageInfo?.outputTokens,
         cachedTokens: usageInfo?.cachedTokens,

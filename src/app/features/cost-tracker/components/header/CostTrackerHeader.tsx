@@ -44,7 +44,7 @@ export function CostTrackerHeader({
     { id: 'distribution', label: 'Phân bổ', icon: PieChart },
     { id: 'budget', label: 'Ngân sách', icon: Sliders },
     { id: 'pricing', label: 'Bảng giá mô hình', icon: Coins },
-    { id: 'logs', label: 'Lịch sử cuộc gọi', icon: History },
+    { id: 'logs', label: 'Lịch sử sử dụng AI', icon: History },
   ]
 
   return (

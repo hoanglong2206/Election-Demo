@@ -9,6 +9,10 @@ export type AIUsageFeature =
   | 'summary'
   | 'grounding'
   | 'general'
+  | 'cv_jd_match'
+  | 'llm_latency_test'
+  | 'vision_test'
+  | 'audio_signal_test'
 
 export type CostCalculationStatus = 'calculated' | 'unknown' | 'free'
 

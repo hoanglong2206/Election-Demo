@@ -69,11 +69,11 @@ describe('CostTracker Screen Smoke Tests', () => {
     expect(result.getByText('Bảng Giá Model & Cấu Hình Chi Phí')).toBeDefined()
 
     // Switch to Logs tab
-    const logsTab = result.getByText('Lịch sử cuộc gọi')
+    const logsTab = result.getByText('Lịch sử sử dụng AI')
     await act(async () => {
       fireEvent.click(logsTab)
     })
-    expect(result.getByText(/Nhật Ký Yêu Cầu API/)).toBeDefined()
+    expect(result.getByText(/Lịch Sử Sử Dụng AI/)).toBeDefined()
   })
 
   it('opens and closes reset statistics confirmation modal', async () => {

@@ -1,4 +1,5 @@
 import type { UsageRecord } from '@/services/usage-tracker'
+import { getFeatureDisplayName } from '../types'
 
 export interface BudgetMetrics {
   limitNum: number
@@ -73,7 +74,9 @@ export function filterUsageRecords(
     if (normalizedQuery) {
       const matchModel = r.model.toLowerCase().includes(normalizedQuery)
       const matchProvider = r.provider.toLowerCase().includes(normalizedQuery)
-      const matchFeature = r.feature.toLowerCase().includes(normalizedQuery)
+      const matchFeature =
+        r.feature.toLowerCase().includes(normalizedQuery) ||
+        getFeatureDisplayName(r.feature).toLowerCase().includes(normalizedQuery)
       const matchId = r.id.toLowerCase().includes(normalizedQuery)
       if (!matchModel && !matchProvider && !matchFeature && !matchId) {
         return false

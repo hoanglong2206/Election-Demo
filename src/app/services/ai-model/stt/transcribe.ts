@@ -2,7 +2,7 @@ import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
 import type { TranscribeResult } from './types'
 import { base64ToBlob, blobToBase64 } from './audioUtils'
 import { encodeWavBlob } from '@/core/audio'
-import { usageTrackerService } from '../../usage-tracker'
+import { usageTrackerService, type AIUsageFeature } from '../../usage-tracker'
 import { whisperPort, credentialsPort } from '@/infrastructure/ipc'
 
 /**
@@ -45,8 +45,10 @@ export async function transcribeAudio(
   customEngineId?: string,
   language = 'auto',
   prompt?: string,
-  sessionId?: string
+  sessionId?: string,
+  feature?: AIUsageFeature
 ): Promise<TranscribeResult> {
+  const targetFeature: AIUsageFeature = feature || (sessionId?.startsWith('audiotest_') ? 'audio_signal_test' : 'stt')
   const engineId = customEngineId || getSavedSTTEngineId()
   const available = getAvailableSTTEngines()
   let engine = available.find((e) => e.id === engineId)
@@ -86,7 +88,7 @@ export async function transcribeAudio(
           sessionId,
           provider: 'Local',
           model: engineId,
-          feature: 'stt',
+          feature: targetFeature,
           audioDurationSeconds: durationSec,
         })
       } catch {}
@@ -166,7 +168,7 @@ export async function transcribeAudio(
               sessionId,
               provider: 'Groq',
               model: engineId,
-              feature: 'stt',
+              feature: targetFeature,
               audioDurationSeconds: durationSec,
             })
           } catch {}

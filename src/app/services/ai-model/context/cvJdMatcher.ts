@@ -180,6 +180,7 @@ Hãy đánh giá khách quan độ tương thích và trả về ĐÚNG ĐỊNH 
     const res = await callUniversalLLM(prompt, {
       maxTokens: 600,
       temperature: 0.2,
+      feature: 'cv_jd_match',
       systemPrompt: 'You are an expert technical recruiter analyzing CV vs JD compatibility. Always return clean JSON without markdown code fences if possible.',
     })
 

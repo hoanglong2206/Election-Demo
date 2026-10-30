@@ -157,6 +157,7 @@ export function useVisionDiagnostic({
           customModelId: state.selectedVisionId,
           responseLanguage: normalizeResponseLanguage(getSavedResponseLanguage()),
           implementationLanguage: implementationLanguage || undefined,
+          feature: 'vision_test',
         })
         dispatch({ type: 'ANALYSIS_SUCCESS', result })
       } catch (err: any) {

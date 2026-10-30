@@ -736,6 +736,10 @@ export class UsageTrackerService {
       { provider: 'Google', model: 'gemini-2.5-flash', feature: 'visual_question' as const, inMin: 1500, inMax: 3800, outMin: 350, outMax: 900, cacheMin: 0, cacheMax: 0 },
       { provider: 'Local', model: 'whisper-tiny', feature: 'stt' as const, audioSec: 35 },
       { provider: 'Groq', model: 'whisper-large-v3', feature: 'stt' as const, audioSec: 75 },
+      { provider: 'OpenAI', model: 'gpt-4o-mini', feature: 'cv_jd_match' as const, inMin: 800, inMax: 2000, outMin: 250, outMax: 500, cacheMin: 0, cacheMax: 0 },
+      { provider: 'Google', model: 'gemini-2.5-flash', feature: 'llm_latency_test' as const, inMin: 100, inMax: 300, outMin: 40, outMax: 120, cacheMin: 0, cacheMax: 0 },
+      { provider: 'Google', model: 'gemini-2.5-flash', feature: 'vision_test' as const, inMin: 1200, inMax: 3000, outMin: 300, outMax: 700, cacheMin: 0, cacheMax: 0 },
+      { provider: 'Local', model: 'whisper-base', feature: 'audio_signal_test' as const, audioSec: 25 },
     ]
 
     const newRecords: UsageRecord[] = []

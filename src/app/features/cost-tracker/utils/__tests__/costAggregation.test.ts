@@ -1,3 +1,4 @@
+import { getFeatureDisplayName, FEATURE_NAMES } from '../../types'
 import { describe, it, expect } from 'bun:test'
 import {
   calculateBudgetMetrics,
@@ -85,5 +86,26 @@ describe('costAggregation Unit Tests', () => {
     expect(csvContent).toContain('rec_1')
     expect(csvContent).toContain('"Google"')
     expect(csvContent).toContain('"gemini-2.5-flash"')
+  })
+
+  it('getFeatureDisplayName returns correct display name or fallback to general', () => {
+    expect(getFeatureDisplayName('cv_jd_match')).toBe('Phân tích Độ khớp CV - JD')
+    expect(getFeatureDisplayName('llm_latency_test')).toBe('Đo Tốc độ LLM Benchmark')
+    expect(getFeatureDisplayName('vision_test')).toBe('Thử nghiệm Phân tích Màn hình (Vision)')
+    expect(getFeatureDisplayName('audio_signal_test')).toBe('Đo & Kiểm thử Tín hiệu Âm thanh (Audio Test)')
+    expect(getFeatureDisplayName('copilot')).toBe('Meeting Copilot AI')
+    // Fallback cases
+    expect(getFeatureDisplayName('unknown_custom_feat')).toBe(FEATURE_NAMES.general)
+    expect(getFeatureDisplayName(undefined)).toBe(FEATURE_NAMES.general)
+  })
+
+  it('filterUsageRecords matches both raw feature name and Vietnamese display name', () => {
+    // raw feature search
+    expect(filterUsageRecords(mockRecords, 'translate')).toHaveLength(1)
+    // display name search: "Dịch thuật"
+    expect(filterUsageRecords(mockRecords, 'Dịch thuật')).toHaveLength(1)
+    expect(filterUsageRecords(mockRecords, 'dịch thuật')).toHaveLength(1)
+    // display name search: "Copilot"
+    expect(filterUsageRecords(mockRecords, 'Copilot')).toHaveLength(1)
   })
 })

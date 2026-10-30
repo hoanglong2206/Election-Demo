@@ -282,7 +282,7 @@ export class STTJobQueue {
         audioPayload = encodeWavBlob(job.audioBuffer, 16000)
       }
 
-      const result = await transcribeAudio(audioPayload, engineId, lang, job.prompt, job.sessionId)
+      const result = await transcribeAudio(audioPayload, engineId, lang, job.prompt, job.sessionId, job.feature)
 
       const inferenceTime = result.inferenceMs || result.latencyMs || Math.round(performance.now() - execStartTime)
       const totalTime = waitTime + inferenceTime

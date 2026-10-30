@@ -1,4 +1,5 @@
 import type { AudioChunkLifecycleState, SpeechSegmentCloseReason } from '../../../core/audio/types'
+import type { AIUsageFeature } from '@/services/usage-tracker'
 
 export type { SpeechSegmentCloseReason }
 
@@ -49,6 +50,7 @@ export interface STTJob {
   closeReason?: SpeechSegmentCloseReason
   continuation?: boolean
   endOfSpeechTimestampMs?: number
+  feature?: AIUsageFeature
 }
 
 /**

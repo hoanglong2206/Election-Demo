@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { cn } from '@/lib/utils'
 import type { UsageRecord } from '@/services/usage-tracker'
-import { FEATURE_NAMES } from '../../types'
+import { getFeatureDisplayName } from '../../types'
 import { useUsageLogsFilter } from '../../hooks/useUsageLogsFilter'
 
 export interface RecentUsageLogsTableProps {
@@ -49,7 +49,7 @@ export function RecentUsageLogsTable({ records: initialRecords }: RecentUsageLog
       { value: 'all', label: 'Tất cả Tính năng' },
       ...uniqueFeatures.map((f) => ({
         value: f,
-        label: (FEATURE_NAMES as any)[f] || f,
+        label: getFeatureDisplayName(f),
       })),
     ]
   }, [uniqueFeatures])
@@ -68,13 +68,13 @@ export function RecentUsageLogsTable({ records: initialRecords }: RecentUsageLog
           </div>
           <div>
             <CardTitle className="text-[13px] text-white/90 font-semibold flex items-center gap-2">
-              <span>Nhật Ký Yêu Cầu API (API Usage Logs)</span>
+              <span>Lịch Sử Sử Dụng AI</span>
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 border font-mono bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
                 {filteredRecords.length} / {totalCount} bản ghi
               </Badge>
             </CardTitle>
             <p className="text-[10px] text-white/40 mt-0.5">
-              Danh sách chi tiết từng request AI/STT, lượng token và chi phí ước tính thời gian thực
+              Danh sách chi tiết từng lần gọi tính năng AI/STT, lượng token và chi phí ước tính thời gian thực
             </p>
           </div>
         </div>
@@ -87,7 +87,7 @@ export function RecentUsageLogsTable({ records: initialRecords }: RecentUsageLog
             <Search className="w-3 h-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-white/30" />
             <input
               type="text"
-              placeholder="Tìm theo model..."
+              placeholder="Tìm theo model, tính năng, nhà cung cấp..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-black/40 border border-white/10 rounded-lg pl-7 pr-2 py-1 text-[10.5px] text-white placeholder:text-white/30 focus:outline-none focus:border-cyan-400 transition-colors"
@@ -140,13 +140,13 @@ export function RecentUsageLogsTable({ records: initialRecords }: RecentUsageLog
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-white/40 text-xs">
                       {records.length === 0
-                        ? 'Chưa có nhật ký yêu cầu API nào. Hãy bắt đầu phiên làm việc để ghi nhận.'
+                        ? 'Chưa có lịch sử sử dụng AI nào. Hãy bắt đầu phiên làm việc để ghi nhận.'
                         : 'Không tìm thấy kết quả phù hợp với bộ lọc.'}
                     </td>
                   </tr>
                 ) : (
                   filteredRecords.map((r) => {
-                    const featName = (FEATURE_NAMES as any)[r.feature] || r.feature
+                    const featName = getFeatureDisplayName(r.feature)
                     return (
                       <tr
                         key={r.id}

@@ -16,6 +16,7 @@ import { settingsManager } from '../settings'
 export * from './model-registry'
 import { modelRegistryService, type DiscoveredModel } from './model-registry'
 import { credentialsPort, whisperPort } from '@/infrastructure/ipc'
+import { usageTrackerService } from '../usage-tracker'
 
 /**
  * Synchronize and cache local STT models scanned dynamically from resources/models
@@ -434,6 +435,16 @@ export async function runAILatencyBenchmark(
         const tokensEstimate = outputTokens ?? Math.max(1, Math.round(text.length / 4))
         const generationMs = res.benchmark?.generationMs ?? latency
         const tokensPerSec = Math.round((tokensEstimate / Math.max(1, generationMs)) * 1000)
+
+        try {
+          usageTrackerService.trackUsage({
+            provider: res.provider || model.provider,
+            model: model.id,
+            feature: 'llm_latency_test',
+            inputTokens: res.usage?.inputTokens || Math.max(1, Math.round(benchmarkPrompt.length / 4)),
+            outputTokens: res.usage?.outputTokens || tokensEstimate,
+          })
+        } catch {}
 
         return {
           modelId: model.id,
