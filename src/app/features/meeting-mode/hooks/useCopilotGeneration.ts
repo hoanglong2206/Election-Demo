@@ -12,6 +12,7 @@ import {
 } from "../machines/copilotStateMachine";
 import { useStreamingAnswer } from "./useStreamingAnswer";
 import { generateDiscussionOptions } from "@/services/ai-model/copilot/discussion";
+import { shortenContent } from "@/services/ai-model/copilot/repetitionGuard";
 import {
   getSavedResponseLanguage,
   saveResponseLanguage,
@@ -67,7 +68,7 @@ export function useCopilotGeneration({
 
   const activeAnswerContent = customInterviewAnswer
     ? isShortened
-      ? customInterviewAnswer.shortContent
+      ? customInterviewAnswer.shortContent || shortenContent(customInterviewAnswer.content)
       : customInterviewAnswer.content
     : "";
 

@@ -38,6 +38,7 @@ import type { AnswerStrategyId } from "../../../../services/ai-model/strategy";
 import { answerStrategyRouter } from "../../../../services/ai-model/strategy";
 import { triggerLogManager } from "../../../../services/ai-model/intent";
 import { useVietnameseTranslation } from "@/hooks/useVietnameseTranslation";
+import { shortenContent } from "@/services/ai-model/copilot/repetitionGuard";
 import { VisualQuestionCard } from "../visual";
 import type {
   ScreenCaptureState,
@@ -273,11 +274,12 @@ export function CopilotSuggestionPane({
       ? Boolean(interviewAnswer)
       : discussionOptions.length > 0;
 
-  const activeAnswerContent = interviewAnswer
-    ? isShortened
-      ? interviewAnswer.shortContent
-      : interviewAnswer.content
-    : "";
+  const activeAnswerContent = useMemo(() => {
+    if (!interviewAnswer) return "";
+    return isShortened
+      ? interviewAnswer.shortContent || shortenContent(interviewAnswer.content)
+      : interviewAnswer.content;
+  }, [interviewAnswer, isShortened]);
 
   const confidence =
     mode === "interview"
@@ -298,8 +300,10 @@ export function CopilotSuggestionPane({
 
   const interviewTr = translations["interview"];
   const interviewShowingVi = Boolean(interviewTr?.text && interviewTr.showing);
-  const interviewDisplay = interviewShowingVi
-    ? interviewTr!.text!
+  const interviewDisplay = interviewShowingVi && interviewTr?.text
+    ? isShortened
+      ? shortenContent(interviewTr.text)
+      : interviewTr.text
     : activeAnswerContent;
 
   return (
@@ -1155,20 +1159,26 @@ export function CopilotSuggestionPane({
                       : "💬 Câu cuối là nội dung chia sẻ → Đề xuất các câu hỏi phản biện & làm rõ"}
                   </span>
                 </span>
-                <span className="font-mono text-emerald-300/70 shrink-0 whitespace-nowrap">
-                  ✨ {discussionOptions.length} phương án từ LLM
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isShortened && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      ⚡ Đang rút gọn
+                    </span>
+                  )}
+                  <span className="font-mono text-emerald-300/70 whitespace-nowrap">
+                    ✨ {discussionOptions.length} phương án từ LLM
+                  </span>
+                </div>
               </div>
 
               {discussionOptions.map((suggestion, idx) => {
                 const trKey = `opt-${suggestion.id}`;
                 const tr = translations[trKey];
                 const showingVi = Boolean(tr?.text && tr.showing);
-                const displayContent = showingVi
-                  ? tr!.text!
-                  : isShortened
-                    ? suggestion.content.split(".")[0] + "."
-                    : suggestion.content;
+                const rawContent = showingVi ? (tr?.text || suggestion.content) : suggestion.content;
+                const displayContent = isShortened
+                  ? shortenContent(rawContent)
+                  : rawContent;
 
                 return (
                   <div
@@ -1214,7 +1224,7 @@ export function CopilotSuggestionPane({
                         <button
                           type="button"
                           onClick={(e) =>
-                            onCopyOption(suggestion.content, suggestion.id, e)
+                            onCopyOption(displayContent, suggestion.id, e)
                           }
                           className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-white transition-all text-[9.5px] flex items-center gap-0.5"
                           title="Sao chép phương án này"
