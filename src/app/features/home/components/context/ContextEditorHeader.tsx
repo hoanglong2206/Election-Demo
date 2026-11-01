@@ -207,7 +207,7 @@ export function ContextEditorHeader({
             ))}
 
           {mode === 'interview' && (
-            <div className="flex items-center gap-1 text-[8.5px] font-mono whitespace-nowrap">
+            <div className="flex items-center gap-1 text-[8.5px] whitespace-nowrap">
               {currentModeTokens > 0 ? (
                 <Badge
                   variant="outline"
