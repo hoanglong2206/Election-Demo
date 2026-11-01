@@ -105,6 +105,7 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
             benchmarkResult={benchmarkResult}
             isBenchmarking={isBenchmarking}
             onRunBenchmark={handleRunBenchmark}
+            onViewChange={onViewChange}
             onOpenSettings={
               onViewChange ? () => onViewChange('settings') : undefined
             }

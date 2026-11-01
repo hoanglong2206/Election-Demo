@@ -8,6 +8,7 @@ import { AudioControlsToolbar } from './components/controls'
 import { STTPreviewPanel } from './components/stt-preview'
 import { PipelineStagesCard } from './components/pipeline'
 import { VADCalibrationModal } from './components/calibration'
+import { DualChannelReadinessCard } from './components/readiness'
 import { useAudioDeviceSelection, useAudioTestSTT } from './hooks'
 
 export function AudioTest({ onViewChange }: AudioTestProps = {}) {
@@ -186,6 +187,19 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
           )}
         </div>
       )}
+
+      {/* Pre-flight Dual-Channel Audio Readiness & Verification */}
+      <DualChannelReadinessCard
+        sourceType={sourceType}
+        setSourceType={setSourceType}
+        isCapturing={isAudioTestRecording}
+        isAudioDetected={isAudioTestRecording ? isAudioDetected : false}
+        db={isAudioTestRecording ? db : -60}
+        volume={isAudioTestRecording ? volume : 0}
+        startCapture={handleStartAudioTestCapture}
+        stopCapture={() => stopCapture('audio-test')}
+        onEnterMeeting={onViewChange ? () => onViewChange('meeting') : undefined}
+      />
 
       {/* Unified Studio Audio Console (Controls & Integrated Real-time Signal Monitor) */}
       <AudioControlsToolbar

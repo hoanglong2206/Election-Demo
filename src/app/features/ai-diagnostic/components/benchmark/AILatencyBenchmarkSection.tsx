@@ -10,6 +10,7 @@ import {
 import { BenchmarkMetricCards } from './BenchmarkMetricCards'
 import { BenchmarkPromptForm } from './BenchmarkPromptForm'
 import { BenchmarkResponseView } from './BenchmarkResponseView'
+import { TacticalAdviceCard } from './TacticalAdviceCard'
 
 export interface AILatencyBenchmarkSectionProps {
   currentModel: AIModelConfig
@@ -20,6 +21,15 @@ export interface AILatencyBenchmarkSectionProps {
   isBenchmarking: boolean
   onRunBenchmark: (modelId: string, customPrompt: string) => void
   onOpenSettings?: () => void
+  onViewChange?: (
+    view:
+      | 'home'
+      | 'meeting'
+      | 'audio-test'
+      | 'ai-diagnostic'
+      | 'history'
+      | 'settings'
+  ) => void
 }
 
 export function AILatencyBenchmarkSection({
@@ -30,6 +40,7 @@ export function AILatencyBenchmarkSection({
   benchmarkResult,
   isBenchmarking,
   onRunBenchmark,
+  onViewChange,
 }: AILatencyBenchmarkSectionProps) {
   const [selectedPromptId, setSelectedPromptId] = useState<string>('cap')
   const [customPrompt, setCustomPrompt] = useState<string>(
@@ -169,6 +180,14 @@ export function AILatencyBenchmarkSection({
 
       {/* 4 Real-time Metrics Cards */}
       <BenchmarkMetricCards benchmarkResult={benchmarkResult} />
+
+      {/* Tactical Recommendation & 1-Click Apply to Meeting */}
+      <TacticalAdviceCard
+        benchmarkResult={benchmarkResult}
+        selectedModelId={selectedModelId}
+        selectedModelName={currentModel.name}
+        onViewChange={onViewChange}
+      />
 
       {/* Preset Prompts Selector & Textarea Form */}
       <BenchmarkPromptForm
