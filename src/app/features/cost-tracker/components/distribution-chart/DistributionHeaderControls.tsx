@@ -17,15 +17,15 @@ export function DistributionHeaderControls({
   return (
     <div className="flex items-center gap-2 flex-wrap self-end md:self-auto">
       {/* Category Tabs */}
-      <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/[0.08] text-[10.5px]">
+      <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] text-[10.5px] shadow-inner backdrop-blur-md gap-1 shrink-0 select-none">
         <button
           type="button"
           onClick={() => onCategoryChange('provider')}
           className={cn(
-            'px-2.5 py-1 rounded-md transition-colors font-medium border',
+            'px-2.5 py-1 rounded-lg transition-all duration-200 font-medium border select-none cursor-pointer active:scale-[0.98]',
             category === 'provider'
-              ? 'bg-violet-600 text-white border-violet-500 shadow-sm'
-              : 'border-transparent text-white/50 hover:text-white'
+              ? 'bg-violet-600/30 text-violet-100 border-violet-500/40 shadow-sm shadow-violet-500/20 font-semibold'
+              : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
           )}
         >
           Nhà Cung Cấp
@@ -34,10 +34,10 @@ export function DistributionHeaderControls({
           type="button"
           onClick={() => onCategoryChange('model')}
           className={cn(
-            'px-2.5 py-1 rounded-md transition-colors font-medium border',
+            'px-2.5 py-1 rounded-lg transition-all duration-200 font-medium border select-none cursor-pointer active:scale-[0.98]',
             category === 'model'
-              ? 'bg-violet-600 text-white border-violet-500 shadow-sm'
-              : 'border-transparent text-white/50 hover:text-white'
+              ? 'bg-violet-600/30 text-violet-100 border-violet-500/40 shadow-sm shadow-violet-500/20 font-semibold'
+              : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
           )}
         >
           Mô Hình
@@ -46,10 +46,10 @@ export function DistributionHeaderControls({
           type="button"
           onClick={() => onCategoryChange('feature')}
           className={cn(
-            'px-2.5 py-1 rounded-md transition-colors font-medium border',
+            'px-2.5 py-1 rounded-lg transition-all duration-200 font-medium border select-none cursor-pointer active:scale-[0.98]',
             category === 'feature'
-              ? 'bg-violet-600 text-white border-violet-500 shadow-sm'
-              : 'border-transparent text-white/50 hover:text-white'
+              ? 'bg-violet-600/30 text-violet-100 border-violet-500/40 shadow-sm shadow-violet-500/20 font-semibold'
+              : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
           )}
         >
           Tính Năng
@@ -57,7 +57,7 @@ export function DistributionHeaderControls({
       </div>
 
       {/* Metric Selector */}
-      <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/[0.08] text-[10px]">
+      <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] text-[10px] shadow-inner backdrop-blur-md gap-1 shrink-0 select-none">
         <button
           type="button"
           onClick={() => onMetricChange('cost')}

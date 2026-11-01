@@ -2,15 +2,25 @@ import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { ChevronDown, Check, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+export type CustomSelectThemeColor =
+  | 'violet'
+  | 'cyan'
+  | 'emerald'
+  | 'amber'
+  | 'indigo'
+  | 'rose'
+  | 'default'
+
 export interface SelectOption {
   value: string
   label: string
   subLabel?: string
   badge?: string
   icon?: ReactNode
+  disabled?: boolean
 }
 
-interface CustomSelectProps {
+export interface CustomSelectProps {
   value: string
   onChange: (value: string) => void
   options: SelectOption[]
@@ -23,9 +33,81 @@ interface CustomSelectProps {
   menuClassName?: string
   align?: 'left' | 'right'
   icon?: ReactNode
-  themeColor?: 'violet' | 'cyan' | 'emerald'
+  themeColor?: CustomSelectThemeColor
+  size?: 'xs' | 'sm' | 'md'
+  id?: string
   title?: string
   ariaLabel?: string
+  headerNode?: ReactNode
+  footerNode?: ReactNode
+  customRenderOption?: (opt: SelectOption, isSelected: boolean) => ReactNode
+}
+
+const THEME_CLASSES: Record<
+  CustomSelectThemeColor,
+  {
+    activeBorder: string
+    chevronActive: string
+    itemActive: string
+    checkColor: string
+    focusBorder: string
+  }
+> = {
+  violet: {
+    activeBorder: 'border-violet-500/60 ring-2 ring-violet-500/25',
+    chevronActive: 'text-violet-400',
+    itemActive: 'bg-violet-600/25 text-violet-200 border-violet-500/35 font-medium border shadow-sm',
+    checkColor: 'text-violet-400',
+    focusBorder: 'focus:border-violet-400',
+  },
+  cyan: {
+    activeBorder: 'border-cyan-500/60 ring-2 ring-cyan-500/25',
+    chevronActive: 'text-cyan-400',
+    itemActive: 'bg-cyan-500/20 text-cyan-200 border-cyan-500/35 font-medium border shadow-sm',
+    checkColor: 'text-cyan-400',
+    focusBorder: 'focus:border-cyan-400',
+  },
+  emerald: {
+    activeBorder: 'border-emerald-500/60 ring-2 ring-emerald-500/25',
+    chevronActive: 'text-emerald-400',
+    itemActive: 'bg-emerald-500/20 text-emerald-200 border-emerald-500/35 font-medium border shadow-sm',
+    checkColor: 'text-emerald-400',
+    focusBorder: 'focus:border-emerald-400',
+  },
+  amber: {
+    activeBorder: 'border-amber-500/60 ring-2 ring-amber-500/25',
+    chevronActive: 'text-amber-400',
+    itemActive: 'bg-amber-500/20 text-amber-200 border-amber-500/35 font-medium border shadow-sm',
+    checkColor: 'text-amber-400',
+    focusBorder: 'focus:border-amber-400',
+  },
+  indigo: {
+    activeBorder: 'border-indigo-500/60 ring-2 ring-indigo-500/25',
+    chevronActive: 'text-indigo-400',
+    itemActive: 'bg-indigo-600/25 text-indigo-200 border-indigo-500/35 font-medium border shadow-sm',
+    checkColor: 'text-indigo-400',
+    focusBorder: 'focus:border-indigo-400',
+  },
+  rose: {
+    activeBorder: 'border-rose-500/60 ring-2 ring-rose-500/25',
+    chevronActive: 'text-rose-400',
+    itemActive: 'bg-rose-500/20 text-rose-200 border-rose-500/35 font-medium border shadow-sm',
+    checkColor: 'text-rose-400',
+    focusBorder: 'focus:border-rose-400',
+  },
+  default: {
+    activeBorder: 'border-white/40 ring-2 ring-white/15',
+    chevronActive: 'text-white',
+    itemActive: 'bg-white/15 text-white border-white/25 font-medium border shadow-sm',
+    checkColor: 'text-white',
+    focusBorder: 'focus:border-white/40',
+  },
+}
+
+const SIZE_TRIGGER_CLASSES = {
+  xs: 'h-6 px-2 py-0.5 text-[10px] rounded-md gap-1.5',
+  sm: 'h-7 px-2.5 py-1 text-[10.5px] rounded-lg gap-2',
+  md: 'h-9 px-3 py-1.5 text-xs rounded-xl gap-2.5',
 }
 
 export function CustomSelect({
@@ -42,8 +124,13 @@ export function CustomSelect({
   align = 'left',
   icon,
   themeColor = 'violet',
+  size = 'sm',
+  id,
   title,
   ariaLabel,
+  headerNode,
+  footerNode,
+  customRenderOption,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -65,7 +152,7 @@ export function CustomSelect({
     }
   }, [isOpen, searchable])
 
-  // Click outside to close
+  // Click outside and keyboard handling
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -104,56 +191,41 @@ export function CustomSelect({
     )
   }, [options, searchQuery])
 
-  // Color theme classes
-  const themeClasses = {
-    violet: {
-      activeBorder: 'border-violet-500/60 ring-2 ring-violet-500/20',
-      itemActive: 'bg-violet-600/25 text-violet-200 border-violet-500/30',
-      checkColor: 'text-violet-400',
-      focusBorder: 'focus:border-violet-400',
-    },
-    cyan: {
-      activeBorder: 'border-cyan-500/60 ring-2 ring-cyan-500/20',
-      itemActive: 'bg-cyan-500/20 text-cyan-200 border-cyan-500/30',
-      checkColor: 'text-cyan-400',
-      focusBorder: 'focus:border-cyan-400',
-    },
-    emerald: {
-      activeBorder: 'border-emerald-500/60 ring-2 ring-emerald-500/20',
-      itemActive: 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30',
-      checkColor: 'text-emerald-400',
-      focusBorder: 'focus:border-emerald-400',
-    },
-  }[themeColor]
+  const themeClasses = THEME_CLASSES[themeColor] || THEME_CLASSES.violet
+  const sizeClasses = SIZE_TRIGGER_CLASSES[size] || SIZE_TRIGGER_CLASSES.sm
 
   return (
     <div ref={containerRef} className={cn('relative inline-block w-full', className)}>
       {/* Trigger Button */}
       <button
+        id={id}
         type="button"
         title={title}
         aria-label={ariaLabel || title}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={cn(
-          'w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-all select-none',
-          'bg-black/50 border border-white/15 text-white shadow-inner',
-          'hover:bg-white/[0.06] hover:border-white/25',
-          triggerClassName,
+          'w-full flex items-center justify-between text-left transition-all duration-200 select-none cursor-pointer',
+          'bg-black/50 border border-white/10 text-white shadow-inner font-medium',
+          'hover:bg-white/[0.07] hover:border-white/25 active:scale-[0.99]',
+          sizeClasses,
           isOpen && themeClasses.activeBorder,
-          disabled && 'opacity-40 cursor-not-allowed hover:bg-black/50 hover:border-white/15'
+          disabled && 'opacity-40 cursor-not-allowed hover:bg-black/50 hover:border-white/10 active:scale-100',
+          triggerClassName
         )}
       >
-        <div className="flex items-center gap-1.5 min-w-0 truncate">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
           {icon && <span className="shrink-0 flex items-center text-white/60">{icon}</span>}
           {selectedOption ? (
-            <span className="truncate text-white/90">
+            <span className="truncate text-white/95 flex items-center gap-1.5 min-w-0">
               {selectedOption.badge && (
-                <span className="mr-1.5 px-1.5 py-0.2 rounded text-[9px] font-mono bg-white/10 text-white/70 border border-white/10">
+                <span className="shrink-0 px-1.5 py-0.2 rounded text-[9px] font-mono bg-white/10 text-white/70 border border-white/10">
                   {selectedOption.badge}
                 </span>
               )}
-              {selectedOption.label}
+              <span className="truncate">{selectedOption.label}</span>
             </span>
           ) : (
             <span className="text-white/40 truncate">{placeholder}</span>
@@ -162,8 +234,8 @@ export function CustomSelect({
 
         <ChevronDown
           className={cn(
-            'w-3.5 h-3.5 text-white/50 shrink-0 transition-transform duration-200',
-            isOpen && 'rotate-180 text-white'
+            'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
+            isOpen && cn('rotate-180', themeClasses.chevronActive)
           )}
         />
       </button>
@@ -171,14 +243,18 @@ export function CustomSelect({
       {/* Popover Menu */}
       {isOpen && (
         <div
+          role="listbox"
           className={cn(
             'absolute top-full mt-1.5 z-50 min-w-[200px] w-full max-w-[360px]',
             align === 'right' ? 'right-0' : 'left-0',
-            'bg-[#0d111c]/95 backdrop-blur-2xl border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.08)]',
-            'p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100',
+            'bg-[#0c101d]/95 backdrop-blur-2xl border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)]',
+            'p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out',
             menuClassName
           )}
         >
+          {/* Header Node (Optional) */}
+          {headerNode && <div className="border-b border-white/[0.08] mb-1">{headerNode}</div>}
+
           {/* Search Box if enabled */}
           {searchable && (
             <div className="p-1 border-b border-white/[0.08] mb-1">
@@ -218,19 +294,41 @@ export function CustomSelect({
             ) : (
               filteredOptions.map((opt) => {
                 const isSelected = opt.value === value
+                if (customRenderOption) {
+                  return (
+                    <div
+                      key={opt.value}
+                      onClick={() => {
+                        if (!opt.disabled) {
+                          onChange(opt.value)
+                          setIsOpen(false)
+                        }
+                      }}
+                    >
+                      {customRenderOption(opt, isSelected)}
+                    </div>
+                  )
+                }
+
                 return (
                   <button
                     key={opt.value}
                     type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    disabled={opt.disabled}
                     onClick={() => {
-                      onChange(opt.value)
-                      setIsOpen(false)
+                      if (!opt.disabled) {
+                        onChange(opt.value)
+                        setIsOpen(false)
+                      }
                     }}
                     className={cn(
-                      'w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-all',
+                      'w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-all duration-150 cursor-pointer',
                       isSelected
-                        ? cn(themeClasses.itemActive, 'font-medium border shadow-sm')
-                        : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
+                        ? themeClasses.itemActive
+                        : 'text-white/80 hover:bg-white/[0.08] hover:text-white',
+                      opt.disabled && 'opacity-40 cursor-not-allowed hover:bg-transparent'
                     )}
                   >
                     <div className="flex items-center gap-2 min-w-0 truncate">
@@ -241,7 +339,7 @@ export function CustomSelect({
                         </span>
                       )}
                       <div className="min-w-0 truncate flex flex-col">
-                        <span className="truncate text-[11.5px]">{opt.label}</span>
+                        <span className="truncate text-[11px]">{opt.label}</span>
                         {opt.subLabel && (
                           <span className="text-[9.5px] text-white/40 font-mono truncate">
                             {opt.subLabel}
@@ -258,6 +356,9 @@ export function CustomSelect({
               })
             )}
           </div>
+
+          {/* Footer Node (Optional) */}
+          {footerNode && <div className="border-t border-white/[0.08] mt-1 pt-1">{footerNode}</div>}
         </div>
       )}
     </div>

@@ -450,17 +450,17 @@ export function CopilotSuggestionPane({
           {/* Trigger Mode Selector (Auto / Semi / Manual) */}
           {triggerMode && onTriggerModeChange && (
             <div
-              className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 text-[9px]"
+              className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9px] select-none"
               title="Chế độ kích hoạt Copilot (Auto: Tự động khi có câu hỏi | Semi: Báo câu hỏi & bấm để gợi ý | Manual: Chỉ gợi ý khi bấm thủ công)"
             >
               <button
                 type="button"
                 onClick={() => onTriggerModeChange("auto")}
                 className={cn(
-                  "px-1.5 py-0.5 rounded font-semibold transition-all",
+                  "px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
                   triggerMode === "auto"
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-white/40 hover:text-white",
+                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(124,58,237,0.35)]"
+                    : "text-white/45 hover:text-white hover:bg-white/[0.05]",
                 )}
               >
                 Auto
@@ -469,10 +469,10 @@ export function CopilotSuggestionPane({
                 type="button"
                 onClick={() => onTriggerModeChange("semi-auto")}
                 className={cn(
-                  "px-1.5 py-0.5 rounded font-semibold transition-all",
+                  "px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
                   triggerMode === "semi-auto"
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-white/40 hover:text-white",
+                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(124,58,237,0.35)]"
+                    : "text-white/45 hover:text-white hover:bg-white/[0.05]",
                 )}
               >
                 Semi
@@ -481,10 +481,10 @@ export function CopilotSuggestionPane({
                 type="button"
                 onClick={() => onTriggerModeChange("manual")}
                 className={cn(
-                  "px-1.5 py-0.5 rounded font-semibold transition-all",
+                  "px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
                   triggerMode === "manual"
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-white/40 hover:text-white",
+                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(124,58,237,0.35)]"
+                    : "text-white/45 hover:text-white hover:bg-white/[0.05]",
                 )}
               >
                 Manual
@@ -697,7 +697,7 @@ export function CopilotSuggestionPane({
             <button
               type="button"
               onClick={() => setIsLogOpen(false)}
-              className="text-white/40 hover:text-white"
+              className="text-white/45 hover:text-white hover:bg-white/[0.05]"
             >
               ✕
             </button>

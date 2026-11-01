@@ -13,12 +13,12 @@ export function SidebarModePills({
   totalCount,
 }: SidebarModePillsProps) {
   return (
-    <div className="flex items-center gap-1 bg-black/30 p-0.5 rounded-lg border border-white/[0.05]">
+    <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md select-none">
       <button
         type="button"
         onClick={() => onModeFilterChange('all')}
         className={cn(
-          'flex-1 py-0.5 text-[10px] rounded-md transition-colors text-center font-medium',
+          'flex-1 py-1 px-2 text-[10px] rounded-lg transition-all duration-200 text-center font-medium border cursor-pointer select-none active:scale-[0.98]',
           modeFilter === 'all'
             ? 'bg-white/10 text-white shadow-sm'
             : 'text-white/40 hover:text-white/70'
@@ -30,7 +30,7 @@ export function SidebarModePills({
         type="button"
         onClick={() => onModeFilterChange('interview')}
         className={cn(
-          'flex-1 py-0.5 text-[10px] rounded-md transition-colors text-center font-medium',
+          'flex-1 py-1 px-2 text-[10px] rounded-lg transition-all duration-200 text-center font-medium border cursor-pointer select-none active:scale-[0.98]',
           modeFilter === 'interview'
             ? 'bg-violet-500/20 text-violet-300'
             : 'text-white/40 hover:text-white/70'
@@ -42,7 +42,7 @@ export function SidebarModePills({
         type="button"
         onClick={() => onModeFilterChange('discussion')}
         className={cn(
-          'flex-1 py-0.5 text-[10px] rounded-md transition-colors text-center font-medium',
+          'flex-1 py-1 px-2 text-[10px] rounded-lg transition-all duration-200 text-center font-medium border cursor-pointer select-none active:scale-[0.98]',
           modeFilter === 'discussion'
             ? 'bg-indigo-500/20 text-indigo-300'
             : 'text-white/40 hover:text-white/70'

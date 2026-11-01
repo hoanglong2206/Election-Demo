@@ -52,20 +52,20 @@ export function AIDiagnosticHeader({
 
         {/* Tab Switcher & Settings Shortcut */}
         <div className="flex items-center gap-2 justify-between w-full">
-          <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shrink-0 shadow-inner">
+          <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shrink-0 shadow-inner backdrop-blur-md gap-1 select-none">
             <button
               type="button"
               id="tab-diag-llm"
               onClick={() => setActiveTab('llm-speed')}
               className={cn(
-                'h-7 px-3 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap',
+                'h-7 px-3 rounded-lg text-[11px] font-medium transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap border cursor-pointer active:scale-[0.98]',
                 activeTab === 'llm-speed'
-                  ? 'bg-amber-600/30 text-amber-200 border border-amber-500/40 shadow-sm font-semibold'
-                  : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04] border border-transparent'
+                  ? 'bg-amber-500/25 text-amber-100 border-amber-500/40 shadow-sm shadow-amber-500/20 font-semibold backdrop-blur-sm'
+                  : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
               )}
               title="Chuyên kiểm tra tốc độ phản hồi và benchmark token/s của mô hình LLM"
             >
-              <Zap className="w-3.5 h-3.5" />
+              <Zap className={cn('w-3.5 h-3.5 transition-colors duration-200', activeTab === 'llm-speed' ? 'text-amber-300' : 'text-white/40')} />
               <span>Đo Tốc Độ AI (LLM)</span>
             </button>
 
@@ -74,14 +74,14 @@ export function AIDiagnosticHeader({
               id="tab-diag-vision"
               onClick={() => setActiveTab('vision-capture')}
               className={cn(
-                'h-7 px-3 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap',
+                'h-7 px-3 rounded-lg text-[11px] font-medium transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap border cursor-pointer active:scale-[0.98]',
                 activeTab === 'vision-capture'
-                  ? 'bg-emerald-600/30 text-emerald-200 border border-emerald-500/40 shadow-sm font-semibold'
-                  : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04] border border-transparent'
+                  ? 'bg-emerald-500/25 text-emerald-100 border-emerald-500/40 shadow-sm shadow-emerald-500/20 font-semibold backdrop-blur-sm'
+                  : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
               )}
               title="Chuyên kiểm tra chụp màn hình, cắt vùng crop và phân tích bài toán bằng Vision"
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className={cn('w-3.5 h-3.5 transition-colors duration-200', activeTab === 'vision-capture' ? 'text-emerald-300' : 'text-white/40')} />
               <span>Chụp Màn Hình & Vision</span>
             </button>
           </div>

@@ -144,31 +144,31 @@ export function ProfileImportExportDialog({
             </button>
           </div>
 
-          <div className="flex items-center gap-2 mt-2.5">
+          <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md select-none mt-3">
             <button
               type="button"
               onClick={() => setTab('export')}
               className={cn(
-                'px-3 py-1 rounded text-[11px] font-medium transition-all flex items-center gap-1.5',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 border cursor-pointer select-none active:scale-[0.98]',
                 tab === 'export'
-                  ? 'bg-violet-600 text-white shadow-sm'
-                  : 'text-white/40 hover:text-white/80 bg-black/30'
+                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-violet-400/30 shadow-[0_2px_10px_rgba(124,58,237,0.35)]'
+                  : 'text-white/50 border-transparent hover:text-white/90 hover:bg-white/[0.05]'
               )}
             >
-              <Download className="w-3 h-3" />
+              <Download className="w-3.5 h-3.5" />
               <span>Xuất file (Export)</span>
             </button>
             <button
               type="button"
               onClick={() => setTab('import')}
               className={cn(
-                'px-3 py-1 rounded text-[11px] font-medium transition-all flex items-center gap-1.5',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 border cursor-pointer select-none active:scale-[0.98]',
                 tab === 'import'
-                  ? 'bg-violet-600 text-white shadow-sm'
-                  : 'text-white/40 hover:text-white/80 bg-black/30'
+                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-violet-400/30 shadow-[0_2px_10px_rgba(124,58,237,0.35)]'
+                  : 'text-white/50 border-transparent hover:text-white/90 hover:bg-white/[0.05]'
               )}
             >
-              <Upload className="w-3 h-3" />
+              <Upload className="w-3.5 h-3.5" />
               <span>Nhập file (Import)</span>
             </button>
           </div>

@@ -40,19 +40,27 @@ export function AudioDeviceSelector({
         <button
           type="button"
           onClick={() => setIsAudioOpen(!isAudioOpen)}
-          className="w-full bg-black/60 hover:bg-black/80 border border-white/[0.1] hover:border-violet-500/40 rounded-xl px-3 py-2 text-[11px] text-left flex items-center justify-between transition-all"
+          aria-haspopup="listbox"
+          aria-expanded={isAudioOpen}
+          className={cn(
+            'w-full bg-black/50 hover:bg-black/70 border border-white/10 hover:border-violet-500/40 rounded-xl px-3 py-2 text-xs text-left flex items-center justify-between transition-all duration-200 cursor-pointer active:scale-[0.99] shadow-inner select-none',
+            isAudioOpen && 'border-violet-500/60 ring-2 ring-violet-500/25'
+          )}
         >
           <span className="font-medium text-white/90 truncate">{currentDevice.label}</span>
           <ChevronDown
             className={cn(
-              'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200',
+              'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
               isAudioOpen && 'rotate-180 text-violet-400'
             )}
           />
         </button>
 
         {isAudioOpen && (
-          <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1.5 space-y-1 animate-fade-in">
+          <div
+            role="listbox"
+            className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150 ease-out"
+          >
             {PRESET_AUDIO_DEVICES.map((d) => {
               const isSelected = d.deviceId === selectedDevice
               return (
@@ -71,10 +79,10 @@ export function AudioDeviceSelector({
                     }
                   }}
                   className={cn(
-                    'p-2 rounded-lg cursor-pointer transition-colors flex items-center justify-between text-[11px]',
+                    'p-2 rounded-lg cursor-pointer transition-all duration-150 flex items-center justify-between text-xs select-none',
                     isSelected
-                      ? 'bg-violet-600/20 text-white font-medium border border-violet-500/30'
-                      : 'hover:bg-white/[0.06] text-white/75'
+                      ? 'bg-violet-600/25 text-white font-medium border border-violet-500/35 shadow-sm'
+                      : 'hover:bg-white/[0.08] text-white/80'
                   )}
                 >
                   <span className="truncate pr-2">{d.label}</span>

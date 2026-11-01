@@ -100,20 +100,20 @@ export function ContextEditorHeader({
         {/* Center: Mode Switcher */}
         {onModeChange ? (
           <div className="flex items-center justify-center">
-            <div className="h-7 flex items-center bg-black/60 p-0.5 rounded-lg border border-white/10 shadow-inner shrink-0">
+            <div className="h-7 flex items-center bg-black/50 p-0.5 rounded-xl border border-white/[0.08] shadow-inner shrink-0 backdrop-blur-md">
               <button
                 type="button"
                 id="btn-mode-tab-interview"
                 onClick={() => onModeChange('interview')}
                 className={cn(
-                  'h-full w-[84px] flex items-center justify-center gap-1.5 rounded-md text-[10px] font-medium transition-all duration-200 select-none whitespace-nowrap',
+                  'h-full px-3 flex items-center justify-center gap-1.5 rounded-lg text-[10px] font-medium transition-all duration-200 select-none whitespace-nowrap cursor-pointer active:scale-[0.98]',
                   mode === 'interview'
-                    ? 'bg-violet-600 text-white shadow-[0_0_12px_rgba(139,92,246,0.35)] font-semibold'
-                    : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04]'
+                    ? 'bg-violet-600/35 text-violet-100 border border-violet-500/40 shadow-sm shadow-violet-500/25 font-semibold backdrop-blur-sm'
+                    : 'border border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
                 )}
                 title="Chế độ Phỏng vấn: Nạp CV & JD để AI đóng vai ứng viên"
               >
-                <UserCheck className="w-2.5 h-2.5 shrink-0" />
+                <UserCheck className={cn('w-3 h-3 shrink-0 transition-colors duration-200', mode === 'interview' ? 'text-violet-300' : 'text-white/40')} />
                 <span>Phỏng vấn</span>
               </button>
               <button
@@ -121,14 +121,14 @@ export function ContextEditorHeader({
                 id="btn-mode-tab-discussion"
                 onClick={() => onModeChange('discussion')}
                 className={cn(
-                  'h-full w-[84px] flex items-center justify-center gap-1.5 rounded-md text-[10px] font-medium transition-all duration-200 select-none whitespace-nowrap',
+                  'h-full px-3 flex items-center justify-center gap-1.5 rounded-lg text-[10px] font-medium transition-all duration-200 select-none whitespace-nowrap cursor-pointer active:scale-[0.98]',
                   mode === 'discussion'
-                    ? 'bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.35)] font-semibold'
-                    : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04]'
+                    ? 'bg-indigo-600/35 text-indigo-100 border border-indigo-500/40 shadow-sm shadow-indigo-500/25 font-semibold backdrop-blur-sm'
+                    : 'border border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
                 )}
                 title="Chế độ Thảo luận: Điền chủ đề, bài toán kiến trúc cuộc họp"
               >
-                <Brain className="w-2.5 h-2.5 shrink-0" />
+                <Brain className={cn('w-3 h-3 shrink-0 transition-colors duration-200', mode === 'discussion' ? 'text-indigo-300' : 'text-white/40')} />
                 <span>Thảo luận</span>
               </button>
             </div>

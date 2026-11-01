@@ -134,26 +134,28 @@ export function CostTrackerHeader({
 
       {/* Navigation Tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-1 border-t border-white/[0.06] custom-scrollbar">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const isActive = currentTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onTabChange(tab.id)}
-              className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 border select-none',
-                isActive
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
-                  : 'bg-white/[0.02] text-white/50 border-transparent hover:text-white hover:bg-white/[0.06]'
-              )}
-            >
-              <Icon className={cn('w-3.5 h-3.5', isActive ? 'text-emerald-400' : 'text-white/40')} />
-              <span>{tab.label}</span>
-            </button>
-          )
-        })}
+        <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner shrink-0 select-none backdrop-blur-md gap-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const isActive = currentTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 shrink-0 border select-none cursor-pointer active:scale-[0.98]',
+                  isActive
+                    ? 'bg-emerald-500/25 text-emerald-100 border-emerald-500/40 shadow-sm shadow-emerald-500/20 font-semibold backdrop-blur-sm'
+                    : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
+                )}
+              >
+                <Icon className={cn('w-3.5 h-3.5 transition-colors duration-200', isActive ? 'text-emerald-300' : 'text-white/40')} />
+                <span>{tab.label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

@@ -118,12 +118,12 @@ export function ProfilePresetBar({
             )}
           </div>
 
-          <ChevronDown className={cn('w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200', dropdownOpen && 'rotate-180')} />
+          <ChevronDown className={cn('w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out', dropdownOpen && 'rotate-180 text-violet-400')} />
         </button>
 
         {/* Dropdown Menu */}
         {dropdownOpen && (
-          <div className="absolute left-0 top-full mt-1.5 w-[260px] sm:w-[280px] max-h-64 bg-zinc-950/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-xl z-50 overflow-hidden flex flex-col animate-fade-in text-[11px]">
+          <div className="absolute left-0 top-full mt-1.5 w-[260px] sm:w-[280px] max-h-64 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 ease-out text-[11px]">
             <div className="p-2 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
               <span className="text-[10px] font-medium text-white/60 flex items-center gap-1.5 min-w-0 truncate">
                 <Layers className="w-3.5 h-3.5 text-violet-400 shrink-0" />
@@ -290,7 +290,7 @@ export function ProfilePresetBar({
             </Button>
 
             {moreMenuOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-52 bg-zinc-950/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-xl z-50 overflow-hidden flex flex-col animate-fade-in p-1 text-[11px]">
+              <div className="absolute right-0 top-full mt-1.5 w-52 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 ease-out p-1 text-[11px]">
                 <div className="px-2.5 py-1.5 text-[10px] font-medium text-white/50 border-b border-white/[0.06] mb-0.5 truncate">
                   Tùy chọn: {activeProfile.name}
                 </div>

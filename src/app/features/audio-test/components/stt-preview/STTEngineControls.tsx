@@ -54,7 +54,12 @@ export function STTEngineControls({
         <button
           type="button"
           onClick={() => setIsSTTMenuOpen(!isSTTMenuOpen)}
-          className="h-6 px-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-md text-[10px] text-emerald-300 font-medium flex items-center gap-1 transition-all"
+          aria-haspopup="listbox"
+          aria-expanded={isSTTMenuOpen}
+          className={cn(
+            'h-7 px-2.5 bg-black/50 hover:bg-black/70 border border-emerald-500/30 hover:border-emerald-500/50 rounded-lg text-[10.5px] text-emerald-300 font-medium flex items-center gap-1.5 transition-all duration-200 active:scale-[0.99] shadow-inner select-none cursor-pointer',
+            isSTTMenuOpen && 'border-emerald-500/60 ring-2 ring-emerald-500/25'
+          )}
           title="Chọn mô hình STT đang sử dụng"
         >
           <Cpu className="w-3 h-3 text-emerald-400 shrink-0" />
@@ -63,14 +68,17 @@ export function STTEngineControls({
           </span>
           <ChevronDown
             className={cn(
-              'w-2.5 h-2.5 text-emerald-400 shrink-0 transition-transform duration-200',
-              isSTTMenuOpen && 'rotate-180'
+              'w-3 h-3 text-emerald-400 shrink-0 transition-transform duration-200 ease-out',
+              isSTTMenuOpen && 'rotate-180 text-emerald-300'
             )}
           />
         </button>
 
         {isSTTMenuOpen && (
-          <div className="absolute right-0 top-full mt-1.5 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1 min-w-[240px] space-y-0.5 animate-fade-in">
+          <div
+            role="listbox"
+            className="absolute right-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1 min-w-[240px] space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out"
+          >
             <div className="px-2 py-1 text-[9px] font-semibold text-white/40 uppercase tracking-wider">
               Mô hình STT nhận diện:
             </div>
@@ -86,10 +94,10 @@ export function STTEngineControls({
                     setIsSTTMenuOpen(false)
                   }}
                   className={cn(
-                    'px-2 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center justify-between text-[10.5px]',
+                    'px-2.5 py-1.5 rounded-lg cursor-pointer transition-all duration-150 flex items-center justify-between text-xs select-none',
                     isSelected
-                      ? 'bg-emerald-600/20 text-white border border-emerald-500/30'
-                      : 'hover:bg-white/[0.06] text-white/75'
+                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/35 font-medium shadow-sm'
+                      : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                   )}
                 >
                   <div className="min-w-0 pr-1">
@@ -113,7 +121,12 @@ export function STTEngineControls({
         <button
           type="button"
           onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
-          className="h-6 px-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-md text-[10px] text-emerald-300 font-medium flex items-center gap-1 transition-all"
+          aria-haspopup="listbox"
+          aria-expanded={isLangMenuOpen}
+          className={cn(
+            'h-7 px-2.5 bg-black/50 hover:bg-black/70 border border-emerald-500/30 hover:border-emerald-500/50 rounded-lg text-[10.5px] text-emerald-300 font-medium flex items-center gap-1.5 transition-all duration-200 active:scale-[0.99] shadow-inner select-none cursor-pointer',
+            isLangMenuOpen && 'border-emerald-500/60 ring-2 ring-emerald-500/25'
+          )}
           title="Chọn ngôn ngữ âm thanh đầu vào"
         >
           <Globe className="w-3 h-3 text-emerald-400 shrink-0" />
@@ -122,14 +135,17 @@ export function STTEngineControls({
           </span>
           <ChevronDown
             className={cn(
-              'w-2.5 h-2.5 text-emerald-400 shrink-0 transition-transform duration-200',
-              isLangMenuOpen && 'rotate-180'
+              'w-3 h-3 text-emerald-400 shrink-0 transition-transform duration-200 ease-out',
+              isLangMenuOpen && 'rotate-180 text-emerald-300'
             )}
           />
         </button>
 
         {isLangMenuOpen && (
-          <div className="absolute right-0 top-full mt-1.5 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1 min-w-[230px] space-y-0.5 animate-fade-in">
+          <div
+            role="listbox"
+            className="absolute right-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1 min-w-[230px] space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out"
+          >
             <div className="px-2 py-1 text-[9px] font-semibold text-white/40 uppercase tracking-wider">
               Ngôn ngữ âm thanh:
             </div>
@@ -145,10 +161,10 @@ export function STTEngineControls({
                     setIsLangMenuOpen(false)
                   }}
                   className={cn(
-                    'px-2 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center justify-between text-[10.5px]',
+                    'px-2.5 py-1.5 rounded-lg cursor-pointer transition-all duration-150 flex items-center justify-between text-xs select-none',
                     isSelected
-                      ? 'bg-emerald-600/20 text-white border border-emerald-500/30'
-                      : 'hover:bg-white/[0.06] text-white/75'
+                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/35 font-medium shadow-sm'
+                      : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                   )}
                 >
                   <div className="min-w-0 pr-1">

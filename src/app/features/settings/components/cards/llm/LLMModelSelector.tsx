@@ -71,14 +71,17 @@ export function LLMModelSelector({
         </div>
         <ChevronDown
           className={cn(
-            'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200',
+            'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
             isLLMOpen && 'rotate-180 text-violet-400'
           )}
         />
       </button>
 
       {isLLMOpen && modelsList.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar space-y-1 animate-fade-in">
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar space-y-1 animate-in fade-in zoom-in-95 duration-150 ease-out"
+        >
           {modelsList.map((m) => {
             const isSelected = m.id === selectedLLM
             return (
@@ -97,10 +100,10 @@ export function LLMModelSelector({
                   }
                 }}
                 className={cn(
-                  'p-2 rounded-lg cursor-pointer transition-colors flex items-start justify-between gap-2',
+                  'p-2 rounded-lg cursor-pointer transition-all duration-150 flex items-start justify-between gap-2 select-none',
                   isSelected
-                    ? 'bg-violet-600/20 text-white border border-violet-500/30'
-                    : 'hover:bg-white/[0.06] text-white/75'
+                    ? 'bg-violet-600/25 text-white border border-violet-500/35 font-medium shadow-sm'
+                    : 'hover:bg-white/[0.08] text-white/80'
                 )}
               >
                 <div className="space-y-0.5 min-w-0 flex-1">

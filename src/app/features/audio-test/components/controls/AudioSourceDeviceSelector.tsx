@@ -96,8 +96,8 @@ export function AudioSourceDeviceSelector({
               >
                 <ChevronDown
                   className={cn(
-                    'w-3 h-3 transition-transform duration-200',
-                    isDeviceMenuOpen && 'rotate-180'
+                    'w-3.5 h-3.5 transition-transform duration-200 ease-out',
+                    isDeviceMenuOpen ? 'rotate-180 text-emerald-300' : 'text-emerald-400/80'
                   )}
                 />
               </span>
@@ -106,7 +106,10 @@ export function AudioSourceDeviceSelector({
 
           {/* Clean Microphone Selector Dropdown */}
           {isDeviceMenuOpen && (
-            <div className="absolute left-0 top-full mt-1.5 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1 min-w-[220px] max-w-[280px] space-y-0.5 animate-fade-in">
+            <div
+              role="listbox"
+              className="absolute left-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1 min-w-[220px] max-w-[280px] space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out"
+            >
               <div className="px-2 py-1 text-[9px] font-semibold text-white/40 uppercase tracking-wider flex items-center justify-between">
                 <span>Chọn Microphone</span>
                 <span className="text-[9px] text-white/20 font-mono">
@@ -122,10 +125,10 @@ export function AudioSourceDeviceSelector({
                     setIsDeviceMenuOpen(false)
                   }}
                   className={cn(
-                    'w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-colors',
+                    'w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-all duration-150 select-none cursor-pointer',
                     selectedDeviceId === dev.deviceId
-                      ? 'bg-emerald-500/20 text-emerald-200 font-medium'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/35 font-medium shadow-sm'
+                      : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                   )}
                 >
                   <span className="truncate">{dev.label}</span>

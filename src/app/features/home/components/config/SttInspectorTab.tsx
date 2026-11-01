@@ -39,7 +39,12 @@ export function SttInspectorTab({
           id="btn-select-stt-engine"
           type="button"
           onClick={onToggleSTTDropdown}
-          className="w-full bg-black/40 border border-white/[0.1] hover:border-cyan-500/50 rounded-lg px-2.5 py-1.5 text-[11px] text-white/90 flex items-center justify-between gap-1.5 transition-all text-left"
+          aria-haspopup="listbox"
+          aria-expanded={isSTTDropdownOpen}
+          className={cn(
+            'w-full bg-black/50 border border-white/10 hover:border-cyan-500/40 rounded-xl px-2.5 py-1.5 text-[11px] text-white/90 flex items-center justify-between gap-1.5 transition-all duration-200 text-left shadow-inner select-none cursor-pointer active:scale-[0.99]',
+            isSTTDropdownOpen && 'border-cyan-500/60 ring-2 ring-cyan-500/25'
+          )}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
             <Mic className="w-3 h-3 text-cyan-400 shrink-0" />
@@ -49,38 +54,42 @@ export function SttInspectorTab({
           </div>
           <ChevronDown
             className={cn(
-              'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200',
+              'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
               isSTTDropdownOpen && 'rotate-180 text-cyan-400'
             )}
           />
         </button>
 
         {isSTTDropdownOpen && (
-          <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in">
+          <div
+            role="listbox"
+            className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1 max-h-48 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150 ease-out space-y-0.5"
+          >
             {sttEngines.map((e) => {
               const isSelected = e.id === selectedSTTId
               return (
                 <div
                   key={e.id}
-                  role="button"
+                  role="option"
+                  aria-selected={isSelected}
                   tabIndex={0}
                   onClick={() => onSTTChange(e.id)}
                   onKeyDown={(ev) => ev.key === 'Enter' && onSTTChange(e.id)}
                   className={cn(
-                    'flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] cursor-pointer transition-colors',
+                    'flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150 select-none',
                     isSelected
-                      ? 'bg-cyan-500/20 text-cyan-300 font-medium'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      ? 'bg-cyan-500/20 text-cyan-200 font-medium border border-cyan-500/35 shadow-sm'
+                      : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                   )}
                   title={e.description}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="truncate block font-medium">{e.name}</span>
-                    <span className="text-[8px] px-1 py-0.2 rounded bg-white/5 text-white/40 shrink-0">
+                    <span className="text-[8px] px-1.5 py-0.2 rounded font-mono bg-white/10 text-white/60 border border-white/10 shrink-0">
                       {e.provider}
                     </span>
                   </div>
-                  {isSelected && <Check className="w-3 h-3 text-cyan-400 shrink-0" />}
+                  {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
                 </div>
               )
             })}

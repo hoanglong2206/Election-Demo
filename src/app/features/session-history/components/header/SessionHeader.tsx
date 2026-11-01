@@ -78,16 +78,29 @@ export function SessionHeader({
             <button
               type="button"
               onClick={() => setIsRetentionOpen(!isRetentionOpen)}
-              className="flex items-center gap-1.5 bg-black/40 hover:bg-black/60 border border-white/[0.08] hover:border-violet-500/30 text-white/60 hover:text-white px-2 py-1 rounded-lg text-[10.5px] transition-all"
+              aria-haspopup="listbox"
+              aria-expanded={isRetentionOpen}
+              className={cn(
+                'flex items-center gap-1.5 bg-black/50 hover:bg-black/70 border border-white/10 hover:border-violet-500/40 text-white/90 px-2.5 py-1.5 rounded-xl text-[10.5px] transition-all duration-200 active:scale-[0.99] shadow-inner select-none cursor-pointer',
+                isRetentionOpen && 'border-violet-500/60 ring-2 ring-violet-500/25'
+              )}
               title="Cấu hình thời gian tự động dọn dẹp các phiên họp cũ (Local Retention)"
             >
-              <Database className="w-3 h-3 text-cyan-400" />
+              <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span>Retention: {retentionDays === 0 ? 'Vĩnh viễn' : `${retentionDays}d`}</span>
-              <ChevronDown className="w-2.5 h-2.5 text-white/40" />
+              <ChevronDown
+                className={cn(
+                  'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
+                  isRetentionOpen && 'rotate-180 text-violet-400'
+                )}
+              />
             </button>
 
             {isRetentionOpen && (
-              <div className="absolute right-0 top-full mt-1.5 z-50 w-48 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1 space-y-0.5 animate-fade-in text-[10.5px]">
+              <div
+                role="listbox"
+                className="absolute right-0 top-full mt-1.5 z-50 w-48 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out text-[10.5px]"
+              >
                 <div className="px-2 py-1 text-[9.5px] font-semibold text-white/40 uppercase tracking-wider border-b border-white/5">
                   Thời gian lưu trữ cục bộ
                 </div>
@@ -100,10 +113,10 @@ export function SessionHeader({
                       setIsRetentionOpen(false)
                     }}
                     className={cn(
-                      'w-full p-1.5 rounded-lg text-left flex items-center justify-between transition-colors',
+                      'w-full px-2.5 py-1.5 rounded-lg text-left flex items-center justify-between transition-all duration-150 select-none cursor-pointer text-xs',
                       retentionDays === opt.days
-                        ? 'bg-violet-600/25 text-white font-medium'
-                        : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
+                        ? 'bg-violet-600/25 text-violet-200 border border-violet-500/35 font-medium shadow-sm'
+                        : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                     )}
                   >
                     <span>{opt.label}</span>

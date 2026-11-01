@@ -37,27 +37,27 @@ export function ContextEditorTabsBar({
     <div className="h-7 flex items-center justify-between gap-1.5 shrink-0 min-w-0">
       {mode === 'interview' ? (
         <>
-          <div className="flex items-center bg-black/45 p-0.5 rounded-lg border border-white/[0.08] shadow-inner min-w-0">
+          <div className="flex items-center bg-black/50 p-0.5 rounded-xl border border-white/[0.08] shadow-inner min-w-0 backdrop-blur-md">
             <button
               type="button"
               id="tab-cv"
               onClick={() => onInterviewTabChange('cv')}
               className={cn(
-                'px-2 py-0.5 rounded-md text-[10px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0',
+                'px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer border active:scale-[0.98]',
                 interviewTab === 'cv'
-                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md font-semibold'
-                  : 'text-white/50 hover:text-white/80 hover:bg-white/[0.04]'
+                  ? 'bg-gradient-to-r from-violet-600/35 to-indigo-600/35 text-violet-100 border-violet-500/40 shadow-sm shadow-violet-500/20 font-semibold backdrop-blur-sm'
+                  : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
               )}
             >
               <span
                 className={cn(
-                  'w-1.5 h-1.5 rounded-full shrink-0',
+                  'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
                   hasCV ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-white/25'
                 )}
               />
               <span>1. CV & Kinh Nghiệm</span>
               {cvTokens > 0 && (
-                <span className="text-[8.5px] px-1 py-0 rounded bg-black/30 font-mono opacity-85">
+                <span className="text-[8.5px] px-1 py-0 rounded bg-black/40 font-mono opacity-85 border border-white/5">
                   {cvTokens}
                 </span>
               )}
@@ -68,21 +68,21 @@ export function ContextEditorTabsBar({
               id="tab-jd"
               onClick={() => onInterviewTabChange('jd')}
               className={cn(
-                'px-2 py-0.5 rounded-md text-[10px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0',
+                'px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer border active:scale-[0.98]',
                 interviewTab === 'jd'
-                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md font-semibold'
-                  : 'text-white/50 hover:text-white/80 hover:bg-white/[0.04]'
+                  ? 'bg-gradient-to-r from-violet-600/35 to-indigo-600/35 text-violet-100 border-violet-500/40 shadow-sm shadow-violet-500/20 font-semibold backdrop-blur-sm'
+                  : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.06]'
               )}
             >
               <span
                 className={cn(
-                  'w-1.5 h-1.5 rounded-full shrink-0',
+                  'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
                   hasJD ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-white/25'
                 )}
               />
               <span>2. Mô Tả JD</span>
               {jdTokens > 0 && (
-                <span className="text-[8.5px] px-1 py-0 rounded bg-black/30 font-mono opacity-85">
+                <span className="text-[8.5px] px-1 py-0 rounded bg-black/40 font-mono opacity-85 border border-white/5">
                   {jdTokens}
                 </span>
               )}

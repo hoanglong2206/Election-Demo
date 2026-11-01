@@ -45,7 +45,12 @@ export function ModelInspectorTab({
               id="btn-select-ai-model"
               type="button"
               onClick={onToggleDropdown}
-              className="w-full bg-black/40 border border-white/[0.1] hover:border-violet-500/50 rounded-lg px-2.5 py-1.5 text-[11px] text-white/90 flex items-center justify-between gap-1.5 transition-all text-left"
+              aria-haspopup="listbox"
+              aria-expanded={isModelDropdownOpen}
+              className={cn(
+                'w-full bg-black/50 border border-white/10 hover:border-violet-500/40 rounded-xl px-2.5 py-1.5 text-[11px] text-white/90 flex items-center justify-between gap-1.5 transition-all duration-200 text-left shadow-inner select-none cursor-pointer active:scale-[0.99]',
+                isModelDropdownOpen && 'border-violet-500/60 ring-2 ring-violet-500/25'
+              )}
             >
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <Cpu className="w-3 h-3 text-violet-400 shrink-0" />
@@ -55,35 +60,39 @@ export function ModelInspectorTab({
               </div>
               <ChevronDown
                 className={cn(
-                  'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200',
+                  'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
                   isModelDropdownOpen && 'rotate-180 text-violet-400'
                 )}
               />
             </button>
 
             {isModelDropdownOpen && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in">
+              <div
+                role="listbox"
+                className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1 max-h-48 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150 ease-out space-y-0.5"
+              >
                 {aiModels.map((m) => {
                   const isSelected = m.id === selectedModelId
                   return (
                     <div
                       key={m.id}
-                      role="button"
+                      role="option"
+                      aria-selected={isSelected}
                       tabIndex={0}
                       onClick={() => onModelChange(m.id)}
                       onKeyDown={(e) => e.key === 'Enter' && onModelChange(m.id)}
                       className={cn(
-                        'flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] cursor-pointer transition-colors',
+                        'flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150 select-none',
                         isSelected
-                          ? 'bg-violet-500/20 text-violet-300 font-medium'
-                          : 'text-white/70 hover:bg-white/10 hover:text-white'
+                          ? 'bg-violet-600/25 text-violet-200 font-medium border border-violet-500/35 shadow-sm'
+                          : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                       )}
                       title={`${m.name} (${m.provider})`}
                     >
                       <span className="truncate pr-2 block">
                         {m.name} ({m.provider})
                       </span>
-                      {isSelected && <Check className="w-3 h-3 text-violet-400 shrink-0" />}
+                      {isSelected && <Check className="w-3.5 h-3.5 text-violet-400 shrink-0" />}
                     </div>
                   )
                 })}

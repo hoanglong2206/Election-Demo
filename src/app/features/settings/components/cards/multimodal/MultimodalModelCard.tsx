@@ -127,7 +127,7 @@ export function MultimodalModelCard({
             </div>
             <ChevronDown
               className={cn(
-                'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200',
+                'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
                 isOpen && 'rotate-180 text-amber-400'
               )}
             />
@@ -135,7 +135,10 @@ export function MultimodalModelCard({
 
           {/* Floating Menu */}
           {isOpen && (
-            <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d] border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar space-y-1 animate-fade-in">
+            <div
+              role="listbox"
+              className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar space-y-1 animate-in fade-in zoom-in-95 duration-150 ease-out"
+            >
               {!hasModels ? (
                 <div className="p-4 text-center text-white/50 text-[11px] space-y-1.5">
                   <p className="font-medium text-white/80">Danh sách mô hình Vision trống</p>

@@ -268,12 +268,12 @@ const totalLinesCount = validLines.length
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 text-[9.5px]">
+          <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9.5px] select-none">
           <button
             type="button"
             onClick={() => onSwitchSource('system')}
             className={cn(
-              'px-2 py-0.5 rounded font-medium flex items-center gap-1 transition-all',
+              'px-2 py-0.5 rounded-lg font-medium flex items-center gap-1 transition-all duration-150 cursor-pointer select-none active:scale-[0.98]',
               sourceType === 'system'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-white/45 hover:text-white'
@@ -287,7 +287,7 @@ const totalLinesCount = validLines.length
             type="button"
             onClick={() => onSwitchSource('mic')}
             className={cn(
-              'px-2 py-0.5 rounded font-medium flex items-center gap-1 transition-all',
+              'px-2 py-0.5 rounded-lg font-medium flex items-center gap-1 transition-all duration-150 cursor-pointer select-none active:scale-[0.98]',
               sourceType === 'mic'
                 ? 'bg-violet-600 text-white shadow-sm'
                 : 'text-white/45 hover:text-white'
@@ -300,17 +300,17 @@ const totalLinesCount = validLines.length
         </div>
           {/* STT Input Language Switcher */}
           <div
-            className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 text-[9px]"
+            className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9px] select-none"
             title="Ngôn ngữ giọng nói đầu vào (Chọn VI để chống nhảy sang tiếng Thái/Hàn/Trung khi dùng Whisper)"
           >
             <button
               type="button"
               onClick={() => onSttLangChange?.('vi')}
               className={cn(
-                'px-1.5 py-0.5 rounded font-semibold transition-all',
+                'px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]',
                 sttLang === 'vi'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-white/40 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]'
+                  : 'text-white/45 hover:text-white hover:bg-white/[0.05]'
               )}
               title="Khóa nhận diện Tiếng Việt (Whisper -l vi, chuẩn xác không bị lẫn tiếng nước ngoài)"
             >
@@ -320,10 +320,10 @@ const totalLinesCount = validLines.length
               type="button"
               onClick={() => onSttLangChange?.('en')}
               className={cn(
-                'px-1.5 py-0.5 rounded font-semibold transition-all',
+                'px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]',
                 sttLang === 'en'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-white/40 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]'
+                  : 'text-white/45 hover:text-white hover:bg-white/[0.05]'
               )}
               title="Khóa nhận diện Tiếng Anh (Whisper -l en)"
             >
@@ -333,10 +333,10 @@ const totalLinesCount = validLines.length
               type="button"
               onClick={() => onSttLangChange?.('auto')}
               className={cn(
-                'px-1.5 py-0.5 rounded font-semibold transition-all',
+                'px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]',
                 sttLang === 'auto'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-white/40 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]'
+                  : 'text-white/45 hover:text-white hover:bg-white/[0.05]'
               )}
               title="Tự động nhận diện ngôn ngữ (Whisper -l auto)"
             >

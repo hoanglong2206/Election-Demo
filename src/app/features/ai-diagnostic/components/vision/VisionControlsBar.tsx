@@ -153,24 +153,32 @@ export function VisionControlsBar({
                 return !prev
               })
             }}
-            className="h-7 px-2.5 rounded-lg bg-black/40 border border-white/10 hover:border-white/20 text-[11px] text-white/80 hover:text-white flex items-center gap-1.5 transition-colors"
+            aria-haspopup="listbox"
+            aria-expanded={isModelDropdownOpen}
+            className={cn(
+              'h-7 px-2.5 rounded-lg bg-black/50 hover:bg-black/70 border border-white/10 hover:border-emerald-500/40 text-[11px] text-white/90 flex items-center gap-1.5 transition-all duration-200 shadow-inner select-none cursor-pointer active:scale-[0.99]',
+              isModelDropdownOpen && 'border-emerald-500/60 ring-2 ring-emerald-500/25'
+            )}
           >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="max-w-[140px] truncate font-mono text-[10.5px]">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="max-w-[140px] truncate font-mono text-[10.5px] font-medium">
               {currentVisionModel?.displayName ||
                 currentVisionModel?.name ||
                 'Chọn Vision Model'}
             </span>
             <ChevronDown
               className={cn(
-                'w-3 h-3 text-white/40 transition-transform duration-200',
-                isModelDropdownOpen && 'rotate-180 text-white'
+                'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
+                isModelDropdownOpen && 'rotate-180 text-emerald-400'
               )}
             />
           </button>
 
           {isModelDropdownOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-64 max-h-60 overflow-y-auto rounded-xl bg-[#0d111c]/95 backdrop-blur-2xl border border-white/15 p-1 z-50 shadow-[0_16px_40px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.08)] custom-scrollbar animate-fade-in">
+            <div
+              role="listbox"
+              className="absolute right-0 top-full mt-1.5 w-64 max-h-60 overflow-y-auto rounded-xl bg-[#0c101d]/95 backdrop-blur-2xl border border-white/15 p-1 z-50 shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] custom-scrollbar animate-in fade-in zoom-in-95 duration-150 ease-out space-y-0.5"
+            >
               <div className="px-2 py-1 text-[10px] font-semibold text-white/40 uppercase tracking-wider">
                 Mô hình Multimodal Vision
               </div>
@@ -184,10 +192,10 @@ export function VisionControlsBar({
                       setIsModelDropdownOpen(false)
                     }}
                     className={cn(
-                      'w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-colors',
+                      'w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-all duration-150 select-none cursor-pointer',
                       selectedVisionModelId === m.id
-                        ? 'bg-emerald-500/20 text-emerald-200 font-medium'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
+                        ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/35 font-medium shadow-sm'
+                        : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                     )}
                   >
                     <span className="truncate">{m.displayName || m.name}</span>
