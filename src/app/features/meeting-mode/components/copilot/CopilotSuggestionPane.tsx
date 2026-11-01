@@ -397,7 +397,7 @@ export function CopilotSuggestionPane({
         (interviewAnswer?.grounding?.overallRisk !== "low" ||
           interviewAnswer?.failover?.switched ||
           onAnswerStrategyChange) && (
-          <div className="flex items-center justify-between gap-2 px-3.5 py-1 bg-white/[0.015] border-b border-white/[0.03] text-[10px] shrink-0 relative z-30 overflow-visible">
+          <div className="flex items-center justify-between gap-1.5 px-3 py-1 bg-white/[0.015] border-b border-white/[0.03] text-[10px] shrink-0 relative z-30 overflow-visible flex-wrap min-w-0">
             <div className="flex items-center gap-2">
               {interviewAnswer?.grounding?.overallRisk !== "low" && (
                 <span
@@ -444,20 +444,20 @@ export function CopilotSuggestionPane({
         )}
 
       {/* Sub-toolbar (Row 2): Trigger Mode Selector, Logs, AI Model Badge & Context Metrics */}
-      <div className="flex items-center justify-between gap-2 px-3.5 py-1 shrink-0 border-b border-white/[0.02] min-w-0">
+      <div className="flex items-center justify-between gap-1.5 px-3 py-1 shrink-0 border-b border-white/[0.02] min-w-0 flex-wrap">
         {/* Left: Trigger mode switcher, logs & intent */}
-        <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           {/* Trigger Mode Selector (Auto / Semi / Manual) */}
           {triggerMode && onTriggerModeChange && (
             <div
-              className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9px] select-none"
+              className="flex items-center bg-black/50 p-0.5 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9px] select-none shrink-0"
               title="Chế độ kích hoạt Copilot (Auto: Tự động khi có câu hỏi | Semi: Báo câu hỏi & bấm để gợi ý | Manual: Chỉ gợi ý khi bấm thủ công)"
             >
               <button
                 type="button"
                 onClick={() => onTriggerModeChange("auto")}
                 className={cn(
-                  "px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
+                  "px-1.5 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
                   triggerMode === "auto"
                     ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(124,58,237,0.35)]"
                     : "text-white/45 hover:text-white hover:bg-white/[0.05]",
@@ -469,7 +469,7 @@ export function CopilotSuggestionPane({
                 type="button"
                 onClick={() => onTriggerModeChange("semi-auto")}
                 className={cn(
-                  "px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
+                  "px-1.5 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
                   triggerMode === "semi-auto"
                     ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(124,58,237,0.35)]"
                     : "text-white/45 hover:text-white hover:bg-white/[0.05]",
@@ -481,7 +481,7 @@ export function CopilotSuggestionPane({
                 type="button"
                 onClick={() => onTriggerModeChange("manual")}
                 className={cn(
-                  "px-2 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
+                  "px-1.5 py-0.5 rounded-lg font-semibold transition-all duration-150 cursor-pointer select-none active:scale-[0.98]",
                   triggerMode === "manual"
                     ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_2px_8px_rgba(124,58,237,0.35)]"
                     : "text-white/45 hover:text-white hover:bg-white/[0.05]",
@@ -563,11 +563,11 @@ export function CopilotSuggestionPane({
         </div>
 
         {/* Right: LLM model & context metrics */}
-        <div className="flex items-center gap-1.5 shrink-0 justify-end min-w-0">
+        <div className="flex items-center gap-1.5 justify-end flex-wrap min-w-0">
           {/* AI Model badge */}
           <Badge
             variant="outline"
-            className="text-[9.5px] px-1.5 py-0 h-5 bg-indigo-500/10 text-indigo-300 border-indigo-500/20 font-mono flex items-center gap-1 shrink-0 max-w-[130px]"
+            className="text-[9px] px-1.5 py-0 h-5 bg-indigo-500/10 text-indigo-300 border-indigo-500/20 font-mono flex items-center gap-1 shrink-0 max-w-[105px]"
             title={`Model LLM: ${currentModel.name}`}
           >
             <Cpu className="w-2.5 h-2.5 text-indigo-400 shrink-0" />
@@ -576,7 +576,7 @@ export function CopilotSuggestionPane({
 
           {/* Multi-Tier Context Usage Badge */}
           {contextUsage && (
-            <div className="relative group">
+            <div className="relative group shrink-0">
               <Badge
                 variant="outline"
                 className={cn(
@@ -587,11 +587,11 @@ export function CopilotSuggestionPane({
                       ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
                       : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
                 )}
-                title="Ước tính context token gửi tới LLM theo 4 tầng (Di chuột để xem chi tiết)"
+                title={`Ước tính context token gửi tới LLM: ${(contextUsage.totalTokens / 1000).toFixed(1)}k / ${(contextUsage.maxBudget / 1000).toFixed(1)}k tokens (Di chuột để xem chi tiết)`}
               >
-                <Layers className="w-2.5 h-2.5" />
-                <span>
-                  Context: {(contextUsage.totalTokens / 1000).toFixed(1)}k /{" "}
+                <Layers className="w-2.5 h-2.5 shrink-0" />
+                <span className="whitespace-nowrap">
+                  {(contextUsage.totalTokens / 1000).toFixed(1)}k /{" "}
                   {(contextUsage.maxBudget / 1000).toFixed(1)}k
                 </span>
               </Badge>

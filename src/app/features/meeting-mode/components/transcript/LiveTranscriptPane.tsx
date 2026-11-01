@@ -246,7 +246,7 @@ const totalLinesCount = validLines.length
   return (
     <section className="flex flex-col flex-1 min-w-0 min-h-0 border-r border-white/[0.07] overflow-hidden">
       {/* Top Header */}
-      <div className="flex items-center justify-between px-3.5 py-1.5 shrink-0 border-b border-white/[0.04]">
+      <div className="flex items-center justify-between px-3 py-1.5 shrink-0 border-b border-white/[0.04] gap-1.5 flex-wrap min-w-0">
         <div className="flex items-center gap-1.5">
           <MessageSquare className="w-3.5 h-3.5 text-white/40" />
           <span className="text-[11px] text-white/50 font-semibold uppercase tracking-wider">
@@ -401,7 +401,7 @@ const totalLinesCount = validLines.length
       )}
 
       {/* Sub Toolbar: Source Switcher & STT Badge */}
-      <div className="flex items-center justify-between gap-1.5 px-3.5 py-1 shrink-0 border-b border-white/[0.02]">
+      <div className="flex items-center justify-between gap-1.5 px-3 py-1 shrink-0 border-b border-white/[0.02] flex-wrap min-w-0">
        
 
         <div className="flex items-center justify-between flex-1 gap-2">
