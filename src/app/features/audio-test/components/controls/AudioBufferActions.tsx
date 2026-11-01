@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 
 export interface AudioBufferActionsProps {
   isCapturing: boolean
+  isMeetingCapturing?: boolean
   isStarting?: boolean
   startCapture: () => Promise<void> | void
   stopCapture: () => void
@@ -31,6 +32,7 @@ export interface AudioBufferActionsProps {
 
 export function AudioBufferActions({
   isCapturing,
+  isMeetingCapturing = false,
   isStarting = false,
   startCapture,
   stopCapture,
@@ -52,13 +54,22 @@ export function AudioBufferActions({
         <Button
           id="btn-start-capture"
           onClick={() => {
+            if (isMeetingCapturing) return
             const res = startCapture()
             if (res && typeof (res as Promise<void>).catch === 'function') {
               ;(res as Promise<void>).catch(() => {})
             }
           }}
-          disabled={isStarting}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11.5px] h-8 w-[122px] justify-center gap-1.5 shadow-sm font-semibold transition-all disabled:opacity-50 shrink-0"
+          disabled={isStarting || isMeetingCapturing}
+          title={
+            isMeetingCapturing
+              ? 'Không thể bắt đầu thu âm: Phiên họp đang thu âm trong nền'
+              : undefined
+          }
+          className={cn(
+            'bg-emerald-600 hover:bg-emerald-500 text-white text-[11.5px] h-8 w-[122px] justify-center gap-1.5 shadow-sm font-semibold transition-all shrink-0',
+            (isStarting || isMeetingCapturing) && 'opacity-40 cursor-not-allowed hover:bg-emerald-600 shadow-none pointer-events-none'
+          )}
         >
           {isStarting ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -84,11 +95,22 @@ export function AudioBufferActions({
         <Button
           id="btn-auto-calibrate-vad"
           type="button"
-          onClick={onOpenCalibration}
+          onClick={() => {
+            if (isMeetingCapturing) return
+            onOpenCalibration()
+          }}
+          disabled={isMeetingCapturing}
           variant="outline"
           size="sm"
-          title="Đo độ ồn nền & tự động hiệu chuẩn ngưỡng VAD"
-          className="h-8 px-2.5 text-[11px] border-violet-500/40 text-violet-300 hover:bg-violet-500/15 gap-1.5 transition-all shadow-sm bg-violet-500/5 font-medium shrink-0"
+          title={
+            isMeetingCapturing
+              ? 'Không thể hiệu chuẩn: Phiên họp đang thu âm trong nền'
+              : 'Đo độ ồn nền & tự động hiệu chuẩn ngưỡng VAD'
+          }
+          className={cn(
+            'h-8 px-2.5 text-[11px] border-violet-500/40 text-violet-300 hover:bg-violet-500/15 gap-1.5 transition-all shadow-sm bg-violet-500/5 font-medium shrink-0',
+            isMeetingCapturing && 'opacity-40 cursor-not-allowed hover:bg-violet-500/5 pointer-events-none'
+          )}
         >
           <Sparkles className="w-3.5 h-3.5 text-violet-400" />
           <span>Auto Calibrate</span>

@@ -273,4 +273,26 @@ describe('AudioPipelineController', () => {
 
     controller.destroy()
   })
+
+  it('prevents audio-test from starting capture or interrupting when meeting is active', async () => {
+    const controller = new AudioPipelineController({
+      captureService: mockCaptureService,
+      bufferManager: mockBufferManager,
+      playbackService: mockPlaybackService,
+    })
+
+    // Start meeting capture
+    await controller.start('system', { owner: 'meeting' })
+    expect(controller.getState().isCapturing).toBe(true)
+    expect(controller.getState().captureOwner).toBe('meeting')
+
+    // Try starting audio-test capture
+    await controller.start('mic', { owner: 'audio-test' })
+    // Meeting capture should remain active and uninterrupted
+    expect(controller.getState().isCapturing).toBe(true)
+    expect(controller.getState().captureOwner).toBe('meeting')
+    expect(mockCaptureService.start).toHaveBeenCalledTimes(1)
+
+    controller.destroy()
+  })
 })

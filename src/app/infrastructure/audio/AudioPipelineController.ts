@@ -151,6 +151,12 @@ export class AudioPipelineController {
 
     const targetOwner = options?.owner ?? this.state.captureOwner ?? null
 
+    // Ngăn chặn Audio Test chiếm mic hoặc ngắt quãng cuộc họp khi Meeting đang ghi âm
+    if (this.state.isCapturing && this.state.captureOwner === 'meeting' && targetOwner === 'audio-test') {
+      console.warn('[AudioPipelineController] Không thể kích hoạt Audio Test khi cuộc họp đang thu âm.')
+      return
+    }
+
     this.state = {
       ...this.state,
       lifecycleState: 'starting',

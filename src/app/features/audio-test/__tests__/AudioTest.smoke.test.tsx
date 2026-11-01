@@ -1,7 +1,8 @@
 import '@/test/setupDom'
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { render, fireEvent, act, cleanup } from '@testing-library/react'
 import { AudioTest } from '../AudioTest'
+import { audioPipelineController } from '@/hooks/useAudioPipeline'
 import { setIpcClient, resetIpcClient, MockIpcAdapter } from '@/infrastructure/ipc'
 
 describe('AudioTest Screen Smoke Tests', () => {
@@ -11,9 +12,12 @@ describe('AudioTest Screen Smoke Tests', () => {
     localStorage.clear()
     mockIpc = new MockIpcAdapter()
     setIpcClient(mockIpc)
+    ;(audioPipelineController as any).captureService.start = mock(async () => {})
+    ;(audioPipelineController as any).captureService.stop = mock(() => {})
   })
 
   afterEach(() => {
+    audioPipelineController.stop()
     cleanup()
     resetIpcClient()
   })
@@ -68,5 +72,29 @@ describe('AudioTest Screen Smoke Tests', () => {
     })
 
     expect(result.queryByText('Bắt đầu đo độ ồn (3s)')).toBeNull()
+  })
+
+  it('disables Start Capture button when meeting capture is active in the background', async () => {
+    // Start meeting capture in shared pipeline
+    await audioPipelineController.start('system', { owner: 'meeting' })
+
+    let result: any
+    await act(async () => {
+      result = render(<AudioTest />)
+    })
+
+    const startBtn = result.container.querySelector('#btn-start-capture') as HTMLButtonElement
+    expect(startBtn).toBeDefined()
+    expect(startBtn.disabled).toBe(true)
+    expect(result.getByText(/Phiên họp đang thu âm trong nền/i)).toBeDefined()
+
+    // Clicking when disabled should not start audio-test capture
+    await act(async () => {
+      fireEvent.click(startBtn)
+    })
+    expect(audioPipelineController.getState().captureOwner).toBe('meeting')
+
+    // Cleanup
+    audioPipelineController.stop('meeting')
   })
 })

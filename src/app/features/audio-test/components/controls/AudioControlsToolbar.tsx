@@ -8,6 +8,7 @@ export interface AudioControlsToolbarProps {
   sourceType: 'mic' | 'system'
   setSourceType: (type: 'mic' | 'system') => void
   isCapturing: boolean
+  isMeetingCapturing?: boolean
   isStarting?: boolean
   isAudioDetected?: boolean
   startCapture: () => Promise<void> | void
@@ -35,6 +36,7 @@ export function AudioControlsToolbar({
   sourceType,
   setSourceType,
   isCapturing,
+  isMeetingCapturing = false,
   isStarting = false,
   isAudioDetected = false,
   startCapture,
@@ -64,7 +66,7 @@ export function AudioControlsToolbar({
         <AudioSourceDeviceSelector
           sourceType={sourceType}
           setSourceType={setSourceType}
-          isCapturing={isCapturing}
+          isCapturing={isCapturing || Boolean(isMeetingCapturing)}
           availableDevices={availableDevices}
           selectedDeviceId={selectedDeviceId}
           onSelectDevice={onSelectDevice}
@@ -72,6 +74,7 @@ export function AudioControlsToolbar({
 
         <AudioBufferActions
           isCapturing={isCapturing}
+          isMeetingCapturing={isMeetingCapturing}
           isStarting={isStarting}
           startCapture={startCapture}
           stopCapture={stopCapture}

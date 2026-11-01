@@ -92,8 +92,9 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
   })
 
   const handleStartAudioTestCapture = useCallback(async () => {
+    if (isMeetingRecording) return
     await startCapture(sourceType, { owner: 'audio-test', deviceId: selectedDeviceId })
-  }, [startCapture, sourceType, selectedDeviceId])
+  }, [isMeetingRecording, startCapture, sourceType, selectedDeviceId])
 
   // ── Speech-to-Text Integration Hook ──
   const {
@@ -170,7 +171,7 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
                 Phiên họp đang thu âm trong nền (Meeting Copilot)
               </span>
               <p className="text-amber-200/80 text-[11px]">
-                Audio Test đang ở chế độ chờ để không can thiệp vào cuộc họp. Bấm &quot;Bắt đầu thu âm&quot; bên dưới nếu bạn muốn chuyển mic sang Audio Test.
+                Audio Test đang bị khóa nút thu âm để không làm gián đoạn cuộc họp. Vui lòng quay lại cuộc họp hoặc dừng cuộc họp trước khi kiểm tra micro.
               </p>
             </div>
           </div>
@@ -191,6 +192,7 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
         sourceType={sourceType}
         setSourceType={setSourceType}
         isCapturing={isAudioTestRecording}
+        isMeetingCapturing={isMeetingRecording}
         isStarting={isStarting && captureOwner === 'audio-test'}
         isAudioDetected={isAudioTestRecording ? isAudioDetected : false}
         startCapture={handleStartAudioTestCapture}
@@ -204,7 +206,7 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
         clearBuffer={() => {
           if (isAudioTestRecording || !isCapturing) clearBuffer()
         }}
-        onOpenCalibration={() => setIsCalibrating(true)}
+        onOpenCalibration={() => !isMeetingRecording && setIsCalibrating(true)}
         calibratedDb={calibratedRecord?.speechThresholdDbfs}
         availableDevices={availableDevices}
         selectedDeviceId={selectedDeviceId}
