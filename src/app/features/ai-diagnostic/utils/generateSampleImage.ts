@@ -16,7 +16,14 @@ export function generateSampleCanvasImage(sample: VisionSamplePreset): CapturedI
 
   const ctx = canvas.getContext('2d')
   if (!ctx) {
-    throw new Error('Canvas 2D context not available')
+    return {
+      dataUrl:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      width,
+      height,
+      source: 'browser_display_media',
+      capturedAt: Date.now(),
+    }
   }
 
   // Dark background matching IDE dark theme
@@ -48,7 +55,7 @@ export function generateSampleCanvasImage(sample: VisionSamplePreset): CapturedI
   ctx.font = '13px "JetBrains Mono", Consolas, monospace'
   ctx.fillText(sample.title, 88, 27)
 
-  // Subtle border separator
+  // Horizontal separator below window frame
   ctx.strokeStyle = '#334155'
   ctx.lineWidth = 1
   ctx.beginPath()
@@ -56,35 +63,34 @@ export function generateSampleCanvasImage(sample: VisionSamplePreset): CapturedI
   ctx.lineTo(width, 44)
   ctx.stroke()
 
-  // Render text lines with syntax-like coloring
-  ctx.font = '15px "JetBrains Mono", Menlo, Consolas, monospace'
-  let y = 44 + padding
+  // Render code/question lines
+  ctx.font = '15px "JetBrains Mono", Consolas, monospace'
+  let currentY = 44 + padding
 
-  for (const line of sample.textToDraw) {
-    if (line.startsWith('LeetCode') || line.startsWith('System Architecture') || line.startsWith('FATAL:')) {
-      ctx.fillStyle = '#38bdf8' // bright cyan title
-      ctx.font = 'bold 16px "JetBrains Mono", Consolas, monospace'
-    } else if (line.startsWith('Difficulty:') || line.startsWith('Requirements:') || line.startsWith('DETAIL:')) {
-      ctx.fillStyle = '#fbbf24' // amber
-      ctx.font = '15px "JetBrains Mono", Consolas, monospace'
-    } else if (line.startsWith('Example') || line.startsWith('Constraints:') || line.startsWith('HINT:')) {
-      ctx.fillStyle = '#a78bfa' // violet
-      ctx.font = 'bold 15px "JetBrains Mono", Consolas, monospace'
+  for (let i = 0; i < sample.textToDraw.length; i++) {
+    const line = sample.textToDraw[i]
+
+    // Line number in left gutter
+    ctx.fillStyle = '#475569'
+    ctx.fillText(String(i + 1).padStart(3, ' '), padding, currentY)
+
+    // Code / description text
+    if (line.startsWith('LeetCode') || line.startsWith('System') || line.startsWith('FATAL')) {
+      ctx.fillStyle = '#38bdf8' // bright cyan highlight for title lines
+    } else if (line.includes('Difficulty') || line.includes('DETAIL') || line.includes('HINT')) {
+      ctx.fillStyle = '#fbbf24' // amber for metadata
     } else if (line.trim().startsWith('-') || line.trim().startsWith('Input:') || line.trim().startsWith('Output:')) {
-      ctx.fillStyle = '#4ade80' // emerald
-      ctx.font = '15px "JetBrains Mono", Consolas, monospace'
+      ctx.fillStyle = '#34d399' // emerald for I/O & bullets
     } else {
-      ctx.fillStyle = '#e2e8f0' // light gray text
-      ctx.font = '15px "JetBrains Mono", Consolas, monospace'
+      ctx.fillStyle = '#e2e8f0' // light gray for standard code
     }
 
-    ctx.fillText(line, padding, y)
-    y += lineHeight
+    ctx.fillText(line, padding + 48, currentY)
+    currentY += lineHeight
   }
 
-  const dataUrl = canvas.toDataURL('image/png')
   return {
-    dataUrl,
+    dataUrl: canvas.toDataURL('image/png'),
     width,
     height,
     source: 'browser_display_media',

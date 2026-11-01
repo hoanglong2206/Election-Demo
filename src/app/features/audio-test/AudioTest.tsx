@@ -9,6 +9,7 @@ import { STTPreviewPanel } from './components/stt-preview'
 import { PipelineStagesCard } from './components/pipeline'
 import { VADCalibrationModal } from './components/calibration'
 import { DualChannelReadinessCard } from './components/readiness'
+import { TechnicalJargonTrainer } from './components/jargon'
 import { useAudioDeviceSelection, useAudioTestSTT } from './hooks'
 
 export function AudioTest({ onViewChange }: AudioTestProps = {}) {
@@ -234,7 +235,7 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
 
       {/* Live STT Preview & Audio Pipeline Stages in 2 Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
-        <div className="lg:col-span-7">
+        <div className="lg:col-span-7 space-y-3.5">
           <STTPreviewPanel
             isCapturing={isAudioTestRecording}
             isSimulatingSTT={isSimulatingSTT}
@@ -251,6 +252,9 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
             onClearSTT={handleClearSTT}
             scrollRef={sttScrollRef}
           />
+
+          {/* Technical Jargon & Accent Training */}
+          <TechnicalJargonTrainer />
         </div>
 
         <div className="lg:col-span-5 space-y-3.5">

@@ -8,6 +8,7 @@ import { VisionControlsBar } from './VisionControlsBar'
 import { VisionImagePreview } from './VisionImagePreview'
 import { VisionPromptForm } from './VisionPromptForm'
 import { VisionResultView } from './VisionResultView'
+import { MockScreenDrillBanner } from './MockScreenDrillBanner'
 
 export interface ScreenCaptureVisionSectionProps {
   currentVisionModel: MultimodalModelOption | null
@@ -79,7 +80,17 @@ export function ScreenCaptureVisionSection({
         isCapturing={isCapturing}
       />
 
-      {/* 2. Captured Image Viewport */}
+      {/* 2. Mock Screen Interview Drill & End-to-End Latency */}
+      <MockScreenDrillBanner
+        onSetCapturedImage={onSetCapturedImage}
+        onAnalyzeImage={onAnalyzeImage}
+        isAnalyzing={isAnalyzing}
+        analysisResult={analysisResult}
+        currentVisionModel={currentVisionModel}
+        selectedImplementationLanguage={selectedImplementationLanguage}
+      />
+
+      {/* 3. Captured Image Viewport */}
       <VisionImagePreview
         capturedImage={capturedImage}
         onClearImage={handleClearImage}
@@ -87,7 +98,7 @@ export function ScreenCaptureVisionSection({
         onTriggerCapture={() => onTriggerScreenCapture(false)}
       />
 
-      {/* 3. Prompt context & Analysis trigger form */}
+      {/* 4. Prompt context & Analysis trigger form */}
       <VisionPromptForm
         userContext={userContext}
         onUserContextChange={setUserContext}
@@ -99,7 +110,7 @@ export function ScreenCaptureVisionSection({
         isNoModel={isNoModel}
       />
 
-      {/* 4. Analysis Results View */}
+      {/* 5. Analysis Results View */}
       <VisionResultView
         analysisResult={analysisResult}
         showTranslate={showTranslate}

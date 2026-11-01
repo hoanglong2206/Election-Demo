@@ -8,6 +8,8 @@ import {
   Sparkles,
   Camera,
   MousePointer,
+  PanelLeft,
+  PanelRight,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -100,6 +102,45 @@ export function ScreenshotCropOverlay({
     }
   }, [isDrawing, startPoint, getImageCoordinates])
 
+  // Apply Quick Crop Presets (Left 50%, Right 50%, Center 70%, Full 100%)
+  const applyPresetCrop = useCallback((preset: 'left50' | 'right50' | 'center70' | 'full') => {
+    if (!imageRef.current) return
+    const rect = imageRef.current.getBoundingClientRect()
+    const displayedWidth = rect.width
+    const displayedHeight = rect.height
+    const scaleX = imageInfo.width / (displayedWidth || 1)
+    const scaleY = imageInfo.height / (displayedHeight || 1)
+
+    let x = 0
+    let y = 0
+    let width = displayedWidth
+    let height = displayedHeight
+
+    if (preset === 'left50') {
+      width = displayedWidth * 0.5
+    } else if (preset === 'right50') {
+      x = displayedWidth * 0.5
+      width = displayedWidth * 0.5
+    } else if (preset === 'center70') {
+      x = displayedWidth * 0.15
+      y = displayedHeight * 0.15
+      width = displayedWidth * 0.7
+      height = displayedHeight * 0.7
+    }
+
+    const realWidth = Math.round(width * scaleX)
+    const realHeight = Math.round(height * scaleY)
+
+    setCropRect({
+      x,
+      y,
+      width,
+      height,
+      realWidth,
+      realHeight,
+    })
+  }, [imageInfo.width, imageInfo.height])
+
   const handleConfirm = useCallback(() => {
     if (!cropRect || !imageRef.current) {
       onConfirmCrop({
@@ -139,10 +180,14 @@ export function ScreenshotCropOverlay({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') triggerClose(onCancel)
       else if (e.key === 'Enter') handleConfirm()
+      else if (e.key === '1') applyPresetCrop('left50')
+      else if (e.key === '2') applyPresetCrop('right50')
+      else if (e.key === '3') applyPresetCrop('center70')
+      else if (e.key === '4') applyPresetCrop('full')
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleConfirm, onCancel, triggerClose])
+  }, [handleConfirm, onCancel, triggerClose, applyPresetCrop])
 
   const content = (
     <div
@@ -160,11 +205,11 @@ export function ScreenshotCropOverlay({
             className="flex items-center gap-1.5 px-3 py-1 bg-violet-500/20 text-violet-300 border-violet-500/40 text-xs font-semibold shrink-0"
           >
             <Crop className="w-3.5 h-3.5 text-violet-400" />
-            <span>KÉO CHUỘT ĐỂ CẮT VÙNG CÂU HỎI</span>
+            <span>KÉO CHUỘT HOẶC CHỌN VÙNG NHANH</span>
           </Badge>
           <span className="text-xs text-white/50 hidden md:flex items-center gap-1.5 truncate">
             <MousePointer className="w-3 h-3 text-white/40 shrink-0" />
-            Nhấn giữ & kéo vùng chứa câu hỏi, code hoặc diagram cần AI giải đáp
+            Kéo chuột để chọn vùng câu hỏi, hoặc bấm phím 1-4 để chọn nhanh khung hình
           </span>
         </div>
 
@@ -172,7 +217,7 @@ export function ScreenshotCropOverlay({
           <button
             onClick={() => triggerClose(onRetake)}
             disabled={isProcessing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors cursor-pointer"
           >
             <Camera className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden sm:inline">Chụp lại</span>
@@ -184,7 +229,7 @@ export function ScreenshotCropOverlay({
               handleConfirm()
             }}
             disabled={isProcessing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors cursor-pointer"
           >
             <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
             <span>Dùng toàn ảnh</span>
@@ -224,6 +269,59 @@ export function ScreenshotCropOverlay({
         </div>
       </div>
 
+      {/* Quick Stealth Crop Presets Bar */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-1.5 border-b border-white/[0.06] bg-black/40 text-xs gap-2 overflow-x-auto custom-scrollbar">
+        <div className="flex items-center gap-1.5 text-white/50 text-[11px] shrink-0">
+          <Crop className="w-3 h-3 text-violet-400" />
+          <span>Vùng chụp nhanh (Presets):</span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => applyPresetCrop('left50')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] bg-white/[0.05] hover:bg-violet-600/30 hover:text-violet-200 border border-white/10 text-white/70 transition-all cursor-pointer"
+            title="Chụp 50% bên trái màn hình (khu vực đề bài LeetCode)"
+          >
+            <PanelLeft className="w-3 h-3 text-violet-400" />
+            <span>Nửa Trái (LeetCode)</span>
+            <kbd className="text-[9px] px-1 py-0 rounded bg-white/10 text-white/60 font-mono">1</kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => applyPresetCrop('right50')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] bg-white/[0.05] hover:bg-violet-600/30 hover:text-violet-200 border border-white/10 text-white/70 transition-all cursor-pointer"
+            title="Chụp 50% bên phải màn hình (khu vực Code Editor)"
+          >
+            <PanelRight className="w-3 h-3 text-violet-400" />
+            <span>Nửa Phải (Code)</span>
+            <kbd className="text-[9px] px-1 py-0 rounded bg-white/10 text-white/60 font-mono">2</kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => applyPresetCrop('center70')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] bg-white/[0.05] hover:bg-violet-600/30 hover:text-violet-200 border border-white/10 text-white/70 transition-all cursor-pointer"
+            title="Chụp 70% vùng giữa màn hình (Cửa sổ chính)"
+          >
+            <Crop className="w-3 h-3 text-amber-400" />
+            <span>Trung Tâm (70%)</span>
+            <kbd className="text-[9px] px-1 py-0 rounded bg-white/10 text-white/60 font-mono">3</kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => applyPresetCrop('full')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] bg-white/[0.05] hover:bg-violet-600/30 hover:text-violet-200 border border-white/10 text-white/70 transition-all cursor-pointer"
+            title="Chụp toàn bộ màn hình"
+          >
+            <Maximize2 className="w-3 h-3 text-cyan-400" />
+            <span>Toàn Bộ</span>
+            <kbd className="text-[9px] px-1 py-0 rounded bg-white/10 text-white/60 font-mono">4</kbd>
+          </button>
+        </div>
+      </div>
+
       {/* Main Image Viewport Area: Takes 100% available space in the full application */}
       <div className="flex-1 relative flex items-center justify-center p-3 sm:p-5 overflow-hidden">
         {/* Precise image wrapper: exactly bounds the rendered image pixels */}
@@ -235,7 +333,7 @@ export function ScreenshotCropOverlay({
             ref={imageRef}
             src={imageInfo.dataUrl}
             alt="Screen capture preview"
-            className="block max-h-[calc(100vh-100px)] max-w-[calc(100vw-32px)] w-auto h-auto select-none pointer-events-none"
+            className="block max-h-[calc(100vh-140px)] max-w-[calc(100vw-32px)] w-auto h-auto select-none pointer-events-none"
             draggable={false}
           />
 
@@ -244,7 +342,7 @@ export function ScreenshotCropOverlay({
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white/90 text-xs font-medium shadow-2xl flex items-center gap-2">
                 <MousePointer className="w-3.5 h-3.5 text-violet-400" />
-                <span>Kéo chuột trên ảnh để chọn vùng câu hỏi hoặc nhấn Enter để dùng toàn bộ</span>
+                <span>Kéo chuột hoặc nhấn phím 1 - 4 để chọn khung hình nhanh</span>
               </div>
             </div>
           )}
