@@ -28,31 +28,31 @@ export interface TabsProps<T extends string = string> {
 
 const THEME_ACTIVE_STYLES: Record<TabThemeColor, { tab: string; icon: string }> = {
   violet: {
-    tab: 'bg-violet-600/30 text-violet-100 border-violet-500/40 shadow-sm shadow-violet-500/20 font-semibold',
+    tab: 'bg-violet-600/30 text-violet-100 border-violet-500/40 shadow-sm shadow-violet-500/20',
     icon: 'text-violet-300',
   },
   cyan: {
-    tab: 'bg-cyan-500/25 text-cyan-100 border-cyan-500/40 shadow-sm shadow-cyan-500/20 font-semibold',
+    tab: 'bg-cyan-500/25 text-cyan-100 border-cyan-500/40 shadow-sm shadow-cyan-500/20',
     icon: 'text-cyan-300',
   },
   emerald: {
-    tab: 'bg-emerald-500/25 text-emerald-100 border-emerald-500/40 shadow-sm shadow-emerald-500/20 font-semibold',
+    tab: 'bg-emerald-500/25 text-emerald-100 border-emerald-500/40 shadow-sm shadow-emerald-500/20',
     icon: 'text-emerald-300',
   },
   amber: {
-    tab: 'bg-amber-500/25 text-amber-100 border-amber-500/40 shadow-sm shadow-amber-500/20 font-semibold',
+    tab: 'bg-amber-500/25 text-amber-100 border-amber-500/40 shadow-sm shadow-amber-500/20',
     icon: 'text-amber-300',
   },
   indigo: {
-    tab: 'bg-indigo-600/30 text-indigo-100 border-indigo-500/40 shadow-sm shadow-indigo-500/20 font-semibold',
+    tab: 'bg-indigo-600/30 text-indigo-100 border-indigo-500/40 shadow-sm shadow-indigo-500/20',
     icon: 'text-indigo-300',
   },
   rose: {
-    tab: 'bg-rose-500/25 text-rose-100 border-rose-500/40 shadow-sm shadow-rose-500/20 font-semibold',
+    tab: 'bg-rose-500/25 text-rose-100 border-rose-500/40 shadow-sm shadow-rose-500/20',
     icon: 'text-rose-300',
   },
   default: {
-    tab: 'bg-white/15 text-white border-white/25 shadow-sm font-semibold',
+    tab: 'bg-white/15 text-white border-white/25 shadow-sm',
     icon: 'text-white',
   },
 }
@@ -122,7 +122,7 @@ export function Tabs<T extends string = string>({
             onClick={() => !tab.disabled && onChange(tab.id)}
             className={cn(
               'relative flex items-center justify-center font-medium transition-all duration-200 select-none whitespace-nowrap cursor-pointer border',
-              'active:scale-[0.98]',
+              '',
               sizeConfig.tab,
               fullWidth && 'flex-1 min-w-0',
               isActive

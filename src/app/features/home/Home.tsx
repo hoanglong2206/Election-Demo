@@ -50,7 +50,7 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
   })
 
   return (
-    <div className="flex flex-col h-full p-2.5 sm:p-3 overflow-y-auto custom-scrollbar select-none animate-fade-in">
+    <div className="flex flex-col h-full p-2.5 sm:p-3 overflow-y-auto [scrollbar-gutter:stable] custom-scrollbar select-none animate-fade-in">
       {/* ── Main Working Grid (2 Columns) ── */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 min-h-full flex-1">
         {/* ── Left Column: Box 1 (Context Editor) + Box 2 (System Quick Status & Launch) ── */}

@@ -68,8 +68,8 @@ export default {
           '50%': { opacity: '0.4' },
         },
         'fade-in': {
-          from: { opacity: '0', transform: 'translateY(8px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
+          from: { opacity: '0' },
+          to: { opacity: '1' },
         },
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
@@ -80,7 +80,7 @@ export default {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'fade-in': 'fade-in 0.4s ease-out',
+        'fade-in': 'fade-in 0.18s ease-out',
         shimmer: 'shimmer 2.5s linear infinite',
       },
     },

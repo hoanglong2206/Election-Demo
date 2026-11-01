@@ -59,7 +59,7 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
   })
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-3.5 animate-fade-in custom-scrollbar">
+    <div className="h-full overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-3.5 animate-fade-in custom-scrollbar select-none">
       {/* Top Header */}
       <AIDiagnosticHeader
         activeTab={activeTab}

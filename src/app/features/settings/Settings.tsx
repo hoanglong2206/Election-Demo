@@ -120,7 +120,7 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
 
   return (
     <div className="relative h-full flex flex-col overflow-hidden select-none">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 animate-fade-in custom-scrollbar">
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-4 animate-fade-in custom-scrollbar select-none">
         {/* Header & Save Action */}
         <SettingsHeader onSave={handleSaveSettings} />
 

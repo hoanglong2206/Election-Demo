@@ -46,10 +46,10 @@ export function AudioSourceDeviceSelector({
           onClick={() => !isCapturing && setSourceType('system')}
           disabled={isCapturing}
           className={cn(
-            'px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap',
+            'px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap border',
             sourceType === 'system'
-              ? 'bg-violet-600/35 text-violet-200 border border-violet-500/40 shadow-sm font-semibold'
-              : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04]'
+              ? 'bg-violet-600/35 text-violet-200 border-violet-500/40 shadow-sm'
+              : 'border-transparent text-white/45 hover:text-white/80 hover:bg-white/[0.04]'
           )}
           title="Thu âm loopback từ video YouTube, cuộc gọi hoặc âm thanh hệ thống"
         >
@@ -69,10 +69,10 @@ export function AudioSourceDeviceSelector({
             }}
             disabled={isCapturing}
             className={cn(
-              'px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap',
+              'px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap border',
               sourceType === 'mic'
-                ? 'bg-emerald-600/35 text-emerald-200 border border-emerald-500/40 shadow-sm font-semibold'
-                : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04]'
+                ? 'bg-emerald-600/35 text-emerald-200 border-emerald-500/40 shadow-sm'
+                : 'border-transparent text-white/45 hover:text-white/80 hover:bg-white/[0.04]'
             )}
             title={
               selectedDevice

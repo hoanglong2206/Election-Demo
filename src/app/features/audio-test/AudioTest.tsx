@@ -127,7 +127,7 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
   }, [error])
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-3.5 animate-fade-in custom-scrollbar">
+    <div className="h-full overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-3.5 animate-fade-in custom-scrollbar select-none">
       {/* Header and Layout Switcher */}
       <AudioTestHeader
         showTip={showTip}
