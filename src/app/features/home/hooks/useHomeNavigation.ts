@@ -11,7 +11,7 @@ import {
 import { saveMeetingContext, type MeetingContextData } from '@/services/meeting-context'
 import { jdKeywordExtractor } from '@/services/ai-model/stt'
 import { profileContextService, type ProfilePreset } from '@/services/profile-preset'
-import { validateMeetingLaunch } from '../utils/validation'
+import { isPreflightLobbySkipped, setPreflightLobbySkipped } from '@/hooks/usePreFlightLobby'
 
 export interface UseHomeNavigationProps {
   mode: AppMode
@@ -30,6 +30,12 @@ export interface UseHomeNavigationReturn {
   setMeetingError: (err: string | null) => void
   handleLaunchMeeting: () => void
   handleOpenSession: (sessionId: string) => void
+  isLobbyOpen: boolean
+  setIsLobbyOpen: (open: boolean) => void
+  handleConfirmLaunchMeeting: () => void
+  isLobbySkipped: boolean
+  handleResetLobbySkipped: () => void
+  handleOpenLobby: () => void
 }
 
 export function useHomeNavigation({
@@ -37,7 +43,7 @@ export function useHomeNavigation({
   contextData,
   activeProfile,
   onViewChange,
-  onInterviewTabChange,
+  onInterviewTabChange: _onInterviewTabChange,
   flushPendingContextSync,
 }: UseHomeNavigationProps): UseHomeNavigationReturn {
   // Usage Tracker Monthly Summary
@@ -78,17 +84,36 @@ export function useHomeNavigation({
   }, [])
 
   const [meetingError, setMeetingError] = useState<string | null>(null)
+  const [isLobbyOpen, setIsLobbyOpen] = useState(false)
+  const [isLobbySkipped, setIsLobbySkipped] = useState(() => isPreflightLobbySkipped())
+
+  useEffect(() => {
+    const handleSyncSkipped = () => {
+      setIsLobbySkipped(isPreflightLobbySkipped())
+    }
+    window.addEventListener('preflight-lobby-skipped-changed', handleSyncSkipped)
+    window.addEventListener('storage', handleSyncSkipped)
+    return () => {
+      window.removeEventListener('preflight-lobby-skipped-changed', handleSyncSkipped)
+      window.removeEventListener('storage', handleSyncSkipped)
+    }
+  }, [])
+
+  const handleResetLobbySkipped = useCallback(() => {
+    setPreflightLobbySkipped(false)
+    setIsLobbySkipped(false)
+  }, [])
+
+  const handleOpenLobby = useCallback(() => {
+    setIsLobbyOpen(true)
+  }, [])
+
+  const handleConfirmLaunchMeeting = useCallback(() => {
+    setIsLobbyOpen(false)
+    onViewChange('meeting')
+  }, [onViewChange])
 
   const handleLaunchMeeting = useCallback(() => {
-    const validation = validateMeetingLaunch(mode, contextData)
-    if (!validation.canLaunch) {
-      setMeetingError(validation.error)
-      if (validation.targetTab && onInterviewTabChange) {
-        onInterviewTabChange(validation.targetTab)
-      }
-      return
-    }
-
     setMeetingError(null)
 
     // Flush any pending debounced sync synchronously before proceeding
@@ -122,12 +147,16 @@ export function useHomeNavigation({
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('meeting-context-updated'))
       }
-      onViewChange('meeting')
+      if (isPreflightLobbySkipped()) {
+        onViewChange('meeting')
+      } else {
+        setIsLobbyOpen(true)
+      }
     } catch (err) {
       console.error('[useHomeNavigation] Failed to persist meeting context before launch:', err)
       setMeetingError('Không thể lưu dữ liệu ngữ cảnh cuộc họp. Vui lòng thử lại.')
     }
-  }, [mode, contextData, activeProfile, onViewChange, onInterviewTabChange, flushPendingContextSync])
+  }, [mode, contextData, activeProfile, onViewChange, flushPendingContextSync])
 
   const handleOpenSession = useCallback(
     (sessionId: string) => {
@@ -149,5 +178,11 @@ export function useHomeNavigation({
     setMeetingError,
     handleLaunchMeeting,
     handleOpenSession,
+    isLobbyOpen,
+    setIsLobbyOpen,
+    handleConfirmLaunchMeeting,
+    isLobbySkipped,
+    handleResetLobbySkipped,
+    handleOpenLobby,
   }
 }

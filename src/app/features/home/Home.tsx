@@ -16,6 +16,7 @@ import { CvJdMatchDialog } from './components/dialogs/CvJdMatchDialog'
 import { ProfilePresetDialog } from './components/dialogs/ProfilePresetDialog'
 import { ProfileDeleteDialog } from './components/dialogs/ProfileDeleteDialog'
 import { ProfileImportExportDialog } from './components/dialogs/ProfileImportExportDialog'
+import { PreFlightLobbyModal } from '@/components/shared/PreFlightLobbyModal'
 
 export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
   // 1. Audio Devices
@@ -114,6 +115,8 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
             estimatedCostMonth={nav.monthSummary.totalEstimatedCostUsd}
             totalSessionsCount={nav.totalSessionsCount}
             onViewChange={onViewChange}
+            isLobbySkipped={nav.isLobbySkipped}
+            onResetLobbySkipped={nav.handleResetLobbySkipped}
           />
         </div>
 
@@ -215,6 +218,21 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
       <ProfileImportExportDialog
         open={profile.isImportExportOpen}
         onClose={() => profile.setIsImportExportOpen(false)}
+      />
+
+      {/* Pre-Flight Lobby Modal */}
+      <PreFlightLobbyModal
+        isOpen={nav.isLobbyOpen}
+        onClose={() => nav.setIsLobbyOpen(false)}
+        onEnterMeeting={nav.handleConfirmLaunchMeeting}
+        onOpenAudioTest={() => {
+          nav.setIsLobbyOpen(false)
+          onViewChange('audio-test')
+        }}
+        onOpenAIDiagnostic={() => {
+          nav.setIsLobbyOpen(false)
+          onViewChange('ai-diagnostic')
+        }}
       />
     </div>
   )

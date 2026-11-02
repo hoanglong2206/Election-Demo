@@ -20,7 +20,7 @@ if (typeof globalThis.window === 'undefined') {
 
 if (!globalThis.localStorage || typeof (globalThis.localStorage as any).clear !== 'function') {
   const storage = new Map<string, string>()
-  ;(globalThis as any).localStorage = {
+  const mockStorage = {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, val: string) => storage.set(key, String(val)),
     removeItem: (key: string) => storage.delete(key),
@@ -29,5 +29,9 @@ if (!globalThis.localStorage || typeof (globalThis.localStorage as any).clear !=
     get length() {
       return storage.size
     },
+  }
+  ;(globalThis as any).localStorage = mockStorage
+  if ((globalThis as any).window) {
+    ;(globalThis as any).window.localStorage = mockStorage
   }
 }

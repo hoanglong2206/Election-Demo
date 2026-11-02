@@ -1,4 +1,4 @@
-import { Activity, Volume2, Mic, Bot, ArrowRight, AlertCircle, X } from 'lucide-react'
+import { Activity, Volume2, Mic, Bot, ArrowRight, AlertCircle, X, ShieldCheck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,8 @@ export interface SystemQuickStatusCardProps {
   onLaunchMeeting?: () => void
   onClearMeetingError?: () => void
   onViewChange?: (view: any) => void
+  isLobbySkipped?: boolean
+  onResetLobbySkipped?: () => void
 }
 
 export function SystemQuickStatusCard({
@@ -38,11 +40,13 @@ export function SystemQuickStatusCard({
   estimatedCostMonth,
   totalSessionsCount,
   mode,
-  canEnterMeeting = true,
+  canEnterMeeting: _canEnterMeeting = true,
   meetingError,
   onLaunchMeeting,
   onClearMeetingError,
   onViewChange,
+  isLobbySkipped = false,
+  onResetLobbySkipped,
 }: SystemQuickStatusCardProps) {
   const formatTokens = (tokens: number) => {
     if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
@@ -87,11 +91,7 @@ export function SystemQuickStatusCard({
                   ? 'bg-violet-600 hover:bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.35)]'
                   : 'bg-indigo-600 hover:bg-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.35)]'
               )}
-              title={
-                mode === 'interview' && !canEnterMeeting
-                  ? 'Chế độ Phỏng Vấn yêu cầu có cả CV và JD trước khi vào phòng họp'
-                  : 'Bắt đầu cuộc họp'
-              }
+              title="Bắt đầu cuộc họp / phỏng vấn ngay"
             >
               <span>Vào Meeting Mode</span>
               <ArrowRight className="w-3 h-3 shrink-0" />
@@ -113,6 +113,26 @@ export function SystemQuickStatusCard({
               className="text-rose-400 hover:text-rose-200 ml-1.5 shrink-0"
             >
               <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Banner when Pre-Flight Lobby is skipped */}
+      {isLobbySkipped && (
+        <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-1.5 flex items-center justify-between text-[10.5px] text-amber-300 animate-fade-in shadow-sm">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="truncate">Sảnh chờ Pre-Flight đang tắt (sẽ vào thẳng cuộc họp).</span>
+          </div>
+          {onResetLobbySkipped && (
+            <button
+              type="button"
+              onClick={onResetLobbySkipped}
+              className="text-amber-200 hover:text-white font-medium underline underline-offset-2 ml-2 shrink-0 cursor-pointer transition-colors"
+              title="Bấm để bật lại sảnh chờ kiểm định trước cuộc họp"
+            >
+              Bật lại sảnh chờ
             </button>
           )}
         </div>
@@ -200,3 +220,4 @@ export function SystemQuickStatusCard({
     </Card>
   )
 }
+

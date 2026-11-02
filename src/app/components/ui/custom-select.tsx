@@ -245,19 +245,19 @@ export function CustomSelect({
         <div
           role="listbox"
           className={cn(
-            'absolute top-full mt-1.5 z-50 min-w-[200px] w-full max-w-[360px]',
+            'absolute top-full mt-1.5 z-50 min-w-[200px] w-full max-w-[360px] max-h-[260px] flex flex-col',
             align === 'right' ? 'right-0' : 'left-0',
             'bg-[#0c101d]/95 backdrop-blur-2xl border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)]',
-            'p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out',
+            'p-1 animate-in fade-in zoom-in-95 duration-150 ease-out overflow-hidden',
             menuClassName
           )}
         >
           {/* Header Node (Optional) */}
-          {headerNode && <div className="border-b border-white/[0.08] mb-1">{headerNode}</div>}
+          {headerNode && <div className="shrink-0 border-b border-white/[0.08] mb-1">{headerNode}</div>}
 
           {/* Search Box if enabled */}
           {searchable && (
-            <div className="p-1 border-b border-white/[0.08] mb-1">
+            <div className="shrink-0 p-1 border-b border-white/[0.08] mb-1">
               <div className="relative flex items-center">
                 <Search className="w-3 h-3 text-white/40 absolute left-2 pointer-events-none" />
                 <input
@@ -286,7 +286,7 @@ export function CustomSelect({
           )}
 
           {/* Options List */}
-          <div className="max-h-60 overflow-y-auto custom-scrollbar p-0.5 space-y-0.5">
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-0.5 space-y-0.5">
             {filteredOptions.length === 0 ? (
               <div className="px-3 py-2.5 text-center text-[11px] text-white/40">
                 Không tìm thấy lựa chọn nào
@@ -331,14 +331,14 @@ export function CustomSelect({
                       opt.disabled && 'opacity-40 cursor-not-allowed hover:bg-transparent'
                     )}
                   >
-                    <div className="flex items-center gap-2 min-w-0 truncate">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
                       {opt.icon && <span className="shrink-0">{opt.icon}</span>}
                       {opt.badge && (
                         <span className="shrink-0 px-1.5 py-0.2 rounded text-[9px] font-mono bg-white/10 text-white/70 border border-white/10">
                           {opt.badge}
                         </span>
                       )}
-                      <div className="min-w-0 truncate flex flex-col">
+                      <div className="min-w-0 flex-1 flex flex-col">
                         <span className="truncate text-[11px]">{opt.label}</span>
                         {opt.subLabel && (
                           <span className="text-[9.5px] text-white/40 font-mono truncate">
@@ -358,7 +358,7 @@ export function CustomSelect({
           </div>
 
           {/* Footer Node (Optional) */}
-          {footerNode && <div className="border-t border-white/[0.08] mt-1 pt-1">{footerNode}</div>}
+          {footerNode && <div className="shrink-0 border-t border-white/[0.08] mt-1 pt-1">{footerNode}</div>}
         </div>
       )}
     </div>
