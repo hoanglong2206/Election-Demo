@@ -18,7 +18,7 @@ import {
 } from '@/services/meeting-context'
 import { whisperPromptBuilder } from '@/services/ai-model/stt'
 
-const DEFAULT_JARGON_PRESETS = [
+export const DEFAULT_JARGON_PRESETS = [
   'Kubernetes',
   'PostgreSQL',
   'OAuth2',
@@ -243,9 +243,9 @@ export function TechnicalJargonTrainer() {
         <div className="flex items-center justify-between text-[11px] text-white/50">
           <span className="flex items-center gap-1 text-white/70 font-medium">
             <Zap className="w-3 h-3 text-amber-400" />
-            Câu Mẫu Luyện Giọng Đọc (Nói thử để kiểm tra STT)
+            Câu Mẫu Thử Nghiệm Từ Vựng (Kiểm tra STT)
           </span>
-          <span className="text-[10px] text-white/40">Bấm sao chép hoặc đọc vào Mic bên trên</span>
+          <span className="text-[10px] text-white/40">Bấm sao chép hoặc phát qua âm thanh hệ thống để kiểm tra STT</span>
         </div>
 
         <div className="space-y-1.5">

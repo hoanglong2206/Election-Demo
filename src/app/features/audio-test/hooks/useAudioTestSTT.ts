@@ -12,6 +12,7 @@ import {
 } from "@/services/ai-model/stt";
 import { getSavedMeetingContext } from "@/services/meeting-context";
 import { YOUTUBE_STT_SAMPLES } from "../constants";
+import { DEFAULT_JARGON_PRESETS } from "../components/jargon/TechnicalJargonTrainer";
 import type { STTLang, STTPreviewLine } from "../types";
 import type { AudioSegment } from "@/core/audio/types";
 import type { AudioCaptureOwner } from "@/hooks/useAudioPipeline";
@@ -153,6 +154,12 @@ export function useAudioTestSTT({
         now.getSeconds(),
       ).padStart(2, "0")}`;
 
+      const savedKws = getSavedMeetingContext().keywords;
+      const activeKws =
+        Array.isArray(savedKws) && savedKws.length > 0
+          ? savedKws
+          : DEFAULT_JARGON_PRESETS;
+
       const job: STTJob = {
         jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
         sessionId: sessionIdRef.current,
@@ -170,9 +177,7 @@ export function useAudioTestSTT({
             : "Microphone Speaker",
         timestampStr: timeStr,
         prompt:
-          whisperPromptBuilder.buildPrompt(
-            getSavedMeetingContext().keywords || [],
-          ) || undefined,
+          whisperPromptBuilder.buildPrompt(activeKws) || undefined,
         feature: "audio_signal_test",
       };
 

@@ -83,8 +83,8 @@ interface LiveTranscriptPaneProps {
 }
 
 export function LiveTranscriptPane({
-  sourceType,
-  onSwitchSource,
+  sourceType: _sourceType,
+  onSwitchSource: _onSwitchSource,
   validLines,
   latestLine,
   latestExchange,
@@ -268,36 +268,13 @@ const totalLinesCount = validLines.length
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9.5px] select-none">
-          <button
-            type="button"
-            onClick={() => onSwitchSource('system')}
-            className={cn(
-              'px-2 py-0.5 rounded-lg font-medium flex items-center gap-1 transition-all duration-150 cursor-pointer select-none active:scale-[0.98]',
-              sourceType === 'system'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-white/45 hover:text-white'
-            )}
-            title="Thu âm thanh cuộc gọi / hệ thống (Google Meet, Zoom, Teams, YouTube)"
+          <div
+            className="flex items-center bg-black/50 px-2.5 py-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9.5px] select-none text-emerald-300 gap-1.5 font-medium"
+            title="Nguồn thu: Âm thanh cuộc gọi / hệ thống (Google Meet, Zoom, Teams, YouTube)"
           >
-            <Volume2 className="w-2.5 h-2.5" />
+            <Volume2 className="w-2.5 h-2.5 text-emerald-400" />
             <span>Hệ thống</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onSwitchSource('mic')}
-            className={cn(
-              'px-2 py-0.5 rounded-lg font-medium flex items-center gap-1 transition-all duration-150 cursor-pointer select-none active:scale-[0.98]',
-              sourceType === 'mic'
-                ? 'bg-violet-600 text-white shadow-sm'
-                : 'text-white/45 hover:text-white'
-            )}
-            title="Thu âm thanh từ Microphone của bạn"
-          >
-            <Mic className="w-2.5 h-2.5" />
-            <span>Micro</span>
-          </button>
-        </div>
+          </div>
           {/* STT Input Language Switcher */}
           <div
             className="flex items-center bg-black/50 p-1 rounded-xl border border-white/[0.08] shadow-inner backdrop-blur-md text-[9px] select-none"
@@ -573,14 +550,14 @@ const totalLinesCount = validLines.length
                     Chưa bắt đầu thu âm cuộc họp
                   </h3>
                   <p className="text-[10px] text-white/45 leading-relaxed">
-                    Nhấn nút bên dưới để cấp quyền thu âm cuộc gọi (Hệ thống) hoặc Microphone. AI sẽ tự động nhận diện và dịch song ngữ thời gian thực.
+                    Nhấn nút bên dưới để bắt đầu thu âm cuộc gọi (Hệ thống). AI sẽ tự động nhận diện và dịch song ngữ thời gian thực.
                   </p>
                 </div>
                 <Button
                   onClick={onToggleListening}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] h-7 px-3 font-medium gap-1.5 shadow-sm shadow-emerald-600/20"
                 >
-                  <Mic className="w-3 h-3" />
+                  <Volume2 className="w-3 h-3" />
                   <span>Bắt đầu thu âm cuộc họp</span>
                 </Button>
               </div>
@@ -602,9 +579,7 @@ const totalLinesCount = validLines.length
                     Đang lắng nghe âm thanh cuộc họp...
                   </h3>
                   <p className="text-[10px] text-white/45 leading-relaxed">
-                    {sourceType === 'system'
-                      ? 'Đang lắng nghe âm thanh từ cuộc gọi/YouTube. Văn bản và bản dịch tiếng Việt sẽ tự động xuất hiện tại đây.'
-                      : 'Đang lắng nghe qua Microphone. Hãy nói câu hỏi hoặc nội dung cuộc họp để AI chuyển thành văn bản.'}
+                    Đang lắng nghe âm thanh từ cuộc gọi/YouTube. Văn bản và bản dịch tiếng Việt sẽ tự động xuất hiện tại đây.
                   </p>
                 </div>
               </div>

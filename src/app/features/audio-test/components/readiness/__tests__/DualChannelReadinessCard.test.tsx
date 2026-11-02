@@ -10,12 +10,12 @@ describe('DualChannelReadinessCard', () => {
     if (typeof sessionStorage !== 'undefined') sessionStorage.clear()
   })
 
-  it('renders initial state with 0% readiness when no channels verified', async () => {
+  it('renders initial state with 0% readiness when system audio is not verified', async () => {
     let result: any
     await act(async () => {
       result = render(
         <DualChannelReadinessCard
-          sourceType="mic"
+          sourceType="system"
           setSourceType={mock(() => {})}
           isCapturing={false}
           isAudioDetected={false}
@@ -27,13 +27,12 @@ describe('DualChannelReadinessCard', () => {
       )
     })
 
-    expect(result.getByText(/Xác Thực Âm Thanh 2 Chiều/i)).toBeDefined()
+    expect(result.getByText(/Xác Thực Sẵn Sàng Âm Thanh Hệ Thống/i)).toBeDefined()
     expect(result.getByText(/Sẵn sàng: 0%/i)).toBeDefined()
-    expect(result.getByText(/Kênh 1: Giọng của bạn \(Microphone\)/i)).toBeDefined()
-    expect(result.getByText(/Kênh 2: Giọng người hỏi \(System Audio\)/i)).toBeDefined()
+    expect(result.getByText(/Âm thanh Hệ thống & Cuộc gọi/i)).toBeDefined()
   })
 
-  it('switches source type when clicking Test Kênh System button', async () => {
+  it('switches source type and starts capture when clicking Test System button', async () => {
     const mockSetSource = mock(() => {})
     const mockStartCapture = mock(async () => {})
 
@@ -41,7 +40,7 @@ describe('DualChannelReadinessCard', () => {
     await act(async () => {
       result = render(
         <DualChannelReadinessCard
-          sourceType="mic"
+          sourceType="system"
           setSourceType={mockSetSource}
           isCapturing={false}
           isAudioDetected={false}
@@ -62,12 +61,12 @@ describe('DualChannelReadinessCard', () => {
     expect(mockStartCapture).toHaveBeenCalled()
   })
 
-  it('auto verifies channel when capturing audio above threshold', async () => {
+  it('auto verifies system audio when capturing audio above threshold', async () => {
     let result: any
     await act(async () => {
       result = render(
         <DualChannelReadinessCard
-          sourceType="mic"
+          sourceType="system"
           setSourceType={mock(() => {})}
           isCapturing={true}
           isAudioDetected={true}
@@ -79,7 +78,7 @@ describe('DualChannelReadinessCard', () => {
       )
     })
 
-    expect(result.getByText(/Sẵn sàng: 50%/i)).toBeDefined()
+    expect(result.getByText(/Sẵn sàng: 100%/i)).toBeDefined()
     expect(result.getByText(/Đạt \(-25dB\)/i)).toBeDefined()
   })
 
@@ -90,7 +89,7 @@ describe('DualChannelReadinessCard', () => {
     await act(async () => {
       result = render(
         <DualChannelReadinessCard
-          sourceType="mic"
+          sourceType="system"
           setSourceType={mock(() => {})}
           isCapturing={false}
           isAudioDetected={false}

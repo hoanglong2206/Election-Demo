@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Mic,
   Headphones,
   CheckCircle2,
-  AlertCircle,
   Volume2,
   Sparkles,
   ArrowRight,
@@ -27,13 +25,11 @@ export interface DualChannelReadinessCardProps {
 }
 
 interface VerificationState {
-  micVerified: boolean
-  micMaxDb: number
   systemVerified: boolean
   systemMaxDb: number
 }
 
-const STORAGE_KEY = 'election_audio_dual_verification'
+const STORAGE_KEY = 'election_audio_system_verification'
 
 function safeGetStorage(key: string): string | null {
   try {
@@ -63,19 +59,21 @@ function loadSavedVerification(): VerificationState {
   const raw = safeGetStorage(STORAGE_KEY)
   if (raw) {
     try {
-      return JSON.parse(raw)
+      const parsed = JSON.parse(raw)
+      return {
+        systemVerified: Boolean(parsed.systemVerified),
+        systemMaxDb: typeof parsed.systemMaxDb === 'number' ? parsed.systemMaxDb : -60,
+      }
     } catch {}
   }
   return {
-    micVerified: false,
-    micMaxDb: -60,
     systemVerified: false,
     systemMaxDb: -60,
   }
 }
 
 export function DualChannelReadinessCard({
-  sourceType,
+  sourceType: _sourceType,
   setSourceType,
   isCapturing,
   isAudioDetected,
@@ -93,7 +91,7 @@ export function DualChannelReadinessCard({
     safeSetStorage(STORAGE_KEY, JSON.stringify(verification))
   }, [verification])
 
-  // Automatically verify channels when audio detected
+  // Automatically verify system audio when audio signal is detected
   useEffect(() => {
     if (!isCapturing) return
 
@@ -101,21 +99,12 @@ export function DualChannelReadinessCard({
     const hasSignal = isAudioDetected || (db > -48 && volume > 0.04)
 
     if (hasSignal) {
-      if (sourceType === 'mic') {
-        setVerification((prev) => ({
-          ...prev,
-          micVerified: true,
-          micMaxDb: Math.max(prev.micMaxDb, Math.round(db)),
-        }))
-      } else if (sourceType === 'system') {
-        setVerification((prev) => ({
-          ...prev,
-          systemVerified: true,
-          systemMaxDb: Math.max(prev.systemMaxDb, Math.round(db)),
-        }))
-      }
+      setVerification((prev) => ({
+        systemVerified: true,
+        systemMaxDb: Math.max(prev.systemMaxDb, Math.round(db)),
+      }))
     }
-  }, [isCapturing, isAudioDetected, db, volume, sourceType])
+  }, [isCapturing, isAudioDetected, db, volume])
 
   // Play pleasant test chime for system loopback verification
   const handlePlayTestTone = useCallback(async () => {
@@ -157,6 +146,12 @@ export function DualChannelReadinessCard({
         osc.stop(now + idx * 0.18 + 0.36)
       })
 
+      // Auto-verify system sound when test chime finishes successfully
+      setVerification((prev) => ({
+        systemVerified: true,
+        systemMaxDb: Math.max(prev.systemMaxDb, -18),
+      }))
+
       setTimeout(() => {
         setIsPlayingTestTone(false)
       }, 1100)
@@ -168,8 +163,6 @@ export function DualChannelReadinessCard({
   // Reset verification
   const handleResetVerification = () => {
     const initial = {
-      micVerified: false,
-      micMaxDb: -60,
       systemVerified: false,
       systemMaxDb: -60,
     }
@@ -178,9 +171,8 @@ export function DualChannelReadinessCard({
   }
 
   // Calculate Readiness score
-  const isBothVerified = verification.micVerified && verification.systemVerified
-  const isOneVerified = verification.micVerified || verification.systemVerified
-  const readinessPercent = isBothVerified ? 100 : isOneVerified ? 50 : 0
+  const isVerified = verification.systemVerified
+  const readinessPercent = isVerified ? 100 : 0
 
   return (
     <div className="bg-gradient-to-r from-[#121624] via-[#101420] to-[#0c0f18] border border-white/[0.1] rounded-xl p-3.5 space-y-3 shadow-md backdrop-blur-md">
@@ -190,14 +182,12 @@ export function DualChannelReadinessCard({
           <div
             className={cn(
               'w-7 h-7 rounded-lg flex items-center justify-center border',
-              isBothVerified
+              isVerified
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                : isOneVerified
-                ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
                 : 'bg-white/[0.05] border-white/10 text-white/50'
             )}
           >
-            {isBothVerified ? (
+            {isVerified ? (
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             ) : (
               <Activity className="w-4 h-4" />
@@ -206,16 +196,14 @@ export function DualChannelReadinessCard({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-white/95">
-                Xác Thực Âm Thanh 2 Chiều (Dual-Channel Readiness)
+                Xác Thực Sẵn Sàng Âm Thanh Hệ Thống (System Audio Readiness)
               </span>
               <Badge
                 variant="outline"
                 className={cn(
                   'text-[9px] px-1.5 py-0 border font-mono font-semibold',
-                  isBothVerified
+                  isVerified
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                    : isOneVerified
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                     : 'bg-white/10 text-white/50 border-white/15'
                 )}
               >
@@ -223,9 +211,8 @@ export function DualChannelReadinessCard({
               </Badge>
             </div>
             <p className="text-[10.5px] text-white/45">
-              Đảm bảo hệ thống bắt được cả{' '}
-              <strong className="text-white/70">tiếng bạn nói (Mic)</strong> và{' '}
-              <strong className="text-white/70">tiếng người hỏi (Tai nghe Zoom/Meet)</strong>.
+              Đảm bảo hệ thống bắt trọn vẹn{' '}
+              <strong className="text-white/70">tiếng người hỏi (Tai nghe Zoom/Meet/YouTube)</strong> trước khi vào cuộc họp.
             </p>
           </div>
         </div>
@@ -233,7 +220,7 @@ export function DualChannelReadinessCard({
         <button
           type="button"
           onClick={handleResetVerification}
-          className="flex items-center gap-1 text-[10.5px] text-white/40 hover:text-white/80 transition-colors p-1 rounded hover:bg-white/[0.05]"
+          className="flex items-center gap-1 text-[10.5px] text-white/40 hover:text-white/80 transition-colors p-1 rounded hover:bg-white/[0.05] cursor-pointer"
           title="Làm mới trạng thái kiểm tra"
         >
           <RotateCcw className="w-3 h-3" />
@@ -241,192 +228,101 @@ export function DualChannelReadinessCard({
         </button>
       </div>
 
-      {/* 2 Channel Diagnostic Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-        {/* Channel 1: Microphone (You) */}
-        <div
-          className={cn(
-            'rounded-xl p-3 border transition-all duration-200 relative',
-            sourceType === 'mic' && isCapturing
-              ? 'bg-emerald-500/[0.08] border-emerald-500/40 ring-1 ring-emerald-500/20'
-              : verification.micVerified
-              ? 'bg-black/30 border-emerald-500/25'
-              : 'bg-black/20 border-white/[0.06]'
-          )}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div
-                className={cn(
-                  'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border',
-                  verification.micVerified
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/35'
-                    : 'bg-white/[0.05] text-white/40 border-white/10'
-                )}
-              >
-                <Mic className="w-3.5 h-3.5" />
-              </div>
-              <div>
-                <span className="text-[11.5px] font-semibold text-white/90 block">
-                  Kênh 1: Giọng của bạn (Microphone)
-                </span>
-                <span className="text-[10px] text-white/45 block">
-                  Bắt lời phản hồi của bạn để AI theo dõi mạch trao đổi
-                </span>
-              </div>
+      {/* System Audio Channel Diagnostic Card */}
+      <div
+        className={cn(
+          'rounded-xl p-3 border transition-all duration-200 relative',
+          isCapturing
+            ? 'bg-violet-500/[0.08] border-violet-500/40 ring-1 ring-violet-500/20'
+            : verification.systemVerified
+            ? 'bg-black/30 border-violet-500/25'
+            : 'bg-black/20 border-white/[0.06]'
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div
+              className={cn(
+                'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border',
+                verification.systemVerified
+                  ? 'bg-violet-500/20 text-violet-300 border-violet-500/35'
+                  : 'bg-white/[0.05] text-white/40 border-white/10'
+              )}
+            >
+              <Headphones className="w-4 h-4" />
             </div>
-
-            {verification.micVerified ? (
-              <Badge
-                variant="outline"
-                className="bg-emerald-500/20 text-emerald-300 border-emerald-500/35 text-[9.5px] py-0 px-1.5 shrink-0 flex items-center gap-1"
-              >
-                <CheckCircle2 className="w-3 h-3" />
-                Đạt ({verification.micMaxDb}dB)
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="bg-white/5 text-white/40 border-white/10 text-[9.5px] py-0 px-1.5 shrink-0"
-              >
-                Chưa test
-              </Badge>
-            )}
+            <div>
+              <span className="text-[12px] font-semibold text-white/90 block">
+                Âm thanh Hệ thống & Cuộc gọi (System Audio / Loopback)
+              </span>
+              <span className="text-[10.5px] text-white/45 block">
+                Bắt âm thanh từ Google Meet, Zoom, Teams hoặc video YouTube trong tai nghe
+              </span>
+            </div>
           </div>
 
-          {/* Action / Live Feed */}
-          <div className="mt-2.5 pt-2 border-t border-white/[0.05] flex items-center justify-between text-xs">
-            {sourceType === 'mic' && isCapturing ? (
-              <div className="flex items-center gap-1.5 text-emerald-300 text-[11px] font-mono animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>Đang thu Mic: {Math.round(db)} dB</span>
-              </div>
-            ) : (
-              <span className="text-[10.5px] text-white/40">
-                {verification.micVerified
-                  ? 'Đã ghi nhận tín hiệu âm thanh rõ'
-                  : 'Chưa nhận tín hiệu giọng nói'}
-              </span>
-            )}
+          {verification.systemVerified ? (
+            <Badge
+              variant="outline"
+              className="bg-violet-500/20 text-violet-300 border-violet-500/35 text-[9.5px] py-0.5 px-2 shrink-0 flex items-center gap-1 font-semibold font-mono"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              Đạt ({verification.systemMaxDb}dB)
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="bg-white/5 text-white/40 border-white/10 text-[9.5px] py-0.5 px-2 shrink-0"
+            >
+              Chưa test
+            </Badge>
+          )}
+        </div>
 
-            {sourceType !== 'mic' || !isCapturing ? (
+        {/* Action / Live Feed */}
+        <div className="mt-2.5 pt-2 border-t border-white/[0.05] flex items-center justify-between text-xs flex-wrap gap-2">
+          {isCapturing ? (
+            <div className="flex items-center gap-1.5 text-violet-300 text-[11px] font-mono animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-violet-400" />
+              <span>Đang thu Loopback: {Math.round(db)} dB</span>
+            </div>
+          ) : (
+            <span className="text-[10.5px] text-white/40">
+              {verification.systemVerified
+                ? 'Đã ghi nhận tín hiệu âm thanh hệ thống rõ ràng'
+                : 'Chưa phát hiện tín hiệu từ tai nghe/hệ thống'}
+            </span>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={handlePlayTestTone}
+              disabled={isPlayingTestTone}
+              title="Phát âm thanh chuông thử nghiệm để test tai nghe"
+              className="h-6 px-2 text-[10px] bg-white/[0.05] hover:bg-violet-500/20 text-white/60 hover:text-violet-200 border border-white/10 rounded-md cursor-pointer"
+            >
+              <Volume2 className={cn('w-3 h-3 mr-1 text-violet-400', isPlayingTestTone && 'animate-spin')} />
+              {isPlayingTestTone ? 'Đang phát...' : 'Phát chuông test'}
+            </Button>
+
+            {!isCapturing ? (
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
                 onClick={async () => {
-                  setSourceType('mic')
-                  if (!isCapturing) await startCapture()
+                  setSourceType('system')
+                  await startCapture()
                 }}
-                className="h-6 px-2.5 text-[10.5px] bg-white/[0.06] hover:bg-emerald-500/20 hover:text-emerald-300 border border-white/10 text-white/70 rounded-md cursor-pointer"
+                className="h-6 px-2.5 text-[10.5px] bg-white/[0.06] hover:bg-violet-500/20 hover:text-violet-300 border border-white/10 text-white/70 rounded-md cursor-pointer"
               >
-                <Mic className="w-3 h-3 mr-1 text-emerald-400" />
-                Test Kênh Mic
+                <Headphones className="w-3 h-3 mr-1 text-violet-400" />
+                Test System
               </Button>
-            ) : (
-              <span className="text-[10.5px] text-emerald-400/80 font-medium">
-                Hãy nói vài câu...
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Channel 2: System Audio / Interlocutor (Interviewer) */}
-        <div
-          className={cn(
-            'rounded-xl p-3 border transition-all duration-200 relative',
-            sourceType === 'system' && isCapturing
-              ? 'bg-violet-500/[0.08] border-violet-500/40 ring-1 ring-violet-500/20'
-              : verification.systemVerified
-              ? 'bg-black/30 border-violet-500/25'
-              : 'bg-black/20 border-white/[0.06]'
-          )}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div
-                className={cn(
-                  'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border',
-                  verification.systemVerified
-                    ? 'bg-violet-500/20 text-violet-300 border-violet-500/35'
-                    : 'bg-white/[0.05] text-white/40 border-white/10'
-                )}
-              >
-                <Headphones className="w-3.5 h-3.5" />
-              </div>
-              <div>
-                <span className="text-[11.5px] font-semibold text-white/90 block">
-                  Kênh 2: Giọng người hỏi (System Audio)
-                </span>
-                <span className="text-[10px] text-white/45 block">
-                  Bắt âm thanh từ Zoom/Google Meet trong tai nghe
-                </span>
-              </div>
-            </div>
-
-            {verification.systemVerified ? (
-              <Badge
-                variant="outline"
-                className="bg-violet-500/20 text-violet-300 border-violet-500/35 text-[9.5px] py-0 px-1.5 shrink-0 flex items-center gap-1"
-              >
-                <CheckCircle2 className="w-3 h-3" />
-                Đạt ({verification.systemMaxDb}dB)
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="bg-white/5 text-white/40 border-white/10 text-[9.5px] py-0 px-1.5 shrink-0"
-              >
-                Chưa test
-              </Badge>
-            )}
-          </div>
-
-          {/* Action / Live Feed */}
-          <div className="mt-2.5 pt-2 border-t border-white/[0.05] flex items-center justify-between text-xs">
-            {sourceType === 'system' && isCapturing ? (
-              <div className="flex items-center gap-1.5 text-violet-300 text-[11px] font-mono animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-violet-400" />
-                <span>Loopback: {Math.round(db)} dB</span>
-              </div>
-            ) : (
-              <span className="text-[10.5px] text-white/40">
-                {verification.systemVerified
-                  ? 'Đã ghi nhận tín hiệu âm thanh hệ thống'
-                  : 'Chưa nhận tín hiệu từ tai nghe'}
-              </span>
-            )}
-
-            <div className="flex items-center gap-1.5">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={handlePlayTestTone}
-                disabled={isPlayingTestTone}
-                title="Phát âm thanh chuông thử nghiệm để test tai nghe"
-                className="h-6 px-2 text-[10px] bg-white/[0.05] hover:bg-violet-500/20 text-white/60 hover:text-violet-200 border border-white/10 rounded-md cursor-pointer"
-              >
-                <Volume2 className={cn('w-3 h-3 mr-1 text-violet-400', isPlayingTestTone && 'animate-spin')} />
-                {isPlayingTestTone ? 'Đang phát...' : 'Phát chuông test'}
-              </Button>
-
-              {sourceType !== 'system' || !isCapturing ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={async () => {
-                    setSourceType('system')
-                    if (!isCapturing) await startCapture()
-                  }}
-                  className="h-6 px-2.5 text-[10.5px] bg-white/[0.06] hover:bg-violet-500/20 hover:text-violet-300 border border-white/10 text-white/70 rounded-md cursor-pointer"
-                >
-                  <Headphones className="w-3 h-3 mr-1 text-violet-400" />
-                  Test System
-                </Button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -434,24 +330,15 @@ export function DualChannelReadinessCard({
       {/* Readiness Advice Banner & Meeting CTA */}
       <div className="bg-black/30 border border-white/[0.06] rounded-xl p-2.5 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-xs space-y-0.5">
-          {isBothVerified ? (
+          {isVerified ? (
             <div className="flex items-center gap-2 text-emerald-300 font-medium text-[11.5px]">
               <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Âm thanh hoàn hảo! Cả 2 kênh (Mic bạn nói & Tai nghe) đều đã được xác nhận sẵn sàng 100%.</span>
-            </div>
-          ) : isOneVerified ? (
-            <div className="flex items-center gap-2 text-amber-200/90 text-[11px]">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>
-                {verification.micVerified
-                  ? 'Bạn mới chỉ test Mic. Nhớ test Kênh 2 (System Audio) để đảm bảo không bị miss câu hỏi của người phỏng vấn.'
-                  : 'Bạn mới test System Audio. Hãy nói vài câu vào Kênh 1 (Mic) để đảm bảo AI nghe được câu trả lời của bạn.'}
-              </span>
+              <span>Âm thanh hệ thống hoàn hảo! Đã xác nhận bắt được âm thanh cuộc gọi / tai nghe (100% Sẵn sàng).</span>
             </div>
           ) : (
             <div className="flex items-center gap-2 text-white/50 text-[11px]">
               <Volume2 className="w-4 h-4 text-white/40 shrink-0" />
-              <span>Khuyên dùng: Bật test Kênh 1 (Mic) và Kênh 2 (System) trước khi bước vào cuộc họp thực tế.</span>
+              <span>Khuyên dùng: Bấm &ldquo;Phát chuông test&rdquo; hoặc mở một video YouTube để kiểm tra âm thanh trước khi vào họp.</span>
             </div>
           )}
         </div>
@@ -463,7 +350,7 @@ export function DualChannelReadinessCard({
             onClick={onEnterMeeting}
             className={cn(
               'h-7 px-3 text-[11px] font-medium rounded-lg transition-all cursor-pointer ml-auto',
-              isBothVerified
+              isVerified
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/50 shadow-md shadow-emerald-500/20'
                 : 'bg-white/10 hover:bg-white/15 text-white/80 border border-white/10'
             )}

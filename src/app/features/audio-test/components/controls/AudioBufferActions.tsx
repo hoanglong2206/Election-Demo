@@ -187,7 +187,7 @@ export function AudioBufferActions({
           type="button"
           onClick={onEnterMeeting}
           className="bg-violet-600 hover:bg-violet-500 text-white text-[11.5px] h-8 px-3 gap-1.5 shadow-sm font-medium transition-all shrink-0"
-          title="Bắt đầu phiên họp với microphone và ngưỡng VAD đã hiệu chuẩn"
+          title="Bắt đầu phiên họp với âm thanh hệ thống và ngưỡng VAD đã hiệu chuẩn"
         >
           <span>Vào phòng họp</span>
           <ArrowRight className="w-3.5 h-3.5" />

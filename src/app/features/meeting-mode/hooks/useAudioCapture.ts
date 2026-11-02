@@ -76,17 +76,10 @@ export function useAudioCapture({
     }
   }, [sessionId, mode, sourceType, sttLang, activeKeywords, fallbackPrompt])
 
-  // Sync initial audio source type based on selected audio device
+  // Lock initial audio source type to system loopback audio
   useEffect(() => {
-    if (selectedDeviceId) {
-      const devId = selectedDeviceId.toLowerCase()
-      if (devId.includes('mic') || devId.includes('input')) {
-        setSourceType('mic')
-      } else {
-        setSourceType('system')
-      }
-    }
-  }, [selectedDeviceId, setSourceType])
+    setSourceType('system')
+  }, [setSourceType])
 
   // Synchronize calibrated VAD speech threshold
   useEffect(() => {
@@ -102,14 +95,14 @@ export function useAudioCapture({
     }
   }, [selectedDeviceId, setVadEnergyThreshold])
 
-  // Dynamically switch microphone device on the fly
+  // Keep device switched if deviceId changes
   useEffect(() => {
-    if (isCapturing && sourceType === 'mic' && selectedDeviceId) {
+    if (isCapturing && selectedDeviceId) {
       switchDevice(selectedDeviceId).catch((err) =>
-        console.warn('[useAudioCapture] switchDevice on the fly error:', err)
+        console.warn('[useAudioCapture] switchDevice error:', err)
       )
     }
-  }, [selectedDeviceId, isCapturing, sourceType, switchDevice])
+  }, [selectedDeviceId, isCapturing, switchDevice])
 
   // Synchronize state if capture stops externally (e.g. mic unplugged) or owner changes
   useEffect(() => {

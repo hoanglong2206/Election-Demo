@@ -29,8 +29,7 @@ describe('AudioTest Screen Smoke Tests', () => {
     })
 
     expect(result.getByText(/Kiểm Tra Thu Âm Hệ Thống & Live STT/i)).toBeDefined()
-    expect(result.getAllByText('System Audio').length).toBeGreaterThanOrEqual(1)
-    expect(result.getByText('Microphone')).toBeDefined()
+    expect(result.getAllByText(/System Audio/i).length).toBeGreaterThanOrEqual(1)
     expect(result.getAllByText('Start Capture').length).toBeGreaterThanOrEqual(1)
     expect(result.getByText('Auto Calibrate')).toBeDefined()
     expect(result.getByText(/Live STT Preview/i)).toBeDefined()

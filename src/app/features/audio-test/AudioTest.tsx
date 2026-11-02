@@ -145,10 +145,10 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
             <div className="text-xs space-y-1">
-              <span className="font-semibold text-rose-300 block">Lỗi kết nối âm thanh / microphone:</span>
+              <span className="font-semibold text-rose-300 block">Lỗi kết nối âm thanh hệ thống (System Loopback):</span>
               <p className="text-rose-200/90 leading-relaxed">{error}</p>
               <p className="text-[11px] text-white/50">
-                Gợi ý: Vui lòng kiểm tra quyền truy cập microphone trên trình duyệt hoặc cắm lại thiết bị micro.
+                Gợi ý: Vui lòng kiểm tra quyền chia sẻ âm thanh hệ thống hoặc thiết bị loopback trên máy tính.
               </p>
             </div>
           </div>
@@ -173,7 +173,7 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
                 Phiên họp đang thu âm trong nền (Meeting Copilot)
               </span>
               <p className="text-amber-200/80 text-[11px]">
-                Audio Test đang bị khóa nút thu âm để không làm gián đoạn cuộc họp. Vui lòng quay lại cuộc họp hoặc dừng cuộc họp trước khi kiểm tra micro.
+                Audio Test đang bị khóa nút thu âm để không làm gián đoạn cuộc họp. Vui lòng quay lại cuộc họp hoặc dừng cuộc họp trước khi kiểm tra âm thanh.
               </p>
             </div>
           </div>

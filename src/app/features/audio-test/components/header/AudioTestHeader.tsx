@@ -1,4 +1,4 @@
-import { Headphones, AlertCircle, X, Mic } from 'lucide-react'
+import { Headphones, AlertCircle, X, Radio } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { AudioEngineType } from '@/core/audio/types'
@@ -15,8 +15,8 @@ export function AudioTestHeader({
   showTip,
   setShowTip,
   engineType,
-  sourceType,
-  activeDeviceName,
+  sourceType: _sourceType,
+  activeDeviceName: _activeDeviceName,
 }: AudioTestHeaderProps) {
   return (
     <div className="space-y-3">
@@ -33,23 +33,21 @@ export function AudioTestHeader({
             </h2>
 
             <p className="text-[10.5px] text-white/40 leading-tight mt-0.5 truncate">
-              Kiểm tra âm thanh loopback YouTube/Calls, cân chỉnh độ nhạy micro VAD và nhận diện giọng nói Whisper
+              Kiểm tra âm thanh hệ thống loopback (Google Meet, Zoom, Teams, YouTube) và nhận diện giọng nói Whisper
             </p>
           </div>
         </div>
 
         {/* Right side status badges: Active Mic & AudioWorklet Engine */}
         <div className="flex items-center gap-2 shrink-0">
-          {sourceType === 'mic' && activeDeviceName && (
-            <Badge
-              variant="outline"
-              className="text-[10px] h-6 px-2.5 border font-mono bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hidden sm:inline-flex items-center gap-1.5 max-w-[220px]"
-              title={`Microphone đang dùng: ${activeDeviceName}`}
-            >
-              <Mic className="w-3 h-3 text-emerald-400 shrink-0" />
-              <span className="truncate">{activeDeviceName.split(' (')[0].trim()}</span>
-            </Badge>
-          )}
+          <Badge
+            variant="outline"
+            className="text-[10px] h-6 px-2.5 border font-mono bg-violet-500/10 text-violet-300 border-violet-500/30 hidden sm:inline-flex items-center gap-1.5"
+            title="Đang thu âm qua loopback hệ thống (Google Meet / Zoom / YouTube)"
+          >
+            <Radio className="w-3 h-3 text-violet-400 shrink-0" />
+            <span>System Audio Loopback</span>
+          </Badge>
 
           {engineType && (
             <Badge

@@ -60,7 +60,7 @@ export function STTSubtitlesStream({
           </div>
           <p className="text-[10.5px] max-w-sm text-white/40 leading-relaxed">
             {isCapturing
-              ? `Đang lắng nghe qua ${currentSTTEngine.id}. Hãy phát video YouTube (tiếng Anh) hoặc nói vào Micro, phụ đề sẽ tự động hiển thị ngay bên dưới.`
+              ? `Đang lắng nghe qua ${currentSTTEngine.id}. Hãy phát video YouTube (tiếng Anh) hoặc âm thanh cuộc gọi, phụ đề sẽ tự động hiển thị ngay bên dưới.`
               : `Bấm nút "Start Capture" ở trên để bắt đầu thu âm và chuyển trực tiếp âm thanh thành văn bản thời gian thực.`}
           </p>
         </div>
