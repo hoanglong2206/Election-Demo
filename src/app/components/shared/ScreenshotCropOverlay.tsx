@@ -180,6 +180,7 @@ export function ScreenshotCropOverlay({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') triggerClose(onCancel)
       else if (e.key === 'Enter') handleConfirm()
+      else if (e.key === 'r' || e.key === 'R') triggerClose(onRetake)
       else if (e.key === '1') applyPresetCrop('left50')
       else if (e.key === '2') applyPresetCrop('right50')
       else if (e.key === '3') applyPresetCrop('center70')
@@ -187,7 +188,7 @@ export function ScreenshotCropOverlay({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleConfirm, onCancel, triggerClose, applyPresetCrop])
+  }, [handleConfirm, onCancel, onRetake, triggerClose, applyPresetCrop])
 
   const content = (
     <div
@@ -205,7 +206,7 @@ export function ScreenshotCropOverlay({
             className="flex items-center gap-1.5 px-3 py-1 bg-violet-500/20 text-violet-300 border-violet-500/40 text-xs font-semibold shrink-0"
           >
             <Crop className="w-3.5 h-3.5 text-violet-400" />
-            <span>KÉO CHUỘT HOẶC CHỌN VÙNG NHANH</span>
+            <span>CHỤP MÀN HÌNH</span>
           </Badge>
           <span className="text-xs text-white/50 hidden md:flex items-center gap-1.5 truncate">
             <MousePointer className="w-3 h-3 text-white/40 shrink-0" />
@@ -215,24 +216,14 @@ export function ScreenshotCropOverlay({
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
+            type="button"
             onClick={() => triggerClose(onRetake)}
-            disabled={isProcessing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors cursor-pointer"
+            disabled={isProcessing || isClosing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Camera className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden sm:inline">Chụp lại</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setCropRect(null)
-              handleConfirm()
-            }}
-            disabled={isProcessing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors cursor-pointer"
-          >
-            <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Dùng toàn ảnh</span>
+            <kbd className="text-[9px] px-1 py-0 rounded bg-white/10 text-white/60 font-mono ml-0.5">R</kbd>
           </button>
 
           <button

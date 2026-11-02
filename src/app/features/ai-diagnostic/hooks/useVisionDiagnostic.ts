@@ -1,4 +1,4 @@
-import { useReducer, useState, useEffect, useCallback, useMemo } from 'react'
+import { useReducer, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   screenCaptureService,
   visualQuestionAnalyzer,
@@ -43,6 +43,7 @@ export interface UseVisionDiagnosticReturn {
   handleOpenCropOverlay: () => void
   handleCloseSourcePicker: () => void
   handleCancelCropping: () => void
+  handleRetakeScreenCapture: () => Promise<void>
 }
 
 export function useVisionDiagnostic({
@@ -60,6 +61,10 @@ export function useVisionDiagnostic({
       const models = getAvailableMultimodalModels()
       return models[0]?.id || ''
     })(),
+  })
+
+  const lastSourceRef = useRef<{ sourceType: 'screen' | 'window'; sourceId?: string }>({
+    sourceType: 'screen',
   })
 
   const [sessionId] = useState(() => 'diagnostic_' + Date.now())
@@ -92,6 +97,7 @@ export function useVisionDiagnostic({
 
   const handleStartScreenCapture = useCallback(
     async (source: { sourceType: 'screen' | 'window'; sourceId?: string }) => {
+      lastSourceRef.current = source
       dispatch({ type: 'START_CAPTURE' })
       try {
         const imgInfo = await screenCaptureService.captureScreen(source)
@@ -207,6 +213,15 @@ export function useVisionDiagnostic({
     dispatch({ type: 'CANCEL_CROPPING' })
   }, [])
 
+  const handleRetakeScreenCapture = useCallback(async () => {
+    dispatch({ type: 'START_RETAKE' })
+    try {
+      await handleStartScreenCapture(lastSourceRef.current)
+    } catch {
+      dispatch({ type: 'OPEN_SOURCE_PICKER', cropImmediately: true })
+    }
+  }, [handleStartScreenCapture])
+
   return {
     state,
     availableVisionModels,
@@ -222,5 +237,6 @@ export function useVisionDiagnostic({
     handleOpenCropOverlay,
     handleCloseSourcePicker,
     handleCancelCropping,
+    handleRetakeScreenCapture,
   }
 }

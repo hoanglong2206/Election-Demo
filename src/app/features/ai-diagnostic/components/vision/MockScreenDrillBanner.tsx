@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Timer,
   Play,
@@ -66,12 +66,12 @@ export function MockScreenDrillBanner({
   ])
 
   // Track completion time when analysis result arrives
-  if (isAnalyzing && drillStartTime && !drillCompletedTime) {
-    // still in flight
-  } else if (!isAnalyzing && drillStartTime && !drillCompletedTime && analysisResult) {
-    const elapsed = Date.now() - drillStartTime
-    setDrillCompletedTime(elapsed)
-  }
+  useEffect(() => {
+    if (!isAnalyzing && drillStartTime && !drillCompletedTime && analysisResult) {
+      const elapsed = Date.now() - drillStartTime
+      setDrillCompletedTime(elapsed)
+    }
+  }, [isAnalyzing, drillStartTime, drillCompletedTime, analysisResult])
 
   const effectiveTimeMs = drillCompletedTime ?? analysisResult?.latencyMs ?? null
 
@@ -81,8 +81,6 @@ export function MockScreenDrillBanner({
         rating: 'excellent',
         badge: '⚡ Tốc Độ Tàng Hình Hoàn Hảo (<2.5s)',
         badgeStyle: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-        advice:
-          'Đối phương sẽ không nhận ra bạn đang dùng trợ lý. Lời giải xuất hiện ngay trước mắt bạn chỉ sau hơn 1 giây.',
       }
     }
     if (ms <= 5000) {
@@ -90,16 +88,12 @@ export function MockScreenDrillBanner({
         rating: 'good',
         badge: '🎯 Tốc Độ Tiêu Chuẩn (2.5s - 5s)',
         badgeStyle: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-        advice:
-          'Thời gian phản hồi ở mức khá. Bạn có thể vừa mở lời chào vừa đọc lướt ý chính của giải thuật.',
       }
     }
     return {
       rating: 'slow',
       badge: '⚠️ Độ Trễ Hơi Cao (>5s)',
       badgeStyle: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-      advice:
-        'Thời gian phân tích lâu có thể làm bạn bị khựng lại. Khuyên bạn nên chuyển sang model Vision nhẹ hơn (như Gemini 2.0 Flash) khi phỏng vấn live.',
     }
   }
 
@@ -189,9 +183,6 @@ export function MockScreenDrillBanner({
               {verdict.badge}
             </Badge>
           </div>
-          <p className="text-[11px] text-white/80 leading-relaxed">
-            💡 {verdict.advice}
-          </p>
         </div>
       ) : (
         <div className="text-[10.5px] text-white/40 bg-black/20 border border-white/[0.04] rounded-lg p-2 flex items-center justify-between">

@@ -85,14 +85,14 @@ export function useScreenCapture({
 
   const handleStartScreenCapture = useCallback(
     async (source: { sourceType: 'screen' | 'window'; sourceId?: string }) => {
-      if (isCapturingRef.current || captureState === 'capturing' || captureState === 'processing') {
+      if (isCapturingRef.current || captureState === 'processing') {
         return
       }
 
       setIsScreenSourcePickerOpen(false)
       lastSourceRef.current = source
       isCapturingRef.current = true
-      setCaptureState((prev) => transitionCaptureState(prev, { type: 'START_CAPTURE' }))
+      setCaptureState((prev) => (prev === 'capturing' ? 'capturing' : transitionCaptureState(prev, { type: 'START_CAPTURE' })))
 
       const watchdogTimer = setTimeout(() => {
         if (isCapturingRef.current) {

@@ -21,7 +21,7 @@ export type CaptureEvent =
 const VALID_CAPTURE_TRANSITIONS: Record<CaptureState, CaptureState[]> = {
   idle: ['picking', 'capturing'],
   picking: ['capturing', 'idle'],
-  capturing: ['cropping', 'error', 'idle'],
+  capturing: ['cropping', 'error', 'idle', 'capturing'],
   cropping: ['processing', 'capturing', 'idle'],
   processing: ['done', 'error', 'idle'],
   done: ['idle', 'picking'],
@@ -45,6 +45,7 @@ export function transitionCaptureState(current: CaptureState, event: CaptureEven
       break
 
     case 'capturing':
+      if (event.type === 'START_CAPTURE') return 'capturing'
       if (event.type === 'CAPTURE_SUCCESS') return 'cropping'
       if (event.type === 'FAIL') return 'error'
       if (event.type === 'CANCEL' || event.type === 'RESET') return 'idle'

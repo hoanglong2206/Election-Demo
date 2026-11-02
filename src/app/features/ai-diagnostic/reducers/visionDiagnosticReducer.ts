@@ -24,6 +24,7 @@ export type VisionDiagnosticAction =
   | { type: 'START_CROPPING' }
   | { type: 'CONFIRM_CROP'; croppedImage: CapturedImageInfo }
   | { type: 'CANCEL_CROPPING' }
+  | { type: 'START_RETAKE' }
   | { type: 'START_ANALYSIS' }
   | { type: 'ANALYSIS_SUCCESS'; result: VisualAnalysisResult }
   | { type: 'ANALYSIS_FAILURE' }
@@ -101,6 +102,13 @@ export function visionDiagnosticReducer(
       return {
         ...state,
         isCropping: false,
+      }
+
+    case 'START_RETAKE':
+      return {
+        ...state,
+        isCropping: false,
+        cropAfterCapture: true,
       }
 
     case 'START_ANALYSIS':
