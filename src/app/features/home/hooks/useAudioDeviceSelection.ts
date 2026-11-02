@@ -8,8 +8,11 @@ import { settingsManager } from '@/services/settings'
 
 export interface UseAudioDeviceSelectionReturn {
   audioDevices: AudioDeviceInfo[]
+  savedDeviceId: string
+  savedAudioDevice: AudioDeviceInfo
+  // Legacy aliases for backward compatibility with callers/tests
   selectedDeviceId: string
-  currentAudioDevice: AudioDeviceInfo | undefined
+  currentAudioDevice: AudioDeviceInfo
   isScanningDevices: boolean
   isAudioDropdownOpen: boolean
   audioDropdownRef: React.RefObject<HTMLDivElement | null>
@@ -20,6 +23,7 @@ export interface UseAudioDeviceSelectionReturn {
 
 export function useAudioDeviceSelection(): UseAudioDeviceSelectionReturn {
   const [audioDevices, setAudioDevices] = useState<AudioDeviceInfo[]>([])
+  const [savedDeviceId, setSavedDeviceId] = useState<string>(getSavedAudioDeviceId)
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(getSavedAudioDeviceId)
   const [isScanningDevices, setIsScanningDevices] = useState(false)
   const [isAudioDropdownOpen, setIsAudioDropdownOpen] = useState(false)
@@ -42,7 +46,9 @@ export function useAudioDeviceSelection(): UseAudioDeviceSelectionReturn {
   // Keep Home synchronized whenever Settings updates
   useEffect(() => {
     const handleSync = () => {
-      setSelectedDeviceId(getSavedAudioDeviceId())
+      const saved = getSavedAudioDeviceId()
+      setSavedDeviceId(saved)
+      setSelectedDeviceId(saved)
     }
     window.addEventListener('storage', handleSync)
     window.addEventListener('app_settings_changed', handleSync)
@@ -65,7 +71,6 @@ export function useAudioDeviceSelection(): UseAudioDeviceSelectionReturn {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Local inspection on Home without mutating global Settings
   const handleDeviceChange = useCallback((deviceId: string) => {
     setSelectedDeviceId(deviceId)
     setIsAudioDropdownOpen(false)
@@ -82,11 +87,25 @@ export function useAudioDeviceSelection(): UseAudioDeviceSelectionReturn {
     }
   }, [])
 
+  const fallbackDevice: AudioDeviceInfo = {
+    deviceId: 'default-loopback',
+    label: 'Loopback Output (Âm thanh hệ thống)',
+    kind: 'audiooutput',
+    type: 'system',
+  }
+
+  const savedAudioDevice =
+    audioDevices.find((d) => d.deviceId === savedDeviceId) ||
+    audioDevices[0] ||
+    fallbackDevice
+
   const currentAudioDevice =
-    audioDevices.find((d) => d.deviceId === selectedDeviceId) || audioDevices[0]
+    audioDevices.find((d) => d.deviceId === selectedDeviceId) || savedAudioDevice
 
   return {
     audioDevices,
+    savedDeviceId,
+    savedAudioDevice,
     selectedDeviceId,
     currentAudioDevice,
     isScanningDevices,

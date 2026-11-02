@@ -103,7 +103,7 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
             meetingError={nav.meetingError}
             onLaunchMeeting={nav.handleLaunchMeeting}
             onClearMeetingError={() => nav.setMeetingError(null)}
-            currentAudioDeviceLabel={audio.currentAudioDevice?.label || 'Loopback Output'}
+            currentAudioDeviceLabel={audio.savedAudioDevice?.label || 'Loopback Output'}
             currentSTTLabel={model.settingSTTEngine?.name || 'Local Whisper'}
             isSTTLocal={model.settingSTTEngine?.provider === 'Local'}
             currentLLMLabel={model.settingModel.name}
@@ -121,6 +121,8 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
         <div className="md:col-span-5 flex flex-col gap-2.5 min-w-0 flex-1">
           <AudioDeviceSelectorCard
             audioDevices={audio.audioDevices}
+            savedDeviceId={audio.savedDeviceId}
+            savedAudioDevice={audio.savedAudioDevice}
             selectedDeviceId={audio.selectedDeviceId}
             currentAudioDevice={audio.currentAudioDevice}
             isScanningDevices={audio.isScanningDevices}

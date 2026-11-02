@@ -6,6 +6,7 @@ import {
   Mic,
   ChevronDown,
   Settings,
+  Check,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -13,16 +14,19 @@ import type { AudioDeviceInfo } from '@/services/audio-devices'
 
 export interface AudioDeviceSelectorCardProps {
   audioDevices: AudioDeviceInfo[]
-  selectedDeviceId: string
-  currentAudioDevice: AudioDeviceInfo | undefined
+  savedDeviceId?: string
+  savedAudioDevice?: AudioDeviceInfo
+  // Legacy support for callers passing selectedDeviceId / currentAudioDevice
+  selectedDeviceId?: string
+  currentAudioDevice?: AudioDeviceInfo
   isScanningDevices: boolean
   isAudioDropdownOpen: boolean
   audioDropdownRef: React.RefObject<HTMLDivElement | null>
   onToggleDropdown: () => void
-  onDeviceChange: (id: string) => void
   onRefreshDevices: () => void
   onOpenAudioTest: () => void
   onOpenSettings?: () => void
+  onDeviceChange?: (id: string) => void
 }
 
 function DeviceIcon({
@@ -46,21 +50,27 @@ function DeviceIcon({
 
 export function AudioDeviceSelectorCard({
   audioDevices,
+  savedDeviceId,
+  savedAudioDevice,
   selectedDeviceId,
   currentAudioDevice,
   isScanningDevices,
   isAudioDropdownOpen,
   audioDropdownRef,
   onToggleDropdown,
-  onDeviceChange,
   onRefreshDevices,
   onOpenAudioTest,
   onOpenSettings,
 }: AudioDeviceSelectorCardProps) {
+  // The system active device is strictly the one from Settings
+  const effectiveActiveDevice = savedAudioDevice || currentAudioDevice
+  const effectiveActiveId =
+    savedDeviceId || effectiveActiveDevice?.deviceId || selectedDeviceId || 'default-loopback'
+
   const isLoopback =
-    !currentAudioDevice ||
-    currentAudioDevice.deviceId === 'default-loopback' ||
-    currentAudioDevice.type === 'system'
+    !effectiveActiveDevice ||
+    effectiveActiveDevice.deviceId === 'default-loopback' ||
+    effectiveActiveDevice.type === 'system'
 
   return (
     <Card className="bg-white/[0.03] border-white/[0.07] shadow-none p-2.5 gap-2 relative min-h-[105px] flex flex-col justify-between shrink-0">
@@ -116,12 +126,12 @@ export function AudioDeviceSelectorCard({
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-              <DeviceIcon device={currentAudioDevice} className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <DeviceIcon device={effectiveActiveDevice} className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="truncate block font-medium text-white/95 text-[11px]">
-                  {currentAudioDevice?.label || 'Loopback Output (Âm thanh hệ thống)'}
+                  {effectiveActiveDevice?.label || 'Loopback Output (Âm thanh hệ thống)'}
                 </span>
                 {isLoopback ? (
                   <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium shrink-0">
@@ -162,7 +172,7 @@ export function AudioDeviceSelectorCard({
           </div>
         </div>
 
-        {/* Hardware Inspector Popover (Không làm thay đổi Settings) */}
+        {/* Hardware Inspector Popover (Chỉ thiết bị trong Cài Đặt mới có badge "Đang kích hoạt") */}
         {isAudioDropdownOpen && (
           <div
             role="listbox"
@@ -176,31 +186,35 @@ export function AudioDeviceSelectorCard({
             </div>
 
             {audioDevices.map((d) => {
-              const isSelected = d.deviceId === selectedDeviceId
+              const isActive = d.deviceId === effectiveActiveId
               return (
                 <div
                   key={d.deviceId}
                   role="option"
-                  aria-selected={isSelected}
-                  tabIndex={0}
-                  onClick={() => onDeviceChange(d.deviceId)}
-                  onKeyDown={(e) => e.key === 'Enter' && onDeviceChange(d.deviceId)}
+                  aria-selected={isActive}
                   className={cn(
-                    'flex items-center justify-between px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150 select-none',
-                    isSelected
+                    'flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-all duration-150 select-none',
+                    isActive
                       ? 'bg-emerald-500/20 text-emerald-200 font-medium border border-emerald-500/35 shadow-sm'
                       : 'text-white/80 hover:bg-white/[0.08] hover:text-white'
                   )}
                   title={d.label}
                 >
                   <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
-                    <DeviceIcon device={d} className="w-3 h-3 text-emerald-400/80 shrink-0" />
+                    <DeviceIcon
+                      device={d}
+                      className={cn('w-3 h-3 shrink-0', isActive ? 'text-emerald-400' : 'text-white/40')}
+                    />
                     <span className="truncate block">{d.label}</span>
                   </div>
-                  {isSelected && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/25 text-emerald-300 shrink-0 font-medium border border-emerald-500/30">
+
+                  {isActive ? (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/25 text-emerald-300 shrink-0 font-medium border border-emerald-500/30 flex items-center gap-1">
+                      <Check className="w-2.5 h-2.5" />
                       Đang kích hoạt
                     </span>
+                  ) : (
+                    <span className="text-[9px] text-white/60 shrink-0">Khả dụng</span>
                   )}
                 </div>
               )
