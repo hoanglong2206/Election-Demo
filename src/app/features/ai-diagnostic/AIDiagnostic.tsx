@@ -33,6 +33,8 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
     currentLLM,
     benchmarkResult,
     isBenchmarking,
+    maxOutputTokens,
+    setMaxOutputTokens,
     handleRunBenchmark,
   } = useLLMBenchmark({
     onError: setGeneralError,
@@ -54,6 +56,7 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
     handleOpenCropOverlay,
     handleCloseSourcePicker,
     handleCancelCropping,
+    handleRetakeScreenCapture,
   } = useVisionDiagnostic({
     onError: setGeneralError,
   })
@@ -105,6 +108,8 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
             benchmarkResult={benchmarkResult}
             isBenchmarking={isBenchmarking}
             onRunBenchmark={handleRunBenchmark}
+            maxOutputTokens={maxOutputTokens}
+            onMaxOutputTokensChange={setMaxOutputTokens}
             onViewChange={onViewChange}
             onOpenSettings={
               onViewChange ? () => onViewChange('settings') : undefined
@@ -153,10 +158,7 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
           imageInfo={visionState.capturedImage}
           onConfirmCrop={handleConfirmCrop}
           onCancel={handleCancelCropping}
-          onRetake={() => {
-            handleCancelCropping()
-            handleTriggerScreenCapture(true)
-          }}
+          onRetake={handleRetakeScreenCapture}
         />
       )}
     </div>

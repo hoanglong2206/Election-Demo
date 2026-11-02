@@ -1,4 +1,4 @@
-import { Zap, RotateCcw } from 'lucide-react'
+import { Zap, RotateCcw, Sliders } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -19,6 +19,8 @@ export interface BenchmarkPromptFormProps {
   isBenchmarking: boolean
   isNoModel: boolean
   currentModel: AIModelConfig
+  maxOutputTokens?: number
+  onMaxOutputTokensChange?: (tokens: number) => void
 }
 
 export function BenchmarkPromptForm({
@@ -30,6 +32,8 @@ export function BenchmarkPromptForm({
   isBenchmarking,
   isNoModel,
   currentModel,
+  maxOutputTokens = AI_BENCHMARK_MAX_OUTPUT_TOKENS,
+  onMaxOutputTokensChange,
 }: BenchmarkPromptFormProps) {
   return (
     <div className="space-y-3">
@@ -45,7 +49,7 @@ export function BenchmarkPromptForm({
               type="button"
               onClick={() => onSelectPreset(p)}
               className={cn(
-                'text-[10px] px-2 py-1 rounded-lg border transition-all text-left whitespace-nowrap',
+                'text-[10px] px-2 py-1 rounded-lg border transition-all text-left whitespace-nowrap cursor-pointer',
                 selectedPromptId === p.id
                   ? 'bg-amber-500/20 text-amber-200 border-amber-500/40 font-medium shadow-sm'
                   : 'bg-white/[0.02] text-white/60 border-white/[0.08] hover:bg-white/[0.06] hover:text-white'
@@ -71,6 +75,35 @@ export function BenchmarkPromptForm({
           />
         </div>
 
+        {/* Token Budget Selector Pills */}
+        <div className="flex items-center justify-between text-[10.5px] px-0.5 flex-wrap gap-2">
+          <span className="text-white/50 flex items-center gap-1.5">
+            <Sliders className="w-3 h-3 text-amber-400" />
+            Giới hạn token phản hồi:
+          </span>
+          <div className="flex items-center gap-1">
+            {[
+              { val: 250, label: '250 (Ngắn)' },
+              { val: 500, label: '500 (Chuẩn)' },
+              { val: 1000, label: '1000 (Dài)' },
+            ].map((item) => (
+              <button
+                key={item.val}
+                type="button"
+                onClick={() => onMaxOutputTokensChange?.(item.val)}
+                className={cn(
+                  'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors cursor-pointer',
+                  maxOutputTokens === item.val
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                    : 'bg-white/[0.03] text-white/50 border-white/10 hover:text-white'
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-2 text-[10px] leading-relaxed text-amber-100/75">
           <span className="font-semibold text-amber-200">
             Có thể phát sinh phí hoặc tiêu quota.
@@ -79,14 +112,12 @@ export function BenchmarkPromptForm({
           <span className="font-mono text-amber-100">
             {currentModel.provider} / {currentModel.id}
           </span>
-          ; giới hạn đầu ra là tối đa {AI_BENCHMARK_MAX_OUTPUT_TOKENS} token. Chi
-          phí thực tế tùy giá và cách tính token của provider.
+          ; giới hạn đầu ra là tối đa {maxOutputTokens} token. Chi phí thực tế tùy giá và cách tính token của provider.
         </div>
 
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] text-white/40">
-            Prompt {customPrompt.length} ký tự • Tối đa{' '}
-            {AI_BENCHMARK_MAX_OUTPUT_TOKENS} token •{' '}
+            Prompt {customPrompt.length} ký tự • Tối đa {maxOutputTokens} token •{' '}
             <code className="text-amber-300 font-mono">{currentModel.id}</code>
           </span>
 
@@ -96,7 +127,7 @@ export function BenchmarkPromptForm({
             onClick={onTriggerBenchmark}
             disabled={isBenchmarking || !customPrompt.trim() || isNoModel}
             className={cn(
-              'text-[11px] h-8 px-4 gap-1.5 shadow-sm font-medium transition-all shrink-0',
+              'text-[11px] h-8 px-4 gap-1.5 shadow-sm font-medium transition-all shrink-0 cursor-pointer',
               isNoModel
                 ? 'bg-white/10 text-white/40 cursor-not-allowed hover:bg-white/10'
                 : 'bg-amber-600 hover:bg-amber-500 text-white'

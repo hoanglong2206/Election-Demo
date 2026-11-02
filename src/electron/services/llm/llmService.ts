@@ -274,7 +274,7 @@ export class ElectronLlmService {
       body = {
         model: modelId,
         messages,
-        max_completion_tokens: input.maxTokens ?? 250,
+        max_completion_tokens: input.maxTokens ?? 500,
         ...(!reasoningModel ? { temperature: input.temperature ?? 0.2 } : {}),
         stream: true,
         ...(provider === 'openai' || provider === 'groq' ? { stream_options: { include_usage: true } } : {}),
@@ -282,7 +282,7 @@ export class ElectronLlmService {
     } else if (provider === 'gemini') {
       url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse`
       headers['x-goog-api-key'] = key
-      body = { contents: [{ parts: [{ text: input.prompt }] }], generationConfig: { maxOutputTokens: input.maxTokens ?? 250, temperature: input.temperature ?? 0.2 }, ...(input.systemPrompt ? { systemInstruction: { parts: [{ text: input.systemPrompt }] } } : {}) }
+      body = { contents: [{ parts: [{ text: input.prompt }] }], generationConfig: { maxOutputTokens: input.maxTokens ?? 500, temperature: input.temperature ?? 0.2 }, ...(input.systemPrompt ? { systemInstruction: { parts: [{ text: input.systemPrompt }] } } : {}) }
     } else throw new Error(`Provider không được hỗ trợ: ${provider}`)
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
     if (!res.ok) {

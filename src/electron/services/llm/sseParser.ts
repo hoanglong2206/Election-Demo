@@ -33,6 +33,7 @@ export class SSEStreamParser {
   private callbacks: SSECallbacks
   private usage: SSEUsage = {}
   private accumulatedText: string = ''
+  private finishReason?: string
 
   constructor(provider: string, callbacks: SSECallbacks = {}) {
     this.decoder = new TextDecoder('utf-8')
@@ -107,7 +108,11 @@ export class SSEStreamParser {
 
     let delta: string
     if (this.provider === 'gemini') {
-      delta = data?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
+      const parts = data?.candidates?.[0]?.content?.parts || []
+      delta = parts.filter((part: any) => !part.thought).map((part: any) => part.text || '').join('')
+      if (data?.candidates?.[0]?.finishReason) {
+        this.finishReason = data.candidates[0].finishReason
+      }
       if (data?.usageMetadata) {
         this.usage.inputTokens = data.usageMetadata.promptTokenCount ?? this.usage.inputTokens
         this.usage.outputTokens = data.usageMetadata.candidatesTokenCount ?? this.usage.outputTokens
@@ -116,6 +121,9 @@ export class SSEStreamParser {
       }
     } else {
       delta = data?.choices?.[0]?.delta?.content ?? data?.choices?.[0]?.delta?.text ?? ''
+      if (data?.choices?.[0]?.finish_reason) {
+        this.finishReason = data.choices[0].finish_reason
+      }
       if (data?.usage) {
         this.usage.inputTokens = data.usage.prompt_tokens ?? this.usage.inputTokens
         this.usage.outputTokens = data.usage.completion_tokens ?? this.usage.outputTokens
@@ -136,5 +144,9 @@ export class SSEStreamParser {
 
   public getUsage(): SSEUsage {
     return { ...this.usage }
+  }
+
+  public getFinishReason(): string | undefined {
+    return this.finishReason
   }
 }

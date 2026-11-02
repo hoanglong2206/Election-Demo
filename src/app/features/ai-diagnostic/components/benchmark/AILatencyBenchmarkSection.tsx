@@ -19,7 +19,9 @@ export interface AILatencyBenchmarkSectionProps {
   onSelectModel: (modelId: string) => void
   benchmarkResult: AIBenchmarkResult | null
   isBenchmarking: boolean
-  onRunBenchmark: (modelId: string, customPrompt: string) => void
+  onRunBenchmark: (modelId: string, customPrompt: string, customMaxTokens?: number) => void
+  maxOutputTokens?: number
+  onMaxOutputTokensChange?: (tokens: number) => void
   onOpenSettings?: () => void
   onViewChange?: (
     view:
@@ -40,6 +42,8 @@ export function AILatencyBenchmarkSection({
   benchmarkResult,
   isBenchmarking,
   onRunBenchmark,
+  maxOutputTokens,
+  onMaxOutputTokensChange,
   onViewChange,
 }: AILatencyBenchmarkSectionProps) {
   const [selectedPromptId, setSelectedPromptId] = useState<string>('cap')
@@ -87,8 +91,8 @@ export function AILatencyBenchmarkSection({
 
   const handleTriggerBenchmark = useCallback(() => {
     if (!customPrompt.trim() || isNoModel) return
-    onRunBenchmark(selectedModelId, customPrompt.trim())
-  }, [customPrompt, isNoModel, onRunBenchmark, selectedModelId])
+    onRunBenchmark(selectedModelId, customPrompt.trim(), maxOutputTokens)
+  }, [customPrompt, isNoModel, maxOutputTokens, onRunBenchmark, selectedModelId])
 
   return (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 space-y-3.5 shadow-sm flex flex-col h-full">
@@ -199,6 +203,8 @@ export function AILatencyBenchmarkSection({
         isBenchmarking={isBenchmarking}
         isNoModel={isNoModel}
         currentModel={currentModel}
+        maxOutputTokens={maxOutputTokens}
+        onMaxOutputTokensChange={onMaxOutputTokensChange}
       />
 
       {/* Benchmark Response Card */}

@@ -370,9 +370,12 @@ export interface AIBenchmarkResult {
   generationMs?: number
   tokenRateIsEstimate?: boolean
   errorCategory?: 'authentication' | 'model' | 'quota' | 'rate_limit' | 'request' | 'service' | 'network' | 'unknown'
+  finishReason?: string
+  isTruncated?: boolean
+  maxTokensConfigured?: number
 }
 
-export const AI_BENCHMARK_MAX_OUTPUT_TOKENS = 250
+export const AI_BENCHMARK_MAX_OUTPUT_TOKENS = 500
 
 function classifyBenchmarkError(message: string): NonNullable<AIBenchmarkResult['errorCategory']> {
   const text = message.toLowerCase()
@@ -388,13 +391,15 @@ function classifyBenchmarkError(message: string): NonNullable<AIBenchmarkResult[
 
 export async function runAILatencyBenchmark(
   modelId?: string,
-  customPrompt?: string
+  customPrompt?: string,
+  customMaxTokens?: number
 ): Promise<AIBenchmarkResult> {
   const targetId = modelId || getSavedAIModelId()
   const model = getAllAIModels().find((candidate) => candidate.id === targetId)
   const benchmarkPrompt =
     (customPrompt || '').trim() ||
     'Phân tích định lý CAP và đánh đổi giữa Latency vs Consistency trong 1 câu ngắn gọn.'
+  const maxTokens = customMaxTokens && customMaxTokens > 0 ? customMaxTokens : AI_BENCHMARK_MAX_OUTPUT_TOKENS
 
   if (!model || !model.isLiveFromAPI) {
     throw new Error(`Model "${targetId}" không còn trong registry đã đồng bộ. Vào Cài đặt, đồng bộ model rồi chọn lại trước khi đo.`)
@@ -418,8 +423,8 @@ export async function runAILatencyBenchmark(
         modelId: modelToUse,
         prompt: benchmarkPrompt,
         systemPrompt:
-          'You are an AI benchmark tester. Provide a direct, concise and accurate answer without unnecessary preamble.',
-        maxTokens: AI_BENCHMARK_MAX_OUTPUT_TOKENS,
+          'You are a helpful and concise AI benchmark assistant. Always reply directly in the exact same language as the user prompt (if the prompt is in Vietnamese, you MUST answer in Vietnamese). Provide a clear, well-structured, and complete answer without unnecessary preamble.',
+        maxTokens,
         temperature: 0.2,
         stream: true,
       })
@@ -435,6 +440,11 @@ export async function runAILatencyBenchmark(
         const tokensEstimate = outputTokens ?? Math.max(1, Math.round(text.length / 4))
         const generationMs = res.benchmark?.generationMs ?? latency
         const tokensPerSec = Math.round((tokensEstimate / Math.max(1, generationMs)) * 1000)
+        const finishReason = (res as any).finishReason
+        const isTruncated =
+          finishReason === 'length' ||
+          finishReason === 'MAX_TOKENS' ||
+          (!/[.!?"'`)\n:]$/.test(text) && tokensEstimate >= (maxTokens - 20))
 
         try {
           usageTrackerService.trackUsage({
@@ -460,6 +470,9 @@ export async function runAILatencyBenchmark(
           ttftMs: res.benchmark?.ttftMs ?? latency,
           generationMs,
           tokenRateIsEstimate,
+          finishReason,
+          isTruncated,
+          maxTokensConfigured: maxTokens,
         }
       }
     } catch (err: any) {

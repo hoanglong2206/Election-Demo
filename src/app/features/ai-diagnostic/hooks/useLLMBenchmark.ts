@@ -19,7 +19,13 @@ export interface UseLLMBenchmarkReturn {
   currentLLM: AIModelConfig
   benchmarkResult: AIBenchmarkResult | null
   isBenchmarking: boolean
-  handleRunBenchmark: (modelIdToTest: string, promptToTest: string) => Promise<void>
+  maxOutputTokens: number
+  setMaxOutputTokens: (val: number) => void
+  handleRunBenchmark: (
+    modelIdToTest: string,
+    promptToTest: string,
+    customMaxTokens?: number
+  ) => Promise<void>
   clearBenchmarkResult: () => void
 }
 
@@ -35,6 +41,7 @@ export function useLLMBenchmark({
   const [benchmarkResult, setBenchmarkResult] =
     useState<AIBenchmarkResult | null>(null)
   const [isBenchmarking, setIsBenchmarking] = useState(false)
+  const [maxOutputTokens, setMaxOutputTokens] = useState<number>(500)
 
   const currentLLM = useMemo(() => {
     return (
@@ -59,10 +66,15 @@ export function useLLMBenchmark({
   }, [])
 
   const handleRunBenchmark = useCallback(
-    async (modelIdToTest: string, promptToTest: string) => {
+    async (
+      modelIdToTest: string,
+      promptToTest: string,
+      customMaxTokens?: number
+    ) => {
       setIsBenchmarking(true)
       try {
-        const res = await runAILatencyBenchmark(modelIdToTest, promptToTest)
+        const tokensToUse = customMaxTokens ?? maxOutputTokens
+        const res = await runAILatencyBenchmark(modelIdToTest, promptToTest, tokensToUse)
         setBenchmarkResult(res)
       } catch (err: any) {
         const msg = err?.message || 'Không thể thực hiện đo tốc độ AI.'
@@ -71,7 +83,7 @@ export function useLLMBenchmark({
         setIsBenchmarking(false)
       }
     },
-    [onError]
+    [maxOutputTokens, onError]
   )
 
   const clearBenchmarkResult = useCallback(() => {
@@ -85,6 +97,8 @@ export function useLLMBenchmark({
     currentLLM,
     benchmarkResult,
     isBenchmarking,
+    maxOutputTokens,
+    setMaxOutputTokens,
     handleRunBenchmark,
     clearBenchmarkResult,
   }
