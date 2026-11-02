@@ -14,6 +14,9 @@ export interface MeetingAudioConfigCardProps {
   selectedDevice: string
   onSelectDevice: (deviceId: string) => void
   currentDevice: AudioDeviceInfo
+  audioDevices?: AudioDeviceInfo[]
+  isScanningDevices?: boolean
+  onRefreshDevices?: () => void
   modelRouterPolicy: ModelRouterPolicy
   onModelRouterPolicyChange: (policy: ModelRouterPolicy) => void
   segmentationMode?: 'sentence' | 'fixed'
@@ -32,6 +35,9 @@ export function MeetingAudioConfigCard({
   selectedDevice,
   onSelectDevice,
   currentDevice,
+  audioDevices,
+  isScanningDevices,
+  onRefreshDevices,
   modelRouterPolicy,
   onModelRouterPolicyChange,
   segmentationMode = 'sentence',
@@ -57,6 +63,9 @@ export function MeetingAudioConfigCard({
             selectedDevice={selectedDevice}
             onSelectDevice={onSelectDevice}
             currentDevice={currentDevice}
+            audioDevices={audioDevices}
+            isScanningDevices={isScanningDevices}
+            onRefreshDevices={onRefreshDevices}
           />
           <ModelRouterPolicySelector
             modelRouterPolicy={modelRouterPolicy}
@@ -86,4 +95,3 @@ export function MeetingAudioConfigCard({
     </Card>
   )
 }
-

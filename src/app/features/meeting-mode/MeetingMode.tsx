@@ -9,8 +9,9 @@ import {
   needsVietnameseTranslation,
 } from '@/services/ai-model/aiModels'
 import {
-  PRESET_AUDIO_DEVICES,
+
   getSavedAudioDeviceId,
+  enumerateSystemAudioDevices,
 } from '@/services/audio-devices'
 import {
   jdKeywordExtractor,
@@ -23,6 +24,7 @@ import {
 import type { HistorySuggestion } from '@/services/session-history'
 import type { ScreenCaptureState } from '@/services/screen-capture'
 import type { MeetingModeProps } from './types'
+import { DEFAULT_JARGON_PRESETS } from '@/features/audio-test/components/jargon'
 import {
   useTranscript,
   useMeetingSession,
@@ -80,8 +82,19 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   const selectedModelId = getSavedAIModelId()
   const currentModel = getSelectedModelConfig(selectedModelId)
   const selectedDeviceId = getSavedAudioDeviceId()
-  const matchedDevice = PRESET_AUDIO_DEVICES.find((d) => d.deviceId === selectedDeviceId)
-  const currentDeviceLabel = matchedDevice?.label || 'Loopback Output'
+  const [currentDeviceLabel, setCurrentDeviceLabel] = useState<string>('Loopback Output')
+  useEffect(() => {
+    if (!selectedDeviceId || selectedDeviceId === 'default-loopback') {
+      setCurrentDeviceLabel('Loopback Output')
+      return
+    }
+    enumerateSystemAudioDevices().then((devs) => {
+      const found = devs.find((d) => d.deviceId === selectedDeviceId)
+      if (found) {
+        setCurrentDeviceLabel(found.label)
+      }
+    })
+  }, [selectedDeviceId])
 
   const savedSTTEngineId = getSavedSTTEngineId()
   const availableSTTEngines = getAvailableSTTEngines()
@@ -98,10 +111,21 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       ? profileSnapshot.jobDescription || contextData.jobDescription || ''
       : contextData.jobDescription || ''
   const activeKeywords = useMemo(() => {
-    return mode === 'interview'
-      ? profileSnapshot.keywords || contextData.keywords || []
-      : contextData.discussionKeywords || []
-  }, [mode, profileSnapshot.keywords, contextData.keywords, contextData.discussionKeywords])
+    const customKws =
+      mode === 'interview'
+        ? profileSnapshot.keywords || contextData.keywords || []
+        : contextData.discussionKeywords || []
+
+    if (customKws && customKws.length > 0) return customKws
+    if (mode === 'interview' && activeJD) {
+      const extracted = jdKeywordExtractor.extractKeywords(activeJD)
+      if (extracted.length > 0) return extracted
+    } else if (mode === 'discussion' && contextData.discussionTopic) {
+      const extracted = jdKeywordExtractor.extractKeywords(contextData.discussionTopic)
+      if (extracted.length > 0) return extracted
+    }
+    return DEFAULT_JARGON_PRESETS
+  }, [mode, profileSnapshot.keywords, contextData.keywords, contextData.discussionKeywords, activeJD, contextData.discussionTopic])
 
   const hasCV = isValidCvContent(activeCV)
   const hasJD = isValidJdContent(activeJD)
@@ -111,18 +135,10 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
 
   // Context-Aware Whisper Initial Prompt
   const whisperPrompt = useMemo(() => {
-    let kws = activeKeywords
-    if (!kws || kws.length === 0) {
-      if (mode === 'interview' && activeJD) {
-        kws = jdKeywordExtractor.extractKeywords(activeJD)
-      } else if (mode === 'discussion' && contextData.discussionTopic) {
-        kws = jdKeywordExtractor.extractKeywords(contextData.discussionTopic)
-      }
-    }
-    return whisperPromptBuilder.buildPrompt(kws || [], {
+    return whisperPromptBuilder.buildPrompt(activeKeywords, {
       contextType: mode,
     })
-  }, [activeKeywords, activeJD, contextData.discussionTopic, mode])
+  }, [activeKeywords, mode])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const aiSuggestionsHistoryRef = useRef<HistorySuggestion[]>([])

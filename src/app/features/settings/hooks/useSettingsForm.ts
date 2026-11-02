@@ -16,9 +16,11 @@ import {
   type STTEngineConfig,
 } from '@/services/ai-model/aiModels'
 import {
-  PRESET_AUDIO_DEVICES,
+  DEFAULT_LOOPBACK_DEVICE,
   getSavedAudioDeviceId,
   saveAudioDeviceId,
+  enumerateSystemAudioDevices,
+  type AudioDeviceInfo,
 } from '@/services/audio-devices'
 import { normalizeResponseLanguage } from '@/services/ai-model/language'
 import {
@@ -46,8 +48,10 @@ export function useSettingsForm() {
   )
   const [modelsList, setModelsList] = useState<AIModelConfig[]>(() => getAllAIModels())
 
-  // 2. Audio & Meeting Configuration States
+  // 2. Audio & Meeting Configuration States (Real Hardware Devices)
+  const [audioDevices, setAudioDevices] = useState<AudioDeviceInfo[]>([DEFAULT_LOOPBACK_DEVICE])
   const [selectedDevice, setSelectedDevice] = useState(getSavedAudioDeviceId)
+  const [isScanningDevices, setIsScanningDevices] = useState(false)
   const [vadThreshold, setVadThreshold] = useState(getSavedVADThreshold)
   const [responseLang, setResponseLang] = useState(getSavedResponseLanguage)
   const [modelRouterPolicy, setModelRouterPolicy] = useState(currentSettings.modelRouter.policy)
@@ -60,6 +64,31 @@ export function useSettingsForm() {
   const [maxSegmentMs, setMaxSegmentMs] = useState<number>(
     () => (settingsManager.get('maxSegmentMs') as number) || 4500
   )
+
+  // Enumerate real hardware devices from OS
+  const handleRefreshDevices = useCallback(async () => {
+    setIsScanningDevices(true)
+    try {
+      const devs = await enumerateSystemAudioDevices()
+      if (devs && devs.length > 0) {
+        setAudioDevices(devs)
+      }
+    } finally {
+      setIsScanningDevices(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    enumerateSystemAudioDevices().then((devs) => {
+      if (mounted && devs && devs.length > 0) {
+        setAudioDevices(devs)
+      }
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   // Listen to models sync updates event
   useEffect(() => {
@@ -138,9 +167,10 @@ export function useSettingsForm() {
 
   const currentDevice = useMemo(
     () =>
-      PRESET_AUDIO_DEVICES.find((d) => d.deviceId === selectedDevice) ||
-      PRESET_AUDIO_DEVICES[0],
-    [selectedDevice]
+      audioDevices.find((d) => d.deviceId === selectedDevice) ||
+      audioDevices[0] ||
+      DEFAULT_LOOPBACK_DEVICE,
+    [audioDevices, selectedDevice]
   )
 
   return {
@@ -156,6 +186,9 @@ export function useSettingsForm() {
     setSelectedMultimodal,
     modelsList,
     setModelsList,
+    audioDevices,
+    isScanningDevices,
+    handleRefreshDevices,
     selectedDevice,
     setSelectedDevice,
     vadThreshold,
@@ -176,4 +209,3 @@ export function useSettingsForm() {
     currentDevice,
   }
 }
-

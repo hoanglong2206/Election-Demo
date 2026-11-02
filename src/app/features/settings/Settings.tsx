@@ -54,6 +54,9 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
     currentSTT,
     currentLLM,
     currentDevice,
+    audioDevices,
+    isScanningDevices,
+    handleRefreshDevices,
   } = useSettingsForm()
 
   // 2. AI Model Sync
@@ -212,6 +215,9 @@ export function Settings({ onViewChange }: SettingsProps = {}) {
           selectedDevice={selectedDevice}
           onSelectDevice={setSelectedDevice}
           currentDevice={currentDevice}
+          audioDevices={audioDevices}
+          isScanningDevices={isScanningDevices}
+          onRefreshDevices={handleRefreshDevices}
           modelRouterPolicy={modelRouterPolicy}
           onModelRouterPolicyChange={(policy) => {
             setModelRouterPolicy(policy)
