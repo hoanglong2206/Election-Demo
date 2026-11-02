@@ -42,19 +42,7 @@ export function useSessionHistoryData(
   useEffect(() => {
     let isSubscribed = true
 
-    // 1. Immediately sync with current in-memory cache upon mount
-    const current = getSavedSessions()
-    if (current && current.length > 0) {
-      setSessions([...current])
-      setSelectedSessionId((curr) => {
-        if (!curr || !current.some((s) => s.id === curr)) {
-          return current[0].id
-        }
-        return curr
-      })
-    }
-
-    // 2. Subscribe to real-time session updates
+    // 1. Subscribe to real-time session updates
     const unsubscribe = subscribeSessions((updated) => {
       if (!isSubscribed) return
       setSessions([...updated])
@@ -70,7 +58,7 @@ export function useSessionHistoryData(
       }
     })
 
-    // 3. Ensure async init completes if still in-flight
+    // 2. Ensure async init completes if still in-flight
     initSessionStorage().then((loaded) => {
       if (!isSubscribed) return
       const currentSaved = getSavedSessions()
