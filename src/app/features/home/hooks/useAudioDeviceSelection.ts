@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   enumerateSystemAudioDevices,
   getSavedAudioDeviceId,
-  saveAudioDeviceId,
   type AudioDeviceInfo,
 } from '@/services/audio-devices'
+import { settingsManager } from '@/services/settings'
 
 export interface UseAudioDeviceSelectionReturn {
   audioDevices: AudioDeviceInfo[]
@@ -26,6 +26,7 @@ export function useAudioDeviceSelection(): UseAudioDeviceSelectionReturn {
   const audioDropdownRef = useRef<HTMLDivElement>(null)
   const isMountedRef = useRef(true)
 
+  // Enumerate hardware audio devices upon mount
   useEffect(() => {
     isMountedRef.current = true
     let mounted = true
@@ -35,6 +36,21 @@ export function useAudioDeviceSelection(): UseAudioDeviceSelectionReturn {
     return () => {
       mounted = false
       isMountedRef.current = false
+    }
+  }, [])
+
+  // Keep Home synchronized whenever Settings updates
+  useEffect(() => {
+    const handleSync = () => {
+      setSelectedDeviceId(getSavedAudioDeviceId())
+    }
+    window.addEventListener('storage', handleSync)
+    window.addEventListener('app_settings_changed', handleSync)
+    const unsub = settingsManager.subscribe(handleSync)
+    return () => {
+      window.removeEventListener('storage', handleSync)
+      window.removeEventListener('app_settings_changed', handleSync)
+      unsub()
     }
   }, [])
 
@@ -49,9 +65,9 @@ export function useAudioDeviceSelection(): UseAudioDeviceSelectionReturn {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Local inspection on Home without mutating global Settings
   const handleDeviceChange = useCallback((deviceId: string) => {
     setSelectedDeviceId(deviceId)
-    saveAudioDeviceId(deviceId)
     setIsAudioDropdownOpen(false)
   }, [])
 

@@ -132,6 +132,9 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
             onOpenAudioTest={() => {
               onViewChange('audio-test')
             }}
+            onOpenSettings={() => {
+              onViewChange('settings')
+            }}
           />
 
           <AIModelSelectorCard

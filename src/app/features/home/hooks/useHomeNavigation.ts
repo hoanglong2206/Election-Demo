@@ -60,18 +60,13 @@ export function useHomeNavigation({
   )
 
   useEffect(() => {
-    // 1. Immediately sync with latest in-memory cache upon mount
-    const current = getSavedSessions()
-    setRecentSessions(current.slice(0, 2))
-    setTotalSessionsCount(current.length)
-
-    // 2. Subscribe to real-time session changes
+    // 1. Subscribe to real-time session changes
     const unsubscribe = subscribeSessions((updated) => {
       setRecentSessions(updated.slice(0, 2))
       setTotalSessionsCount(updated.length)
     })
 
-    // 3. Ensure async init completes if it was still in flight
+    // 2. Ensure async init completes if it was still in flight
     initSessionStorage().then((loaded) => {
       const latest = getSavedSessions()
       const effective = latest.length > 0 ? latest : loaded
