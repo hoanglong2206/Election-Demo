@@ -33,12 +33,18 @@ export function SessionHeader({
   onRetentionDaysChange,
 }: SessionHeaderProps) {
   const [isRetentionOpen, setIsRetentionOpen] = useState(false)
+  const [isExportOpen, setIsExportOpen] = useState(false)
   const retentionRef = useRef<HTMLDivElement>(null)
+  const exportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (retentionRef.current && !retentionRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (retentionRef.current && !retentionRef.current.contains(target)) {
         setIsRetentionOpen(false)
+      }
+      if (exportRef.current && !exportRef.current.contains(target)) {
+        setIsExportOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -47,31 +53,31 @@ export function SessionHeader({
 
   return (
     <div className="flex items-center bg-white/[0.02] border border-white/[0.06] rounded-xl px-3 py-2 gap-2">
-      <div className="flex items-center gap-2.5 flex-1">
+      <div className="flex items-center gap-2.5 flex-1 min-w-0">
         <div className="w-7 h-7 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center shrink-0">
           <FileText className="w-3.5 h-3.5 text-violet-400" />
         </div>
 
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-[13px] font-semibold text-white/95">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-[13px] font-semibold text-white/95 truncate">
               Lịch Sử Cuộc Họp & Phỏng Vấn (Session History)
             </h2>
             <Badge
               variant="outline"
-              className="text-[9px] px-1.5 py-0 border-violet-500/30 bg-violet-500/10 text-violet-300"
+              className="text-[9px] px-1.5 py-0 border-violet-500/30 bg-violet-500/10 text-violet-300 shrink-0"
             >
               {totalSessions} buổi họp
             </Badge>
           </div>
-          <p className="text-[10px] text-white/40 hidden sm:block">
+          <p className="text-[10px] text-white/40 hidden sm:block truncate">
             Xem lại toàn bộ transcript timeline, câu trả lời gợi ý của AI, câu hỏi hình ảnh và xuất báo cáo
           </p>
         </div>
       </div>
 
-      {/* Action, Retention & Export Buttons */}
-      <div className="flex items-center gap-1.5 justify-end">
+      {/* Action, Retention & Export Dropdown */}
+      <div className="flex items-center gap-1.5 justify-end shrink-0">
         {/* Retention Policy Dropdown */}
         {onRetentionDaysChange && (
           <div ref={retentionRef} className="relative">
@@ -130,6 +136,7 @@ export function SessionHeader({
           </div>
         )}
 
+        {/* Clear All Sessions Button */}
         {totalSessions > 0 && onClearAll && (
           <Button
             id="btn-clear-all-sessions"
@@ -144,46 +151,111 @@ export function SessionHeader({
           </Button>
         )}
 
+        {/* Consolidated Export Dropdown */}
         {currentSession && (
-          <>
-            <Button
-              id="btn-export-markdown"
-              size="sm"
-              variant="outline"
-              onClick={() => exportSessionToMarkdown(currentSession)}
-              className="bg-white/[0.04] border-white/10 hover:bg-white/10 text-white text-[10.5px] h-7 px-2.5 gap-1.5"
-              title="Tải về file Markdown chứa đầy đủ timeline và câu hỏi"
+          <div ref={exportRef} className="relative">
+            <button
+              id="btn-export-dropdown"
+              type="button"
+              onClick={() => setIsExportOpen(!isExportOpen)}
+              aria-haspopup="menu"
+              aria-expanded={isExportOpen}
+              className={cn(
+                'flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white px-2.5 py-1.5 rounded-xl text-[10.5px] font-medium transition-all duration-200 active:scale-[0.99] shadow-sm select-none cursor-pointer',
+                isExportOpen && 'ring-2 ring-violet-400/40 bg-violet-500'
+              )}
+              title="Xuất báo cáo cuộc họp (PDF, Markdown, JSON)"
             >
-              <Download className="w-3 h-3 text-violet-400" />
-              <span>Export MD</span>
-            </Button>
+              <Download className="w-3.5 h-3.5 text-white shrink-0" />
+              <span>Xuất báo cáo</span>
+              <ChevronDown
+                className={cn(
+                  'w-3.5 h-3.5 text-white/70 shrink-0 transition-transform duration-200 ease-out',
+                  isExportOpen && 'rotate-180 text-white'
+                )}
+              />
+            </button>
 
-            <Button
-              id="btn-export-json"
-              size="sm"
-              variant="outline"
-              onClick={() => exportSessionToJson(currentSession)}
-              className="bg-white/[0.04] border-white/10 hover:bg-white/10 text-white text-[10.5px] h-7 px-2.5 gap-1.5"
-              title="Tải về file JSON định dạng chuẩn Schema v2.0"
-            >
-              <Database className="w-3 h-3 text-cyan-400" />
-              <span>Export JSON</span>
-            </Button>
+            {isExportOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1.5 z-50 w-56 bg-[#0c101d]/95 border border-white/15 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150 ease-out text-[11px]"
+              >
+                <div className="px-2 py-1 text-[9.5px] font-semibold text-white/40 uppercase tracking-wider border-b border-white/5 flex items-center justify-between">
+                  <span>Định dạng xuất file</span>
+                  <span className="text-[9px] text-violet-400 font-mono">3 định dạng</span>
+                </div>
 
-            <Button
-              id="btn-export-pdf"
-              size="sm"
-              onClick={() => exportSessionToPDF(currentSession)}
-              className="bg-violet-600 hover:bg-violet-500 text-white text-[10.5px] h-7 px-2.5 gap-1.5 shadow-sm font-medium"
-              title="In hoặc lưu dạng PDF"
-            >
-              <Printer className="w-3 h-3" />
-              <span>Export PDF</span>
-            </Button>
-          </>
+                {/* PDF */}
+                <button
+                  id="btn-export-pdf"
+                  type="button"
+                  onClick={() => {
+                    exportSessionToPDF(currentSession)
+                    setIsExportOpen(false)
+                  }}
+                  className="w-full px-2 py-1.5 rounded-lg text-left flex items-center gap-2.5 hover:bg-white/[0.08] text-white/90 hover:text-white transition-all duration-150 select-none cursor-pointer group"
+                >
+                  <div className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0 group-hover:bg-violet-500/30 transition-colors">
+                    <Printer className="w-3.5 h-3.5 text-violet-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-semibold text-white/95 text-[11px]">Xuất file PDF</span>
+                      <span className="text-[8.5px] font-mono px-1 py-0 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">.pdf</span>
+                    </div>
+                    <p className="text-[9.5px] text-white/45 truncate">In hoặc lưu PDF hoàn chỉnh</p>
+                  </div>
+                </button>
+
+                {/* Markdown */}
+                <button
+                  id="btn-export-markdown"
+                  type="button"
+                  onClick={() => {
+                    exportSessionToMarkdown(currentSession)
+                    setIsExportOpen(false)
+                  }}
+                  className="w-full px-2 py-1.5 rounded-lg text-left flex items-center gap-2.5 hover:bg-white/[0.08] text-white/90 hover:text-white transition-all duration-150 select-none cursor-pointer group"
+                >
+                  <div className="w-6 h-6 rounded-md bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/30 transition-colors">
+                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-semibold text-white/95 text-[11px]">Xuất Markdown</span>
+                      <span className="text-[8.5px] font-mono px-1 py-0 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">.md</span>
+                    </div>
+                    <p className="text-[9.5px] text-white/45 truncate">Timeline, lời thoại & câu hỏi</p>
+                  </div>
+                </button>
+
+                {/* JSON */}
+                <button
+                  id="btn-export-json"
+                  type="button"
+                  onClick={() => {
+                    exportSessionToJson(currentSession)
+                    setIsExportOpen(false)
+                  }}
+                  className="w-full px-2 py-1.5 rounded-lg text-left flex items-center gap-2.5 hover:bg-white/[0.08] text-white/90 hover:text-white transition-all duration-150 select-none cursor-pointer group"
+                >
+                  <div className="w-6 h-6 rounded-md bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/30 transition-colors">
+                    <Database className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-semibold text-white/95 text-[11px]">Xuất JSON</span>
+                      <span className="text-[8.5px] font-mono px-1 py-0 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">.json</span>
+                    </div>
+                    <p className="text-[9.5px] text-white/45 truncate">Schema v2.0 đầy đủ dữ liệu gốc</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
   )
 }
-
