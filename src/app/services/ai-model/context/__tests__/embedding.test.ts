@@ -123,3 +123,4 @@ describe('Task 1: Semantic Vector Embedding & Adaptive Provider', () => {
     expect(result.citations[0]?.text).toContain('Kafka')
   })
 })
+

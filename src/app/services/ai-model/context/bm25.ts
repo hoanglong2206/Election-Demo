@@ -56,14 +56,14 @@ export class BM25Index {
         tfMap.set(token, (tfMap.get(token) || 0) + 1)
       }
 
-      for (const [term, freq] of tfMap) {
+      tfMap.forEach((freq, term) => {
         let postings = this.invertedIndex.get(term)
         if (!postings) {
           postings = new Map<string, number>()
           this.invertedIndex.set(term, postings)
         }
         postings.set(chunk.chunkId, freq)
-      }
+      })
     }
 
     this.recomputeStats()
@@ -74,11 +74,11 @@ export class BM25Index {
    */
   removeDocument(documentId: string): void {
     const chunkIdsToRemove: string[] = []
-    for (const [chunkId, docId] of this.chunkToDocId) {
+    this.chunkToDocId.forEach((docId, chunkId) => {
       if (docId === documentId) {
         chunkIdsToRemove.push(chunkId)
       }
-    }
+    })
 
     for (const chunkId of chunkIdsToRemove) {
       this.removeChunk(chunkId)
@@ -148,9 +148,9 @@ export class BM25Index {
     for (const term of queryTokens) {
       const postings = this.invertedIndex.get(term)
       if (postings) {
-        for (const chunkId of postings.keys()) {
+        postings.forEach((_freq, chunkId) => {
           candidates.add(chunkId)
-        }
+        })
       }
     }
 
@@ -187,14 +187,14 @@ export class BM25Index {
     this.docLengths.delete(chunkId)
     this.chunkToDocId.delete(chunkId)
 
-    for (const [term, postings] of this.invertedIndex) {
+    this.invertedIndex.forEach((postings, term) => {
       if (postings.has(chunkId)) {
         postings.delete(chunkId)
         if (postings.size === 0) {
           this.invertedIndex.delete(term)
         }
       }
-    }
+    })
   }
 
   private recomputeStats(): void {
@@ -205,9 +205,10 @@ export class BM25Index {
     }
 
     let totalLen = 0
-    for (const len of this.docLengths.values()) {
+    this.docLengths.forEach((len) => {
       totalLen += len
-    }
+    })
     this.avgDocLength = totalLen / this.docCount
   }
 }
+
