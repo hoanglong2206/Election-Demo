@@ -78,9 +78,9 @@ export class InMemoryVectorStore implements VectorStore {
   }
 
   removeDocument(documentId: string): void {
-    for (const [chunkId, item] of this.chunks) {
+    this.chunks.forEach((item, chunkId) => {
       if (item.chunk.documentId === documentId) this.chunks.delete(chunkId)
-    }
+    })
   }
 
   search(queryEmbedding: number[], limit: number): Array<{ chunk: DocumentChunk; embedding: number[] }> {
@@ -256,10 +256,10 @@ export class LocalRagIndex {
 
     // Find max BM25 score among candidates for normalization to [0, 1]
     let maxBm25 = 0
-    for (const { chunk } of candidateMap.values()) {
+    candidateMap.forEach(({ chunk }) => {
       const bScore = bm25Scores.get(chunk.chunkId) || 0
       if (bScore > maxBm25) maxBm25 = bScore
-    }
+    })
 
     const scored = Array.from(candidateMap.values())
       .map(({ chunk, embedding }) => {

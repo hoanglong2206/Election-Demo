@@ -154,12 +154,12 @@ export class BM25Index {
       }
     }
 
-    for (const chunkId of candidates) {
+    candidates.forEach((chunkId) => {
       const score = this.scoreChunk(queryTokens, chunkId)
       if (score > 0) {
         scores.set(chunkId, score)
       }
-    }
+    })
 
     return scores
   }

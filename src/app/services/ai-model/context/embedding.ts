@@ -168,10 +168,10 @@ function initConceptMap() {
   }
 
   // 3. Add canonical tech entities
-  for (const tech of CANONICAL_TECH_ENTITIES) {
+  CANONICAL_TECH_ENTITIES.forEach((tech) => {
     const techLower = tech.toLowerCase().trim()
     PHRASE_LIST.push(techLower)
-  }
+  })
 }
 
 initConceptMap()
@@ -241,7 +241,7 @@ export class EnhancedLexicalDenseEmbeddingProvider implements EmbeddingProvider 
     }
 
     // 3. Project activated concepts and character n-grams into 384-dim space
-    for (const [concept, weight] of activatedConcepts) {
+    activatedConcepts.forEach((weight, concept) => {
       const h1 = fnv1a(concept)
       const h2 = fnv1a(`${concept}:polarity`)
       const dim = h1 % this.dimensions
@@ -259,7 +259,7 @@ export class EnhancedLexicalDenseEmbeddingProvider implements EmbeddingProvider 
           vector[subDim] += subSign * (weight * 0.15)
         }
       }
-    }
+    })
 
     // 4. L2 Euclidean Normalization
     let sumSq = 0
