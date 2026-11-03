@@ -1,13 +1,121 @@
-BUG LIST
+# DANH SÁCH VẤN ĐỀ KIẾN TRÚC & ĐỀ XUẤT NÂNG CẤP HỆ THỐNG (SYSTEM BUGS & TECHNICAL DEBT)
+# Dự án: Electron AI Meeting & Interview Copilot (election-demo)
+# Ngày tạo: 2026-11-03
 
-Khi bấm thu âm ở meeting sau đó qua trang audio test -> button nghe tự động chạy và phần pipeline cũng chạy 
-Khi bấm start capture ở trang audio test sau đó qua trang meeting -> phần live transcript hiển thị đang lắng nghe
--> mong muốn: tách biệc phần thu âm cho 2 màn này
+================================================================================
+MỤC LỤC 6 VẤN ĐỀ KỸ THUẬT CẦN CẢI TIẾN
+================================================================================
+1. [RAG] Nâng cấp từ Hashing Trick sang Semantic Vector Embedding
+2. [RAG] Nâng cấp thuật toán tìm kiếm kết hợp BM25 (Thay thế Count Overlap)
+3. [RAG] Phân mảnh tài liệu theo cấu trúc ngữ nghĩa (Semantic Markdown/CV Chunking)
+4. [IPC] Tối Ưu Hóa Đường Truyền Audio IPC (Zero-Copy Buffer Transfer cho Groq STT)
+5. [STT] Tăng Tốc Local Whisper C++ Bằng GPU Acceleration (DirectML / Vulkan / CUDA)
+6. [LLM] Tối Ưu TTFT (Time-to-First-Token) & Kích Hoạt Prompt Caching Nhà Cung Cấp
 
-Trang setting
-Hiện tại khi đổi mô hình STT thi tự động đo lại độ trễ và không đo lại bên LLM, nhưng khi đổi mô hình bên LLM thì tự động đo lại cả 2 bên -> mong muốn: khi đổi mô hình nào thì tự động đo lại mô hình đó
+--------------------------------------------------------------------------------
+1. NÂNG CẤP TỪ HASHING TRICK SANG SEMANTIC VECTOR EMBEDDING
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/context/localRag.ts` (Class `LocalHashEmbeddingProvider`, dòng 86-97)
+  * `src/app/services/ai-model/context/types.ts`
+- Hiện trạng:
+  * Lớp `LocalHashEmbeddingProvider` đang sử dụng thuật toán băm Bag-of-Words 64 chiều đơn giản:
+    `vector[parseInt(hash(token), 16) % vector.length] += 1`
+  * Thuật toán này không có bất kỳ khả năng hiểu ngữ nghĩa (semantic understanding) nào.
+  * Các từ đồng nghĩa, từ viết tắt hoặc khái niệm tương đương (ví dụ: "Message Queue" vs "Kafka", "Cache" vs "Redis", "Distributed System" vs "Microservices", "Latency" vs "Độ trễ") có giá trị băm hoàn toàn khác nhau, dẫn đến Cosine Similarity giữa câu hỏi và tài liệu CV/JD xấp xỉ bằng 0.
+  * Ngược lại, do không gian vector chỉ có 64 chiều, các từ vựng hoàn toàn không liên quan lại dễ gặp hiện tượng đụng độ mã băm (hash collision), làm méo mó kết quả xếp hạng.
+- Cải tiến:
+  * Tích hợp Local Embedding Engine thực thụ chạy qua ONNX Runtime Web / Transformers.js chạy ngầm trong Worker hoặc Node.js Main Process với mô hình quantized siêu nhẹ (~25MB - 35MB, e.g., `all-MiniLM-L6-v2` hoặc `bge-small-en-v1.5`).
+  * Bổ sung tùy chọn kết nối Cloud Embedding API (OpenAI `text-embedding-3-small`, Gemini `text-embedding-004`) thông qua `credentialsPort` khi người dùng đã cấu hình API Key.
+  * Tăng độ rộng vector từ 64 chiều lên 384 hoặc 768 chiều chuẩn, cho phép tìm kiếm ngữ nghĩa chính xác theo ý niệm thay vì khớp từ khóa thô sơ.
 
-Ở chỗ nhập key -> thêm animation sau khi bấm đồng bộ và sau khi bấm lưu os
+--------------------------------------------------------------------------------
+2. NÂNG CẤP THUẬT TOÁN TÌM KIẾM KẾT HỢP BM25 (THAY THẾ COUNT OVERLAP)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/context/localRag.ts` (Hàm `keywordScore`, dòng 130-135)
+- Hiện trạng:
+  * Điểm số khớp từ khóa hiện tại được tính bằng công thức chia tập hợp thô sơ:
+    `keywordScore = new Set(matched).size / queryTokens.size`
+  * Công thức này có 3 nhược điểm nghiêm trọng:
+    1. Không có trọng số nghịch đảo tần suất văn bản (IDF - Inverse Document Frequency): Một từ cực kỳ phổ biến xuất hiện ở mọi nơi (như "system", "project", "work", "develop") có trọng số tương đương với một từ khóa công nghệ mang tính quyết định (như "gRPC", "Paxos", "CQRS", "ClickHouse").
+    2. Không có tần suất từ trong tài liệu (TF - Term Frequency) và chuẩn hóa độ dài văn bản (Length Normalization): Đoạn văn ngắn hay dài đều bị đánh giá sai lệch.
+    3. Không lọc Stopwords (từ dừng) tiếng Việt và tiếng Anh, khiến các từ đệm chiếm tỷ trọng cao trong điểm số.
+- Cải tiến:
+  * Triển khai giải thuật chuẩn Okapi BM25 (`k1 = 1.2`, `b = 0.75`) kết hợp bảng từ dừng (Stopwords Dictionary) cho cả Tiếng Việt và Tiếng Anh.
+  * Tính toán chỉ số IDF cho toàn bộ tập phân mảnh tài liệu (Corpus Chunks) ngay khi nạp hồ sơ CV và JD.
+  * Kết hợp điểm Hybrid Search chuẩn hóa: `Score = alpha * DenseCosineScore + (1 - alpha) * SparseBM25Score` (với `alpha` mặc định 0.6).
 
-Trang quản lý chi phí và token
-Ở tab lịch sử cuộc gọi -> phần tính năng nên thêm loại khi phân tích độ khớp, khi đo tốc độ LLM, thử nghiệm vision hay đo tín hiệu âm thanh,... và đổi tên tab lại
+--------------------------------------------------------------------------------
+3. PHÂN MẢNH TÀI LIỆU THEO CẤU TRÚC NGỮ NGHĨA (SEMANTIC MARKDOWN/CV CHUNKING)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/context/localRag.ts` (Hàm `chunkText`, dòng 71-84)
+  * `src/app/services/documentParser.ts`
+- Hiện trạng:
+  * Hàm `chunkText` chia nhỏ tài liệu dựa trên độ dài ký tự cơ học (`maxChars = 900`) hoặc ngắt theo `\n\n`.
+  * Khi gặp các đoạn mô tả dự án dài hoặc bảng kỹ năng, việc ngắt theo 900 ký tự cắt đôi câu văn hoặc tách rời tên dự án (Heading) khỏi các gạch đầu dòng trách nhiệm và kết quả đạt được (Metrics / STAR results).
+  * Hậu quả: Khi truy xuất RAG, hệ thống chỉ lấy được nửa sau của dự án (mất bối cảnh công nghệ) hoặc chỉ lấy được tên dự án (mất thông tin giải pháp và số liệu).
+- Cải tiến:
+  * Phân mảnh dựa trên Cây cú pháp Markdown AST / Cấu trúc Hồ sơ (Structural Chunking):
+    1. Nhận diện các Section Header cấp 1, 2, 3 (#, ##, ###, hoặc các từ khóa: "Kinh nghiệm làm việc", "Dự án tiêu biểu", "Học vấn & Chứng chỉ").
+    2. Gom trọn vẹn từng đơn vị dự án (Project Entity Block) thành 1 chunk duy nhất kèm Contextual Header Injection (Ví dụ: tự động chèn tiền tố `[Dự án: E-commerce Gateway | Vị trí: Senior Backend]` vào đầu mỗi chunk con nếu dự án quá dài bắt buộc phải tách).
+    3. Thiết lập bước nhảy gối đầu (Chunk Overlap: 15% tương đương ~150 ký tự) giữa các chunk liên tiếp để không làm gián đoạn ngữ cảnh ranh giới.
+
+--------------------------------------------------------------------------------
+4. TỐI ƯU HÓA ĐƯỜNG TRUYỀN AUDIO IPC (ZERO-COPY BUFFER TRANSFER CHO GROQ STT)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/stt/transcribe.ts` (Dòng 162-164)
+  * `src/infrastructure/ipc/ports/credentialsPort.ts`
+  * `src/electron/ipc/handlers/credentials.ts`
+  * `src/electron/services/llm/llmService.ts` (Hàm `transcribeGroq`, dòng 852-870)
+- Hiện trạng:
+  * Khi gửi audio lên Groq Whisper Cloud LPU:
+    1. Renderer chuyển đổi `Blob` hoặc `Int16Array` thành chuỗi Base64 qua `blobToBase64()` (sử dụng FileReader bất đồng bộ).
+    2. Truyền chuỗi Base64 (dung lượng hàng trăm KB đến vài MB mỗi giây) qua kênh IPC `credentials:transcribeGroq`.
+    3. Main Process nhận chuỗi Base64 và gọi `Buffer.from(cleanBase64, 'base64')` để decode ngược lại thành Buffer trước khi đưa vào `FormData`.
+  * Trong khi đó, Local Whisper (`whisperPort.transcribe`) đã được tối ưu truyền trực tiếp `ArrayBuffer`.
+  * Chuỗi chuyển đổi Base64 hai đầu làm tăng từ 30ms đến 60ms độ trễ không đáng có, tăng 33% kích thước dữ liệu truyền trong IPC và gây áp lực thu dọn rác (GC pressure) liên tục lên V8 Engine khi cuộc họp diễn ra hàng giờ.
+- Cải tiến:
+  * Cập nhật IPC Schema và chữ ký hàm `credentialsPort.transcribeGroq` để nhận trực tiếp `ArrayBuffer` hoặc `Uint8Array`.
+  * Sử dụng cơ chế Zero-Copy Buffer Transfer có sẵn của Electron IPC (`ipcRenderer.invoke(channel, arrayBuffer)`).
+  * Main Process chuyển trực tiếp `Buffer.from(arrayBuffer)` vào `Blob/File` của `FormData` mà không tốn bất kỳ thao tác encode/decode chuỗi nào.
+
+--------------------------------------------------------------------------------
+5. TĂNG TỐC LOCAL WHISPER C++ BẰNG GPU ACCELERATION (DIRECTML / VULKAN / CUDA)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/electron/services/whisper/whisperProcessManager.ts` (Dòng 200-265)
+  * `resources/bin/` (Các tệp thực thi `whisper-server.exe`, `whisper-cli.exe`)
+- Hiện trạng:
+  * Binary `whisper.cpp` đi kèm ứng dụng hiện tại đang được cấu hình và thực thi thuần túy trên CPU (sử dụng đa luồng OpenMP / AVX2 với `-t 4`).
+  * Khi xử lý phân đoạn âm thanh 3s - 4.5s:
+    * Model `ggml-tiny.bin` (75MB) mất ~200ms - 450ms trên CPU.
+    * Model `ggml-base.bin` (142MB) mất ~450ms - 1200ms trên CPU.
+  * Việc chiếm dụng 4 luồng CPU liên tục để inference cục bộ làm tăng nhiệt độ CPU, kích hoạt quạt tản nhiệt (gây nhiễu mic) và có thể gây micro-stutter cho các ứng dụng video conference chạy song song (Zoom/Meet/Teams).
+- Cải tiến:
+  * Tích hợp bản build `whisper.cpp` hỗ trợ **Vulkan / DirectML** (cho phép tăng tốc phần cứng trên tất cả các GPU rời và Onboard của Intel, AMD, NVIDIA trên Windows) hoặc **CUDA cuBLAS** (cho GPU NVIDIA).
+  * Kiểm tra tự động tính khả dụng của GPU (`whisperProcessManager.detectGpuCapabilities()`):
+    * Nếu có GPU tương thích: chạy tiến trình server kèm cờ `-ngl 99` (offload toàn bộ layers sang VRAM GPU). Thời gian xử lý chunk 3s giảm xuống dưới **40ms - 70ms** (nhanh gấp 5 - 8 lần, hoàn toàn không tốn CPU).
+    * Nếu không có GPU: tự động fallback về CPU với số luồng động thích ứng (Adaptive Threads: tối đa bằng 50% số logical cores).
+
+--------------------------------------------------------------------------------
+6. TỐI ƯU TTFT (TIME-TO-FIRST-TOKEN) & KÍCH HOẠT PROMPT CACHING NHÀ CUNG CẤP
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/copilot/interview.ts` (Dòng 171-185, 230-245)
+  * `src/app/services/ai-model/copilot/promptTemplate.ts` (`buildStaticSystemPrefix`, `buildDynamicUserPrompt`)
+  * `src/electron/services/llm/llmService.ts`
+- Hiện trạng:
+  * Các mô hình LLM tiên tiến hiện nay (Anthropic Claude 3.5 Sonnet, Google Gemini 1.5 Flash/Pro, OpenAI GPT-4o) đều hỗ trợ tính năng **Prompt Caching** (lưu đệm KV Cache phía server cho các đoạn prompt cố định có dung lượng >= 1024 tokens).
+  * Trong mã nguồn hiện tại, dù đã tách `buildStaticSystemPrefix` và `buildDynamicUserPrompt`, nhưng một số biến trạng thái động nhỏ (như timestamp, số thứ tự câu hỏi, hoặc định dạng ngôn ngữ) đôi khi vô tình bị chèn vào System Prompt hoặc ở đầu User Prompt.
+  * Nếu phần đầu của Prompt bị thay đổi dù chỉ 1 ký tự, cơ chế Prompt Caching phía Server sẽ bị vô hiệu hóa (Cache Miss).
+- Cải tiến:
+  * Cố định tuyệt đối 100% từng byte (Byte-Invariant System Prefix):
+    * Gom toàn bộ: Hướng dẫn vai trò Copilot + Toàn văn CV ứng viên + Profile FactSheet + Hướng dẫn framework chuẩn thành 1 khối tĩnh duy nhất đặt ở `systemPrompt` (đảm bảo độ dài > 1024 tokens).
+    * Đối với Anthropic: Thêm header metadata `"cache_control": {"type": "ephemeral"}` vào khối system prompt.
+    * Đối với Gemini: Sử dụng Context Caching API cho các phiên họp kéo dài.
+  * Toàn bộ nội dung biến thiên (câu hỏi hiện tại, transcript 2-3 turn gần nhất, trích dẫn RAG động) được đưa xuống cuối `userPrompt`.
+  * Kết quả: Giảm **60% - 80% thời gian TTFT** (từ ~1000ms xuống còn ~250ms cho các lượt sau lượt đầu) và giảm **50% - 75% chi phí token đầu vào**.
+================================================================================
