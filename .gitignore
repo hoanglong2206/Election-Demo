@@ -29,3 +29,6 @@ resources/models/*.bin
 *.njsproj
 *.sln
 *.sw?
+
+# Build output
+release

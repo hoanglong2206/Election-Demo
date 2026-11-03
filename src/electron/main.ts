@@ -3,6 +3,7 @@ import { createOverlayWindow } from './window/overlay-window.js'
 import { registerIpcHandlers, getActiveSessionRecoveryService, getActiveUsageStorageService } from './ipc/handler.js'
 import { getWhisperProcessManager } from './services/whisper/index.js'
 import { registerMediaSchemeAsPrivileged, registerMediaProtocolHandler } from './services/sessions/index.js'
+import { initializeAutoUpdater } from './services/updater/index.js'
 import path from 'path'
 
 // Register app-media scheme as privileged before app is ready
@@ -75,6 +76,7 @@ app.whenReady().then(() => {
 
     mainWindow = createOverlayWindow()
     registerIpcHandlers(mainWindow)
+    initializeAutoUpdater()
 
     // Đăng ký phím tắt toàn cục Ctrl+Shift+H (Cmd+Shift+H trên macOS)
     // Cho phép ẩn / hiện overlay tức thì mà KHÔNG cướp focus của trình duyệt toàn màn hình

@@ -1,0 +1,33 @@
+name: Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: # Cho phép bấm nút "Run workflow" thủ công trên GitHub
+
+permissions:
+  contents: write # Cấp quyền tạo GitHub Release và upload file .exe
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build and Publish to GitHub Releases
+        run: bun run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

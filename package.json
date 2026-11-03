@@ -1,9 +1,15 @@
 {
   "name": "election-demo",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Desktop AI Meeting & Interview Copilot HUD",
+  "author": "Election Team",
   "type": "module",
   "main": "dist-electron/electron/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hoanglong2206/Election-Demo.git"
+  },
   "scripts": {
     "predev": "node -e \"const {execSync}=require('child_process');try{execSync('npx -y kill-port 5173',{stdio:'inherit'})}catch(_){}\"",
     "dev": "bun run build:electron && concurrently -k -n VITE,ELECTRON -c cyan,magenta \"bun run dev:vite\" \"bun run dev:electron\"",
@@ -12,6 +18,10 @@
     "build": "bun run build:electron && bun run build:vite",
     "build:vite": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "package": "bun run build && electron-builder --win nsis",
+    "package:portable": "bun run build && electron-builder --win portable",
+    "package:dir": "bun run build && electron-builder --dir",
+    "release": "bun run build && electron-builder --win -p always",
     "preview": "vite preview",
     "lint": "eslint .",
     "arch:check": "bun x madge --extensions ts,tsx --ts-config tsconfig.app.json --circular src/app/ && eslint . --quiet",
@@ -23,6 +33,7 @@
     "@radix-ui/react-slot": "^1.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.11",
     "lucide-react": "^0.469.0",
     "mammoth": "^1.13.0",
     "react": "^19.2.8",
@@ -48,6 +59,7 @@
     "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
     "electron": "^44.7.0",
+    "electron-builder": "^24.13.3",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.6",
@@ -59,5 +71,43 @@
     "typescript-eslint": "^8.69.0",
     "vite": "^8.3.0",
     "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.election.copilot",
+    "productName": "Election AI Copilot",
+    "publish": {
+      "provider": "github",
+      "owner": "hoanglong2206",
+      "repo": "Election-Demo"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Election AI Copilot"
+    }
   }
 }
