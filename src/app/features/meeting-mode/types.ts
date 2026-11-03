@@ -111,4 +111,5 @@ export interface MeetingModeProps {
   mode?: AppMode
   onModeChange?: (mode: AppMode) => void
   onViewChange?: (view: ViewState) => void
+  isActive?: boolean
 }

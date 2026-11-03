@@ -88,6 +88,10 @@ export class LocalStorageMeetingContextRepository
         console.warn('[MeetingContext] Failed to persist meeting context:', err)
       }
     }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('meeting-context-updated', { detail: payload }))
+    }
   }
 
   public clear(): void {

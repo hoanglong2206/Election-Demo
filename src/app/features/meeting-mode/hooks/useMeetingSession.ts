@@ -43,6 +43,18 @@ export interface UseMeetingSessionReturn {
   resetSession: () => void
 }
 
+/**
+ * Rút gọn tiêu đề thảo luận:
+ * Lấy dòng đầu tiên, loại bỏ tiền tố thừa ("Chủ đề:", "Topic:"), cắt tối đa 40 ký tự.
+ */
+export function formatDiscussionTitleSnippet(topic?: string, maxLen = 40): string {
+  if (!topic) return ''
+  const firstLine = topic.split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean)[0] || ''
+  const cleaned = firstLine.replace(/^(chủ đề(\s*thảo luận)?|topic)\s*[:：\-]\s*/i, '').trim()
+  const display = cleaned || firstLine
+  if (display.length <= maxLen) return display
+  return `${display.slice(0, maxLen).trim()}...`
+}
 export function useMeetingSession({
   mode,
   profileSnapshot,
@@ -71,9 +83,19 @@ export function useMeetingSession({
         ? `Phỏng vấn Kỹ thuật (${profileSnapshot.name || 'CV'})`
         : 'Cuộc họp Live Copilot'
       : hasDiscussionContext && discussionTopic
-      ? `Thảo luận: ${discussionTopic.slice(0, 40)}`
+      ? `Thảo luận: ${formatDiscussionTitleSnippet(discussionTopic)}`
       : 'Cuộc họp Thảo luận Live'
   }, [mode, hasInterviewContext, hasDiscussionContext, profileSnapshot.name, discussionTopic])
+
+  // Clear custom session title if discussion topic or profile changes to keep session title in sync with new context
+  const prevContextIdentityRef = useRef(`${mode}:${discussionTopic || ''}:${profileSnapshot.name || ''}`)
+  useEffect(() => {
+    const nextIdentity = `${mode}:${discussionTopic || ''}:${profileSnapshot.name || ''}`
+    if (prevContextIdentityRef.current !== nextIdentity) {
+      prevContextIdentityRef.current = nextIdentity
+      setCustomSessionTitle('')
+    }
+  }, [mode, discussionTopic, profileSnapshot.name])
 
   const currentSessionTitle = customSessionTitle || defaultSessionTitle
 

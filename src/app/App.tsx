@@ -107,6 +107,7 @@ function App() {
                   mode={mode}
                   onModeChange={handleModeChange}
                   onViewChange={handleViewChange}
+                  isActive={view === 'meeting'}
                 />
               </div>
             )}

@@ -31,6 +31,18 @@ export interface MeetingHeaderProps {
   screenCaptureState?: ScreenCaptureState
 }
 
+/**
+ * Rút gọn hiển thị ngữ cảnh thảo luận cho sub-bar:
+ * Lấy dòng đầu tiên, loại bỏ tiền tố thừa, cắt ngắn tối đa 60 ký tự.
+ */
+export function formatDiscussionContextSnippet(topic?: string, maxLen = 60): string {
+  if (!topic || !topic.trim()) return 'Chủ đề thảo luận'
+  const firstLine = topic.split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean)[0] || ''
+  const cleaned = firstLine.replace(/^(chủ đề(\s*thảo luận)?|topic)\s*[:：\-]\s*/i, '').trim()
+  const display = cleaned || firstLine || 'Chủ đề thảo luận'
+  if (display.length <= maxLen) return display
+  return `${display.slice(0, maxLen).trim()}...`
+}
 export function MeetingHeader({
   mode,
   sessionTitle,
@@ -234,12 +246,15 @@ export function MeetingHeader({
       <div className="flex items-center justify-between px-4 py-1 bg-black/20 border-t border-white/[0.04] text-[10px] text-white/40 min-h-[24px]">
         <div className="flex items-center gap-2 truncate">
           {hasActiveContext ? (
-            <span className="flex items-center gap-1 text-emerald-400/90 font-medium truncate">
+            <span
+              className="flex items-center gap-1 text-emerald-400/90 font-medium truncate"
+              title={mode === 'discussion' ? contextData.discussionTopic : undefined}
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               <span className="truncate">
                 {mode === 'interview'
                   ? 'Ngữ cảnh: CV & JD đã sẵn sàng'
-                  : `Ngữ cảnh: ${contextData.discussionTopic || 'Chủ đề thảo luận'}`}
+                  : `Ngữ cảnh: ${formatDiscussionContextSnippet(contextData.discussionTopic)}`}
               </span>
             </span>
           ) : (

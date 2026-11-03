@@ -19,7 +19,7 @@ export interface UseHomeNavigationProps {
   activeProfile: ProfilePreset | null
   onViewChange: (view: ViewState) => void
   onInterviewTabChange?: (tab: 'cv' | 'jd') => void
-  flushPendingContextSync: () => void
+  flushPendingContextSync: () => MeetingContextData | void
 }
 
 export interface UseHomeNavigationReturn {
@@ -116,22 +116,27 @@ export function useHomeNavigation({
   const handleLaunchMeeting = useCallback(() => {
     setMeetingError(null)
 
-    // Flush any pending debounced sync synchronously before proceeding
-    flushPendingContextSync()
+    // Flush any pending debounced sync synchronously before proceeding and get latest content
+    const flushedData = flushPendingContextSync()
+    const effectiveContext = (flushedData as MeetingContextData) || contextData
 
-    // Ensure keywords exist if text is present
-    let finalKeywords = contextData.keywords || []
-    if (finalKeywords.length === 0) {
-      const targetText =
-        mode === 'interview' ? contextData.jobDescription : contextData.discussionTopic || ''
-      if (targetText && targetText.trim()) {
-        finalKeywords = jdKeywordExtractor.extractKeywords(targetText)
+    let finalKeywords = effectiveContext.keywords || []
+    let finalDiscussionKeywords = effectiveContext.discussionKeywords || []
+
+    if (mode === 'interview') {
+      if (finalKeywords.length === 0 && effectiveContext.jobDescription?.trim()) {
+        finalKeywords = jdKeywordExtractor.extractKeywords(effectiveContext.jobDescription)
+      }
+    } else {
+      if (finalDiscussionKeywords.length === 0 && effectiveContext.discussionTopic?.trim()) {
+        finalDiscussionKeywords = jdKeywordExtractor.extractKeywords(effectiveContext.discussionTopic)
       }
     }
 
-    const snapshotData = {
-      ...contextData,
+    const snapshotData: MeetingContextData = {
+      ...effectiveContext,
       keywords: finalKeywords,
+      discussionKeywords: finalDiscussionKeywords,
     }
 
     try {
@@ -145,7 +150,7 @@ export function useHomeNavigation({
         })
       }
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('meeting-context-updated'))
+        window.dispatchEvent(new CustomEvent('meeting-context-updated', { detail: snapshotData }))
       }
       if (isPreflightLobbySkipped()) {
         onViewChange('meeting')

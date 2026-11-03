@@ -52,7 +52,7 @@ import {
 } from '@/components/shared'
 import { sessionsPort } from '@/infrastructure/ipc'
 
-export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeProps) {
+export function MeetingMode({ mode: controlledMode, onViewChange, isActive }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
   const mode = controlledMode ?? internalMode
 
@@ -63,8 +63,12 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
   )
 
   useEffect(() => {
-    const handleContextUpdate = () => {
-      setContextData(getSavedMeetingContext())
+    const handleContextUpdate = (event?: Event) => {
+      if (event && 'detail' in event && (event as CustomEvent).detail) {
+        setContextData((event as CustomEvent).detail)
+      } else {
+        setContextData(getSavedMeetingContext())
+      }
       setProfileSnapshot(profileContextService.getActiveSnapshot())
     }
     const unsubProfile = profileContextService.subscribe(() => {
@@ -78,6 +82,13 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
       window.removeEventListener('storage', handleContextUpdate)
     }
   }, [])
+
+  useEffect(() => {
+    if (isActive) {
+      setContextData(getSavedMeetingContext())
+      setProfileSnapshot(profileContextService.getActiveSnapshot())
+    }
+  }, [isActive])
 
   const selectedModelId = getSavedAIModelId()
   const currentModel = getSelectedModelConfig(selectedModelId)
@@ -187,6 +198,20 @@ export function MeetingMode({ mode: controlledMode, onViewChange }: MeetingModeP
     aiSuggestionsHistoryRef,
     setContextUsage: () => {}, // Managed via trigger
   })
+
+  // Reset stale suggestions when context fundamentally changes
+  const prevContextIdentityRef = useRef<string>('')
+  useEffect(() => {
+    const contextKey =
+      mode === 'interview'
+        ? `interview:${profileSnapshot.presetId || profileSnapshot.name || ''}:${activeCV}:${activeJD}`
+        : `discussion:${contextData.discussionTopic || ''}`
+
+    if (prevContextIdentityRef.current && prevContextIdentityRef.current !== contextKey) {
+      copilot.resetCopilot()
+    }
+    prevContextIdentityRef.current = contextKey
+  }, [mode, profileSnapshot.presetId, profileSnapshot.name, activeCV, activeJD, contextData.discussionTopic, copilot.resetCopilot])
 
   // 6. Transcript
   const transcript = useTranscript({

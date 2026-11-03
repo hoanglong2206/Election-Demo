@@ -37,7 +37,7 @@ export interface UseProfileContextReturn extends UseProfilePresetsReturn {
   handleAddKeyword: (newKw: string) => void
   handleRemoveKeyword: (kwToRemove: string) => void
   handleReExtractKeywords: () => void
-  flushPendingContextSync: () => void
+  flushPendingContextSync: () => MeetingContextData
 }
 
 export function useProfileContext({ mode }: UseProfileContextProps): UseProfileContextReturn {
@@ -70,7 +70,7 @@ export function useProfileContext({ mode }: UseProfileContextProps): UseProfileC
     data: MeetingContextData
   } | null>(null)
 
-  const flushPendingContextSync = useCallback(() => {
+  const flushPendingContextSync = useCallback((): MeetingContextData => {
     if (pendingSyncRef.current) {
       clearTimeout(pendingSyncRef.current.timerId)
       const { profileId, data } = pendingSyncRef.current
@@ -83,8 +83,10 @@ export function useProfileContext({ mode }: UseProfileContextProps): UseProfileC
           keywords: data.keywords || [],
         })
       }
+      return data
     }
-  }, [])
+    return latestContextData.current
+  }, [latestContextData])
 
   // Subscribe to ProfileContextService active profile changes in interview mode
   useEffect(() => {
