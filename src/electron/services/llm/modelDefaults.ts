@@ -9,6 +9,7 @@ export const DEFAULT_PROVIDER_MODELS = {
   groq: 'llama-3.3-70b-versatile',
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
+  anthropic: 'claude-3-5-sonnet-20241022',
 } as const
 
 export type SupportedProviderKey = keyof typeof DEFAULT_PROVIDER_MODELS
@@ -27,6 +28,8 @@ export function getValidatedModelId(provider: string, requestedModelId?: string)
   const defaultModel =
     normProvider === 'gemini' || normProvider === 'google'
       ? DEFAULT_PROVIDER_MODELS.gemini
+      : normProvider === 'anthropic' || normProvider === 'claude'
+      ? DEFAULT_PROVIDER_MODELS.anthropic
       : normProvider === 'openai'
       ? DEFAULT_PROVIDER_MODELS.openai
       : DEFAULT_PROVIDER_MODELS.groq

@@ -227,7 +227,7 @@ export interface ElectronAPI {
       }
     } | null>
     transcribeGroq: (
-      audioBase64: string,
+      audioData: ArrayBuffer | Uint8Array | string,
       modelId?: string,
       language?: string,
       prompt?: string

@@ -7,6 +7,7 @@ import { spawn, execSync, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createWavBuffer, createSilentWavBuffer, type RawAudioInput } from './wavHeader.js'
 import { cleanWhisperOutput } from './hallucinationFilter.js'
+import { resolveWhisperGpuConfig, type WhisperGpuInfo } from './gpuDetector.js'
 
 const require = createRequire(import.meta.url)
 
@@ -41,6 +42,7 @@ export interface WhisperTelemetry {
   engineMode?: 'server' | 'cli'
   serverPort?: number
   isWarmedUp?: boolean
+  gpu?: WhisperGpuInfo
 }
 
 export interface WhisperHealthCheckResult {
@@ -81,6 +83,7 @@ export interface NativeWhisperStatus {
   telemetry: WhisperTelemetry
   engineMode: 'server' | 'cli'
   serverPort: number | null
+  gpu?: WhisperGpuInfo
 }
 
 export interface TranscribeOptions {
@@ -238,6 +241,12 @@ export class WhisperProcessManager {
   private readonly maxRestarts = 4
   private isStartingServer = false
   private serverMutex = new AsyncMutex()
+  private forceCpuFallback = false
+  private currentGpuInfo: WhisperGpuInfo = {
+    isGpuAvailable: false,
+    isAccelerated: false,
+    backend: 'cpu',
+  }
 
   // Job Queue (handles serialization & retries)
   private jobQueue: QueuedJob[] = []
@@ -456,8 +465,10 @@ export class WhisperProcessManager {
 
     try {
       this.serverPort = await findAvailablePort()
-      const cpuCount = os.cpus().length || 4
-      const threadCount = Math.min(8, Math.max(2, cpuCount > 2 ? cpuCount - 1 : 2))
+      const gpuConfig = await resolveWhisperGpuConfig(this.binDir, { forceCpu: this.forceCpuFallback })
+      this.currentGpuInfo = gpuConfig.gpuInfo
+      this.telemetry.gpu = gpuConfig.gpuInfo
+
 
       const args = [
         '--host',
@@ -467,14 +478,15 @@ export class WhisperProcessManager {
         '-m',
         modelPath,
         '-t',
-        String(threadCount),
+        String(gpuConfig.threadCount),
         '-nth',
         '0.6',
         '-sns',
+        ...gpuConfig.extraArgs,
       ]
 
       this.log(
-        `Spawning whisper-server on 127.0.0.1:${this.serverPort} with model ${modelFileName} (${threadCount} threads)`,
+        `Spawning whisper-server on 127.0.0.1:${this.serverPort} with model ${modelFileName} (${gpuConfig.threadCount} threads, backend: ${gpuConfig.gpuInfo.backend}, accelerated: ${gpuConfig.gpuInfo.isAccelerated})`,
         'info'
       )
 
@@ -601,6 +613,14 @@ export class WhisperProcessManager {
     this.stopWatchdog()
     this.consecutiveRestarts++
     this.telemetry.restartCount++
+
+    if (this.currentGpuInfo.isAccelerated && !this.forceCpuFallback) {
+      this.forceCpuFallback = true
+      this.log(
+        'whisper-server crashed with GPU acceleration. Automatically falling back to CPU mode for subsequent runs.',
+        'warn'
+      )
+    }
 
     if (this.consecutiveRestarts > this.maxRestarts) {
       this.log(
@@ -785,6 +805,7 @@ export class WhisperProcessManager {
       telemetry: { ...this.telemetry },
       engineMode: this.engineMode,
       serverPort: this.serverPort > 0 ? this.serverPort : null,
+      gpu: { ...this.currentGpuInfo },
     }
   }
 

@@ -1,7 +1,6 @@
 import { getAvailableSTTEngines, getSavedSTTEngineId } from '../aiModels'
 import type { TranscribeResult } from './types'
-import { base64ToBlob, blobToBase64 } from './audioUtils'
-import { encodeWavBlob } from '@/core/audio'
+import { encodeWavArrayBuffer } from '@/core/audio'
 import { usageTrackerService, type AIUsageFeature } from '../../usage-tracker'
 import { whisperPort, credentialsPort } from '@/infrastructure/ipc'
 import { correctVietglishJargon } from './technicalLexicon'
@@ -152,27 +151,25 @@ export async function transcribeAudio(
     // High security path: Transcribe via Electron Main Process (no plaintext key in renderer!)
     if (credentialsPort.isSupported) {
       try {
-        let blob: Blob
-        if (audioData instanceof Blob) {
-          blob = audioData
-        } else if (typeof audioData === 'string') {
-          blob = base64ToBlob(audioData)
-        } else if (audioData instanceof Int16Array) {
-          blob = encodeWavBlob(audioData, 16000)
+        let bufferPayload: ArrayBuffer | Uint8Array | string
+        if (typeof audioData === 'string') {
+          bufferPayload = audioData
         } else if (audioData instanceof ArrayBuffer) {
-          blob = encodeWavBlob(new Int16Array(audioData), 16000)
+          bufferPayload = audioData
+        } else if (audioData instanceof Int16Array) {
+          bufferPayload = encodeWavArrayBuffer(audioData, 16000)
         } else if (ArrayBuffer.isView(audioData)) {
           const view = audioData as ArrayBufferView
-          blob = encodeWavBlob(
+          bufferPayload = encodeWavArrayBuffer(
             new Int16Array(view.buffer, view.byteOffset, Math.floor(view.byteLength / 2)),
             16000
           )
+        } else if (audioData instanceof Blob) {
+          bufferPayload = await audioData.arrayBuffer()
         } else {
-          blob = new Blob([audioData as any], { type: 'audio/wav' })
+          bufferPayload = await new Blob([audioData as any], { type: 'audio/wav' }).arrayBuffer()
         }
-        const rawBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(blob)
-        const audioBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '').trim()
-        const res = await credentialsPort.transcribeGroq(audioBase64, engineId, language, effectivePrompt)
+        const res = await credentialsPort.transcribeGroq(bufferPayload, engineId, language, effectivePrompt)
         if (res) {
           try {
             usageTrackerService.trackUsage({

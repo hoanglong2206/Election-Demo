@@ -8,9 +8,9 @@ MỤC LỤC 7 VẤN ĐỀ KỸ THUẬT CẦN CẢI TIẾN
 1. [RAG] Nâng cấp từ Hashing Trick sang Semantic Vector Embedding
 2. [RAG] Nâng cấp thuật toán tìm kiếm kết hợp BM25 (Thay thế Count Overlap)
 3. [RAG] Phân mảnh tài liệu theo cấu trúc ngữ nghĩa (Semantic Markdown/CV Chunking)
-4. [IPC] Tối Ưu Hóa Đường Truyền Audio IPC (Zero-Copy Buffer Transfer cho Groq STT)
-5. [STT] Tăng Tốc Local Whisper C++ Bằng GPU Acceleration (DirectML / Vulkan / CUDA)
-6. [LLM] Tối Ưu TTFT (Time-to-First-Token) & Kích Hoạt Prompt Caching Nhà Cung Cấp
+4. [IPC] Tối Ưu Hóa Đường Truyền Audio IPC (Zero-Copy Buffer Transfer cho Groq STT) [ĐÃ HOÀN TẤT]
+5. [STT] Tăng Tốc Local Whisper C++ Bằng GPU Acceleration (DirectML / Vulkan / CUDA) [ĐÃ HOÀN TẤT]
+6. [LLM] Tối Ưu TTFT (Time-to-First-Token) & Kích Hoạt Prompt Caching Nhà Cung Cấp [ĐÃ HOÀN TẤT]
 7. [NAV/UX] Đồng Bộ Gatekeeper Sảnh Chờ (Pre-Flight) & Ràng Buộc Dữ Liệu Thực Chiến Từ Audio Test / AI Diagnostic
 
 --------------------------------------------------------------------------------

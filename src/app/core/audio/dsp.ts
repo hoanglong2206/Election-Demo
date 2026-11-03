@@ -62,10 +62,10 @@ function writeString(view: DataView, offset: number, string: string): void {
  * Packages 16-bit Linear PCM mono samples into a playable WAV Blob (16,000 Hz, 16-bit, 1-ch).
  * Single ArrayBuffer allocation with efficient DataView header writing.
  */
-export function encodeWavBlob(
+export function encodeWavArrayBuffer(
   samples: Int16Array,
   sampleRate: number = 16000
-): Blob {
+): ArrayBuffer {
   const byteLength = samples.length * 2
   const buffer = new ArrayBuffer(44 + byteLength)
   const view = new DataView(buffer)
@@ -93,6 +93,14 @@ export function encodeWavBlob(
   const pcmView = new Int16Array(buffer, 44, samples.length)
   pcmView.set(samples)
 
+  return buffer
+}
+
+export function encodeWavBlob(
+  samples: Int16Array,
+  sampleRate: number = 16000
+): Blob {
+  const buffer = encodeWavArrayBuffer(samples, sampleRate)
   return new Blob([buffer], { type: 'audio/wav' })
 }
 

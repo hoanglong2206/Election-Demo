@@ -119,4 +119,47 @@ describe('ElectronLlmService: transcribeGroq', () => {
     expect(file.name).toBe('audio.webm')
     expect(file.type).toBe('audio/webm')
   })
+
+  it('accepts zero-copy Buffer and ArrayBuffer directly without Base64 encoding', async () => {
+    let capturedBody: FormData | null = null
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      capturedBody = init?.body as FormData
+      return { ok: true, status: 200, json: async () => ({ text: 'Direct Buffer transcript' }) } as any
+    }) as any
+
+    const service = new ElectronLlmService(mockCredentialStore)
+
+    const wavBytes = Buffer.alloc(244)
+    wavBytes.write('RIFF', 0, 'ascii')
+    wavBytes.writeUInt32LE(236, 4)
+    wavBytes.write('WAVEfmt ', 8, 'ascii')
+    wavBytes.writeUInt32LE(16, 16)
+    wavBytes.writeUInt16LE(1, 20)
+    wavBytes.writeUInt16LE(1, 22)
+    wavBytes.writeUInt32LE(16000, 24)
+    wavBytes.writeUInt32LE(32000, 28)
+    wavBytes.writeUInt16LE(2, 32)
+    wavBytes.writeUInt16LE(16, 34)
+    wavBytes.write('data', 36, 'ascii')
+    wavBytes.writeUInt32LE(200, 40)
+
+    // 1. Test Node Buffer
+    const resBuffer = await service.transcribeGroq(wavBytes, 'whisper-large-v3-turbo')
+    expect(resBuffer?.text).toBe('Direct Buffer transcript')
+    let file = capturedBody!.get('file') as File
+    expect(file.name).toBe('audio.wav')
+    expect(file.type).toBe('audio/wav')
+
+    // 2. Test ArrayBuffer (Zero-copy IPC transfer representation)
+    const arrayBuffer = wavBytes.buffer.slice(wavBytes.byteOffset, wavBytes.byteOffset + wavBytes.byteLength)
+    const resArrayBuffer = await service.transcribeGroq(arrayBuffer, 'whisper-large-v3-turbo')
+    expect(resArrayBuffer?.text).toBe('Direct Buffer transcript')
+    file = capturedBody!.get('file') as File
+    expect(file.name).toBe('audio.wav')
+
+    // 3. Test Uint8Array
+    const uint8 = new Uint8Array(arrayBuffer)
+    const resUint8 = await service.transcribeGroq(uint8, 'whisper-large-v3-turbo')
+    expect(resUint8?.text).toBe('Direct Buffer transcript')
+  })
 })

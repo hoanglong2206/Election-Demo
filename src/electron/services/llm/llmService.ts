@@ -366,6 +366,29 @@ export class ElectronLlmService {
         },
         ...(validated.systemPrompt ? { systemInstruction: { parts: [{ text: validated.systemPrompt }] } } : {}),
       }
+    } else if (targetProvider === 'anthropic') {
+      url = 'https://api.anthropic.com/v1/messages'
+      headers['x-api-key'] = key
+      headers['anthropic-version'] = '2023-06-01'
+      headers['anthropic-beta'] = 'prompt-caching-2024-07-31'
+      body = {
+        model: modelId || 'claude-3-5-sonnet-20241022',
+        max_tokens: validated.maxTokens ?? 600,
+        temperature: validated.temperature ?? 0.3,
+        stream: true,
+        messages: [{ role: 'user', content: validated.prompt }],
+        ...(validated.systemPrompt
+          ? {
+              system: [
+                {
+                  type: 'text',
+                  text: validated.systemPrompt,
+                  cache_control: { type: 'ephemeral' },
+                },
+              ],
+            }
+          : {}),
+      }
     } else {
       callbacks.onError({
         error: `Provider không được hỗ trợ cho streaming: ${targetProvider}`,
@@ -850,7 +873,7 @@ export class ElectronLlmService {
    * Transcribes audio using Groq Whisper Cloud LPU in Main Process.
    */
   public async transcribeGroq(
-    audioBase64: string,
+    audio: Buffer | ArrayBuffer | Uint8Array | string,
     modelId: string = 'whisper-large-v3-turbo',
     language?: string,
     prompt?: string
@@ -860,12 +883,23 @@ export class ElectronLlmService {
       throw new Error('Chưa có Groq API Key trong OS Credential Store.')
     }
 
-    const cleanBase64 = (audioBase64 || '').replace(/^data:[^;]+;base64,/, '').trim()
-    if (!cleanBase64) {
-      return { text: '', latencyMs: 0 }
+    let buffer: Buffer
+    if (typeof audio === 'string') {
+      const cleanBase64 = audio.replace(/^data:[^;]+;base64,/, '').trim()
+      if (!cleanBase64) {
+        return { text: '', latencyMs: 0 }
+      }
+      buffer = Buffer.from(cleanBase64, 'base64')
+    } else if (Buffer.isBuffer(audio)) {
+      buffer = audio
+    } else if (audio instanceof ArrayBuffer) {
+      buffer = Buffer.from(audio)
+    } else if (ArrayBuffer.isView(audio)) {
+      buffer = Buffer.from(audio.buffer, audio.byteOffset, audio.byteLength)
+    } else {
+      buffer = Buffer.alloc(0)
     }
 
-    const buffer = Buffer.from(cleanBase64, 'base64')
     if (buffer.length === 0) {
       return { text: '', latencyMs: 0 }
     }

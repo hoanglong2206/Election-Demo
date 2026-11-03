@@ -165,7 +165,8 @@ export async function generateInterviewAnswerStream(
   const retrieval = await localRagIndex.query(question, params.rag)
 
   const useFullContext = params.fullContext ?? isFullContextNeeded(question)
-  const candidateContext = cm.getCandidateContext(useFullContext)
+  // Always lock to full master candidate context to preserve 100% byte-invariance for KV Prompt Caching
+  const candidateContext = cm.getCandidateContext(true)
   const perm = cm.getPermanentContext()
 
   // 1. Static Prefix: 100% byte-invariant across turns for prompt caching
@@ -405,7 +406,8 @@ export async function generateInterviewAnswer(
   const retrieval = await localRagIndex.query(question, params.rag)
 
   const useFullContext = params.fullContext ?? isFullContextNeeded(question)
-  const candidateContext = cm.getCandidateContext(useFullContext)
+  // Always lock to full master candidate context to preserve 100% byte-invariance for KV Prompt Caching
+  const candidateContext = cm.getCandidateContext(true)
   const perm = cm.getPermanentContext()
 
   // 1. Static Prefix: 100% byte-invariant across turns for prompt caching

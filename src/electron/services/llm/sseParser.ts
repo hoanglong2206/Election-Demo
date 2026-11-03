@@ -29,7 +29,7 @@ export interface SSECallbacks {
 export class SSEStreamParser {
   private decoder: TextDecoder
   private buffer: string = ''
-  private provider: 'groq' | 'openai' | 'gemini'
+  private provider: 'groq' | 'openai' | 'gemini' | 'anthropic'
   private callbacks: SSECallbacks
   private usage: SSEUsage = {}
   private accumulatedText: string = ''
@@ -38,7 +38,14 @@ export class SSEStreamParser {
   constructor(provider: string, callbacks: SSECallbacks = {}) {
     this.decoder = new TextDecoder('utf-8')
     const norm = provider.toLowerCase().trim()
-    this.provider = norm === 'gemini' || norm === 'google' ? 'gemini' : norm === 'openai' ? 'openai' : 'groq'
+    this.provider =
+      norm === 'gemini' || norm === 'google'
+        ? 'gemini'
+        : norm === 'anthropic' || norm === 'claude'
+        ? 'anthropic'
+        : norm === 'openai'
+        ? 'openai'
+        : 'groq'
     this.callbacks = callbacks
   }
 
@@ -106,7 +113,7 @@ export class SSEStreamParser {
       return
     }
 
-    let delta: string
+    let delta = ''
     if (this.provider === 'gemini') {
       const parts = data?.candidates?.[0]?.content?.parts || []
       delta = parts.filter((part: any) => !part.thought).map((part: any) => part.text || '').join('')
@@ -118,6 +125,25 @@ export class SSEStreamParser {
         this.usage.outputTokens = data.usageMetadata.candidatesTokenCount ?? this.usage.outputTokens
         this.usage.cachedTokens = data.usageMetadata.cachedContentTokenCount ?? this.usage.cachedTokens
         this.callbacks.onUsage?.({ ...this.usage })
+      }
+    } else if (this.provider === 'anthropic') {
+      if (data?.type === 'content_block_delta' && data?.delta?.text) {
+        delta = data.delta.text
+      }
+      if (data?.type === 'message_start' && data?.message?.usage) {
+        const u = data.message.usage
+        this.usage.inputTokens = u.input_tokens ?? this.usage.inputTokens
+        this.usage.cachedTokens = u.cache_read_input_tokens ?? this.usage.cachedTokens
+        this.callbacks.onUsage?.({ ...this.usage })
+      }
+      if (data?.type === 'message_delta') {
+        if (data.usage?.output_tokens) {
+          this.usage.outputTokens = data.usage.output_tokens
+          this.callbacks.onUsage?.({ ...this.usage })
+        }
+        if (data.delta?.stop_reason) {
+          this.finishReason = data.delta.stop_reason
+        }
       }
     } else {
       delta = data?.choices?.[0]?.delta?.content ?? data?.choices?.[0]?.delta?.text ?? ''

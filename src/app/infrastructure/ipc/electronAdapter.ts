@@ -189,8 +189,8 @@ export class ElectronIpcAdapter implements IIpcClient {
     cancelStreamLLM: (requestId) => getRawApi()?.credentials?.cancelStreamLLM?.(requestId),
     callMultimodalLLM: (params) =>
       getRawApi()?.credentials?.callMultimodalLLM?.(params) ?? Promise.resolve(null),
-    transcribeGroq: (audioBase64, modelId, language, prompt) =>
-      getRawApi()?.credentials?.transcribeGroq?.(audioBase64, modelId, language, prompt) ??
+    transcribeGroq: (audioData, modelId, language, prompt) =>
+      getRawApi()?.credentials?.transcribeGroq?.(audioData, modelId, language, prompt) ??
       Promise.resolve(null),
     syncModels: () =>
       getRawApi()?.credentials?.syncModels?.() ??

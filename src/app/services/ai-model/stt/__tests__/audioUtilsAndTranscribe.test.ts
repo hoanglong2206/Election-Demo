@@ -30,16 +30,16 @@ describe('audioUtils & transcribeAudio Groq STT', () => {
     expect(blob.size).toBe(12)
   })
 
-  it('transcribeAudio with Groq engine strips data URL prefix and sends clean base64', async () => {
-    let capturedBase64 = ''
+  it('transcribeAudio with Groq engine transfers zero-copy ArrayBuffer to IPC', async () => {
+    let capturedPayload: any = null
     const originalWindow = (globalThis as any).window
 
     try {
       ;(globalThis as any).window = {
         api: {
           credentials: {
-            transcribeGroq: mock(async (audioBase64: string) => {
-              capturedBase64 = audioBase64
+            transcribeGroq: mock(async (payload: any) => {
+              capturedPayload = payload
               return { text: 'Hello world', latencyMs: 50 }
             }),
           },
@@ -53,23 +53,27 @@ describe('audioUtils & transcribeAudio Groq STT', () => {
 
       expect(res.success).toBe(true)
       expect(res.text).toBe('Hello world')
-      expect(capturedBase64.startsWith('data:')).toBe(false)
-      expect(capturedBase64).toBe('UklGRiQAAABXQVZF')
+      expect(capturedPayload instanceof ArrayBuffer).toBe(true)
+      const u8 = new Uint8Array(capturedPayload)
+      expect(u8[0]).toBe(82) // 'R'
+      expect(u8[1]).toBe(73) // 'I'
+      expect(u8[2]).toBe(70) // 'F'
+      expect(u8[3]).toBe(70) // 'F'
     } finally {
       ;(globalThis as any).window = originalWindow
     }
   })
 
-  it('transcribeAudio encodes Int16Array PCM into a valid WAV header for Groq engine', async () => {
-    let capturedBase64 = ''
+  it('transcribeAudio encodes Int16Array PCM into a valid WAV ArrayBuffer for Groq engine', async () => {
+    let capturedPayload: any = null
     const originalWindow = (globalThis as any).window
 
     try {
       ;(globalThis as any).window = {
         api: {
           credentials: {
-            transcribeGroq: mock(async (audioBase64: string) => {
-              capturedBase64 = audioBase64
+            transcribeGroq: mock(async (payload: any) => {
+              capturedPayload = payload
               return { text: 'Speech detected', latencyMs: 60 }
             }),
           },
@@ -84,13 +88,39 @@ describe('audioUtils & transcribeAudio Groq STT', () => {
 
       expect(res.success).toBe(true)
       expect(res.text).toBe('Speech detected')
-      expect(capturedBase64.length).toBeGreaterThan(0)
+      expect(capturedPayload instanceof ArrayBuffer).toBe(true)
 
-      // Decode captured base64 and check WAV RIFF header
-      const buffer = Buffer.from(capturedBase64, 'base64')
+      // Check WAV RIFF header directly on the transferred buffer
+      const buffer = Buffer.from(capturedPayload)
       expect(buffer.toString('ascii', 0, 4)).toBe('RIFF')
       expect(buffer.toString('ascii', 8, 12)).toBe('WAVE')
       expect(buffer.length).toBe(44 + 160 * 2)
+    } finally {
+      ;(globalThis as any).window = originalWindow
+    }
+  })
+
+  it('transcribeAudio passes string audio through when audioData is a string', async () => {
+    let capturedPayload: any = null
+    const originalWindow = (globalThis as any).window
+
+    try {
+      ;(globalThis as any).window = {
+        api: {
+          credentials: {
+            transcribeGroq: mock(async (payload: any) => {
+              capturedPayload = payload
+              return { text: 'Legacy string handled', latencyMs: 50 }
+            }),
+          },
+        },
+      }
+
+      const res = await transcribeAudio('UklGRiQAAABXQVZF', 'whisper-large-v3-turbo', 'en')
+
+      expect(res.success).toBe(true)
+      expect(res.text).toBe('Legacy string handled')
+      expect(capturedPayload).toBe('UklGRiQAAABXQVZF')
     } finally {
       ;(globalThis as any).window = originalWindow
     }

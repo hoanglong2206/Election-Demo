@@ -331,12 +331,18 @@ const api = {
     } | null> =>
       ipcRenderer.invoke('credentials:callMultimodalLLM', params),
     transcribeGroq: (
-      audioBase64: string,
+      audioData: ArrayBuffer | Uint8Array | string,
       modelId?: string,
       language?: string,
       prompt?: string
     ): Promise<{ text: string; latencyMs: number } | null> =>
-      ipcRenderer.invoke('credentials:transcribeGroq', { audioBase64, modelId, language, prompt }),
+      ipcRenderer.invoke('credentials:transcribeGroq', {
+        audioData,
+        audioBase64: typeof audioData === 'string' ? audioData : undefined,
+        modelId,
+        language,
+        prompt,
+      }),
     syncModels: (): Promise<{
       totalLoaded: number
       providerBreakdown: string

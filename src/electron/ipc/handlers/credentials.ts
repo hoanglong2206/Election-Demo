@@ -48,10 +48,16 @@ export function registerCredentialHandlers(): void {
     IPC_CHANNELS.CREDENTIALS.TRANSCRIBE_GROQ,
     async (
       _event,
-      payload: { audioBase64: string; modelId?: string; language?: string; prompt?: string }
+      payload: {
+        audioData?: Buffer | ArrayBuffer | Uint8Array | string
+        audioBase64?: string
+        modelId?: string
+        language?: string
+        prompt?: string
+      }
     ) => {
       return llmService.transcribeGroq(
-        payload.audioBase64,
+        payload.audioData ?? payload.audioBase64 ?? '',
         payload.modelId,
         payload.language,
         payload.prompt
