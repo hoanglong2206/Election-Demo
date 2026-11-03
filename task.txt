@@ -1,0 +1,292 @@
+# DANH SÁCH VẤN ĐỀ KIẾN TRÚC & ĐỀ XUẤT NÂNG CẤP HỆ THỐNG (SYSTEM BUGS & TECHNICAL DEBT)
+# Dự án: Electron AI Meeting & Interview Copilot (election-demo)
+# Ngày tạo: 2026-11-03
+
+================================================================================
+MỤC LỤC 7 VẤN ĐỀ KỸ THUẬT CẦN CẢI TIẾN
+================================================================================
+1. [RAG] Nâng cấp từ Hashing Trick sang Semantic Vector Embedding
+2. [RAG] Nâng cấp thuật toán tìm kiếm kết hợp BM25 (Thay thế Count Overlap)
+3. [RAG] Phân mảnh tài liệu theo cấu trúc ngữ nghĩa (Semantic Markdown/CV Chunking)
+4. [IPC] Tối Ưu Hóa Đường Truyền Audio IPC (Zero-Copy Buffer Transfer cho Groq STT)
+5. [STT] Tăng Tốc Local Whisper C++ Bằng GPU Acceleration (DirectML / Vulkan / CUDA)
+6. [LLM] Tối Ưu TTFT (Time-to-First-Token) & Kích Hoạt Prompt Caching Nhà Cung Cấp
+7. [NAV/UX] Đồng Bộ Gatekeeper Sảnh Chờ (Pre-Flight) & Ràng Buộc Dữ Liệu Thực Chiến Từ Audio Test / AI Diagnostic
+
+--------------------------------------------------------------------------------
+1. NÂNG CẤP TỪ HASHING TRICK SANG SEMANTIC VECTOR EMBEDDING
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/context/localRag.ts` (Class `LocalHashEmbeddingProvider`, dòng 86-97)
+  * `src/app/services/ai-model/context/types.ts`
+- Hiện trạng:
+  * Lớp `LocalHashEmbeddingProvider` đang sử dụng thuật toán băm Bag-of-Words 64 chiều đơn giản:
+    `vector[parseInt(hash(token), 16) % vector.length] += 1`
+  * Thuật toán này không có bất kỳ khả năng hiểu ngữ nghĩa (semantic understanding) nào.
+  * Các từ đồng nghĩa, từ viết tắt hoặc khái niệm tương đương (ví dụ: "Message Queue" vs "Kafka", "Cache" vs "Redis", "Distributed System" vs "Microservices", "Latency" vs "Độ trễ") có giá trị băm hoàn toàn khác nhau, dẫn đến Cosine Similarity giữa câu hỏi và tài liệu CV/JD xấp xỉ bằng 0.
+  * Ngược lại, do không gian vector chỉ có 64 chiều, các từ vựng hoàn toàn không liên quan lại dễ gặp hiện tượng đụng độ mã băm (hash collision), làm méo mó kết quả xếp hạng.
+- Cải tiến:
+  * Tích hợp Local Embedding Engine thực thụ chạy qua ONNX Runtime Web / Transformers.js chạy ngầm trong Worker hoặc Node.js Main Process với mô hình quantized siêu nhẹ (~25MB - 35MB, e.g., `all-MiniLM-L6-v2` hoặc `bge-small-en-v1.5`).
+  * Bổ sung tùy chọn kết nối Cloud Embedding API (OpenAI `text-embedding-3-small`, Gemini `text-embedding-004`) thông qua `credentialsPort` khi người dùng đã cấu hình API Key.
+  * Tăng độ rộng vector từ 64 chiều lên 384 hoặc 768 chiều chuẩn, cho phép tìm kiếm ngữ nghĩa chính xác theo ý niệm thay vì khớp từ khóa thô sơ.
+
+--------------------------------------------------------------------------------
+2. NÂNG CẤP THUẬT TOÁN TÌM KIẾM KẾT HỢP BM25 (THAY THẾ COUNT OVERLAP)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/context/localRag.ts` (Hàm `keywordScore`, dòng 130-135)
+- Hiện trạng:
+  * Điểm số khớp từ khóa hiện tại được tính bằng công thức chia tập hợp thô sơ:
+    `keywordScore = new Set(matched).size / queryTokens.size`
+  * Công thức này có 3 nhược điểm nghiêm trọng:
+    1. Không có trọng số nghịch đảo tần suất văn bản (IDF - Inverse Document Frequency): Một từ cực kỳ phổ biến xuất hiện ở mọi nơi (như "system", "project", "work", "develop") có trọng số tương đương với một từ khóa công nghệ mang tính quyết định (như "gRPC", "Paxos", "CQRS", "ClickHouse").
+    2. Không có tần suất từ trong tài liệu (TF - Term Frequency) và chuẩn hóa độ dài văn bản (Length Normalization): Đoạn văn ngắn hay dài đều bị đánh giá sai lệch.
+    3. Không lọc Stopwords (từ dừng) tiếng Việt và tiếng Anh, khiến các từ đệm chiếm tỷ trọng cao trong điểm số.
+- Cải tiến:
+  * Triển khai giải thuật chuẩn Okapi BM25 (`k1 = 1.2`, `b = 0.75`) kết hợp bảng từ dừng (Stopwords Dictionary) cho cả Tiếng Việt và Tiếng Anh.
+  * Tính toán chỉ số IDF cho toàn bộ tập phân mảnh tài liệu (Corpus Chunks) ngay khi nạp hồ sơ CV và JD.
+  * Kết hợp điểm Hybrid Search chuẩn hóa: `Score = alpha * DenseCosineScore + (1 - alpha) * SparseBM25Score` (với `alpha` mặc định 0.6).
+
+--------------------------------------------------------------------------------
+3. PHÂN MẢNH TÀI LIỆU THEO CẤU TRÚC NGỮ NGHĨA (SEMANTIC MARKDOWN/CV CHUNKING)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/context/localRag.ts` (Hàm `chunkText`, dòng 71-84)
+  * `src/app/services/documentParser.ts`
+- Hiện trạng:
+  * Hàm `chunkText` chia nhỏ tài liệu dựa trên độ dài ký tự cơ học (`maxChars = 900`) hoặc ngắt theo `\n\n`.
+  * Khi gặp các đoạn mô tả dự án dài hoặc bảng kỹ năng, việc ngắt theo 900 ký tự cắt đôi câu văn hoặc tách rời tên dự án (Heading) khỏi các gạch đầu dòng trách nhiệm và kết quả đạt được (Metrics / STAR results).
+  * Hậu quả: Khi truy xuất RAG, hệ thống chỉ lấy được nửa sau của dự án (mất bối cảnh công nghệ) hoặc chỉ lấy được tên dự án (mất thông tin giải pháp và số liệu).
+- Cải tiến:
+  * Phân mảnh dựa trên Cây cú pháp Markdown AST / Cấu trúc Hồ sơ (Structural Chunking):
+    1. Nhận diện các Section Header cấp 1, 2, 3 (#, ##, ###, hoặc các từ khóa: "Kinh nghiệm làm việc", "Dự án tiêu biểu", "Học vấn & Chứng chỉ").
+    2. Gom trọn vẹn từng đơn vị dự án (Project Entity Block) thành 1 chunk duy nhất kèm Contextual Header Injection (Ví dụ: tự động chèn tiền tố `[Dự án: E-commerce Gateway | Vị trí: Senior Backend]` vào đầu mỗi chunk con nếu dự án quá dài bắt buộc phải tách).
+    3. Thiết lập bước nhảy gối đầu (Chunk Overlap: 15% tương đương ~150 ký tự) giữa các chunk liên tiếp để không làm gián đoạn ngữ cảnh ranh giới.
+
+--------------------------------------------------------------------------------
+4. TỐI ƯU HÓA ĐƯỜNG TRUYỀN AUDIO IPC (ZERO-COPY BUFFER TRANSFER CHO GROQ STT)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/stt/transcribe.ts` (Dòng 162-164)
+  * `src/infrastructure/ipc/ports/credentialsPort.ts`
+  * `src/electron/ipc/handlers/credentials.ts`
+  * `src/electron/services/llm/llmService.ts` (Hàm `transcribeGroq`, dòng 852-870)
+- Hiện trạng:
+  * Khi gửi audio lên Groq Whisper Cloud LPU:
+    1. Renderer chuyển đổi `Blob` hoặc `Int16Array` thành chuỗi Base64 qua `blobToBase64()` (sử dụng FileReader bất đồng bộ).
+    2. Truyền chuỗi Base64 (dung lượng hàng trăm KB đến vài MB mỗi giây) qua kênh IPC `credentials:transcribeGroq`.
+    3. Main Process nhận chuỗi Base64 và gọi `Buffer.from(cleanBase64, 'base64')` để decode ngược lại thành Buffer trước khi đưa vào `FormData`.
+  * Trong khi đó, Local Whisper (`whisperPort.transcribe`) đã được tối ưu truyền trực tiếp `ArrayBuffer`.
+  * Chuỗi chuyển đổi Base64 hai đầu làm tăng từ 30ms đến 60ms độ trễ không đáng có, tăng 33% kích thước dữ liệu truyền trong IPC và gây áp lực thu dọn rác (GC pressure) liên tục lên V8 Engine khi cuộc họp diễn ra hàng giờ.
+- Cải tiến:
+  * Cập nhật IPC Schema và chữ ký hàm `credentialsPort.transcribeGroq` để nhận trực tiếp `ArrayBuffer` hoặc `Uint8Array`.
+  * Sử dụng cơ chế Zero-Copy Buffer Transfer có sẵn của Electron IPC (`ipcRenderer.invoke(channel, arrayBuffer)`).
+  * Main Process chuyển trực tiếp `Buffer.from(arrayBuffer)` vào `Blob/File` của `FormData` mà không tốn bất kỳ thao tác encode/decode chuỗi nào.
+
+--------------------------------------------------------------------------------
+5. TĂNG TỐC LOCAL WHISPER C++ BẰNG GPU ACCELERATION (DIRECTML / VULKAN / CUDA)
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/electron/services/whisper/whisperProcessManager.ts` (Dòng 200-265)
+  * `resources/bin/` (Các tệp thực thi `whisper-server.exe`, `whisper-cli.exe`)
+- Hiện trạng:
+  * Binary `whisper.cpp` đi kèm ứng dụng hiện tại đang được cấu hình và thực thi thuần túy trên CPU (sử dụng đa luồng OpenMP / AVX2 với `-t 4`).
+  * Khi xử lý phân đoạn âm thanh 3s - 4.5s:
+    * Model `ggml-tiny.bin` (75MB) mất ~200ms - 450ms trên CPU.
+    * Model `ggml-base.bin` (142MB) mất ~450ms - 1200ms trên CPU.
+  * Việc chiếm dụng 4 luồng CPU liên tục để inference cục bộ làm tăng nhiệt độ CPU, kích hoạt quạt tản nhiệt (gây nhiễu mic) và có thể gây micro-stutter cho các ứng dụng video conference chạy song song (Zoom/Meet/Teams).
+- Cải tiến:
+  * Tích hợp bản build `whisper.cpp` hỗ trợ **Vulkan / DirectML** (cho phép tăng tốc phần cứng trên tất cả các GPU rời và Onboard của Intel, AMD, NVIDIA trên Windows) hoặc **CUDA cuBLAS** (cho GPU NVIDIA).
+  * Kiểm tra tự động tính khả dụng của GPU (`whisperProcessManager.detectGpuCapabilities()`):
+    * Nếu có GPU tương thích: chạy tiến trình server kèm cờ `-ngl 99` (offload toàn bộ layers sang VRAM GPU). Thời gian xử lý chunk 3s giảm xuống dưới **40ms - 70ms** (nhanh gấp 5 - 8 lần, hoàn toàn không tốn CPU).
+    * Nếu không có GPU: tự động fallback về CPU với số luồng động thích ứng (Adaptive Threads: tối đa bằng 50% số logical cores).
+
+--------------------------------------------------------------------------------
+6. TỐI ƯU TTFT (TIME-TO-FIRST-TOKEN) & KÍCH HOẠT PROMPT CACHING NHÀ CUNG CẤP
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/services/ai-model/copilot/interview.ts` (Dòng 171-185, 230-245)
+  * `src/app/services/ai-model/copilot/promptTemplate.ts` (`buildStaticSystemPrefix`, `buildDynamicUserPrompt`)
+  * `src/electron/services/llm/llmService.ts`
+- Hiện trạng:
+  * Các mô hình LLM tiên tiến hiện nay (Anthropic Claude 3.5 Sonnet, Google Gemini 1.5 Flash/Pro, OpenAI GPT-4o) đều hỗ trợ tính năng **Prompt Caching** (lưu đệm KV Cache phía server cho các đoạn prompt cố định có dung lượng >= 1024 tokens).
+  * Trong mã nguồn hiện tại, dù đã tách `buildStaticSystemPrefix` và `buildDynamicUserPrompt`, nhưng một số biến trạng thái động nhỏ (như timestamp, số thứ tự câu hỏi, hoặc định dạng ngôn ngữ) đôi khi vô tình bị chèn vào System Prompt hoặc ở đầu User Prompt.
+  * Nếu phần đầu của Prompt bị thay đổi dù chỉ 1 ký tự, cơ chế Prompt Caching phía Server sẽ bị vô hiệu hóa (Cache Miss).
+- Cải tiến:
+  * Cố định tuyệt đối 100% từng byte (Byte-Invariant System Prefix):
+    * Gom toàn bộ: Hướng dẫn vai trò Copilot + Toàn văn CV ứng viên + Profile FactSheet + Hướng dẫn framework chuẩn thành 1 khối tĩnh duy nhất đặt ở `systemPrompt` (đảm bảo độ dài > 1024 tokens).
+    * Đối với Anthropic: Thêm header metadata `"cache_control": {"type": "ephemeral"}` vào khối system prompt.
+    * Đối với Gemini: Sử dụng Context Caching API cho các phiên họp kéo dài.
+  * Toàn bộ nội dung biến thiên (câu hỏi hiện tại, transcript 2-3 turn gần nhất, trích dẫn RAG động) được đưa xuống cuối `userPrompt`.
+  * Kết quả: Giảm **60% - 80% thời gian TTFT** (từ ~1000ms xuống còn ~250ms cho các lượt sau lượt đầu) và giảm **50% - 75% chi phí token đầu vào**.
+
+--------------------------------------------------------------------------------
+7. ĐỒNG BỘ GATEKEEPER SẢNH CHỜ (PRE-FLIGHT) & RÀNG BUỘC DỮ LIỆU THỰC CHIẾN TỪ AUDIO TEST / AI DIAGNOSTIC
+--------------------------------------------------------------------------------
+- Vị trí mã nguồn:
+  * `src/app/App.tsx` (Hàm `handleViewChange`, điều phối chuyển view `meeting`, quản lý mount keep-alive)
+  * `src/app/components/layout/Sidebar.tsx` (Nút chuyển view Meeting Copilot)
+  * `src/app/features/home/Home.tsx` & `src/app/features/home/hooks/useHomeNavigation.ts`
+  * `src/app/components/shared/PreFlightLobbyModal.tsx` & `src/app/hooks/usePreFlightLobby.ts`
+  * `src/app/features/meeting-mode/MeetingMode.tsx` & `src/app/features/meeting-mode/components/context/MissingContextGuard.tsx`
+  * `src/app/features/audio-test/` (`vadCalibrationService`, `DualChannelReadinessCard`, `TechnicalJargonTrainer`, `AudioTest.tsx`)
+  * `src/app/features/ai-diagnostic/` (`useLLMBenchmark`, `useVisionDiagnostic`, `ScreenCaptureVisionSection`, `AIDiagnostic.tsx`)
+
+- Hiện trạng & Lỗ hổng luồng:
+  * 1. Bypass Sảnh chờ từ Sidebar: Nút `Meeting Copilot` trên thanh Sidebar (`Sidebar.tsx`) gọi trực tiếp `onViewChange('meeting')`. Trong khi đó, component Sảnh chờ `PreFlightLobbyModal` hiện chỉ được gắn cục bộ bên trong `Home.tsx` và chỉ mở ra khi người dùng nhấn nút *"Vào Meeting Mode"* tại `SystemQuickStatusCard`.
+  * 2. Guard trong Meeting chỉ kiểm tra ngữ cảnh văn bản: Component `MissingContextGuard` tại `MeetingMode` chỉ kiểm tra điều kiện `mode === 'interview' && (!hasCV || !hasJD)`. Do đó, nếu người dùng đã lưu CV & JD từ trước (hoặc dùng Preset mặc định), hoặc đang ở `mode === 'discussion'`, hệ thống cho phép vào thẳng giao diện phòng họp mà không qua bất kỳ bước kiểm tra âm thanh hay mô hình AI nào.
+  * 3. Hai trang `audio-test` và `ai-diagnostic` bị xem là tiện ích phụ rời rạc: Hiện tại 2 trang này hoạt động như các màn hình demo độc lập, không tạo ra hoặc ràng buộc bất kỳ dữ liệu/cấu hình (artifact contract) bắt buộc nào mà Meeting cần tiêu thụ. Người dùng hoàn toàn có thể bỏ qua 2 trang này, dẫn đến nguy cơ cao gặp lỗi thực chiến:
+    * Micro thu tạp âm phòng (tiếng quạt, gõ phím) làm Whisper STT bị hallucinate hoặc cắt vụn câu do chưa hiệu chuẩn ngưỡng VAD.
+    * Chưa kiểm tra âm thanh hệ thống (Loopback) nên không nghe được tiếng người phỏng vấn từ Google Meet/Zoom/Teams.
+    * Mô hình AI bị hiện tượng "Cold-Start" (trễ 4-7 giây ở câu hỏi đầu tiên) do chưa được làm ấm (pre-warm) kết nối SSL/TLS.
+    * Đang họp phải dừng lại để chọn cửa sổ chụp màn hình đề bài thi vì chưa cấu hình trước.
+
+--------------------------------------------------------------------------------
+A. KIẾN TRÚC LUỒNG ĐIỀU HƯỚNG TẬP TRUNG (CENTRALIZED NAVIGATION GATEKEEPER)
+--------------------------------------------------------------------------------
+
+Sơ đồ tuần tự kiểm soát luồng vào phòng họp:
+
+```
+[Người Dùng]
+   │
+   ├── Bấm "Meeting Copilot" ở Sidebar
+   ├── Bấm "Vào Meeting Mode" ở Trang Home
+   └── Bấm phím tắt chuyển trang (Ctrl + M)
+   │
+   ▼
+[Centralized Navigation Gatekeeper] (tại App.tsx / useAppNavigation)
+   │
+   ├─► [Bước 1: Context Guard Check]
+   │     │
+   │     ├─► Thiếu CV hoặc JD (Interview mode) / Thiếu Topic (Discussion)
+   │     │     │
+   │     │     ▼
+   │     │   [Hiển thị MissingContextGuard / Chuyển về Home]
+   │     │   (Highlight tab cần nhập, bật toast hướng dẫn)
+   │     │
+   │     └─► Đã đầy đủ Ngữ Cảnh (CV & JD hợp lệ)
+   │           │
+   │           ▼
+   ├─► [Bước 2: Pre-Flight Readiness & Skip Check]
+   │     │
+   │     ├─► Điều kiện vào thẳng:
+   │     │     (Đã tick "Không hiển thị lại sảnh chờ") VÀ (Readiness Score >= 80%)
+   │     │     │
+   │     │     ▼
+   │     │   [VÀO THẲNG MEETING MODE] ──► Render MeetingMode với Calibrated Config
+   │     │
+   │     └─► Điều kiện mở Sảnh chờ:
+   │           (Chưa tick Skip) HOẶC (Readiness Score < 80%) HOẶC (Chưa Calibrate)
+   │           │
+   │           ▼
+   └─► [Bước 3: Mở Global PreFlightLobbyModal (Sảnh Chờ Toàn Cục)]
+         │
+         ├── Thẻ 1: Âm thanh & VAD (Chưa chuẩn? ──► [Deep Link sang Audio Test])
+         ├── Thẻ 2: Tốc độ AI & Vision (Chưa làm ấm? ──► [Deep Link sang AI Diagnostic])
+         ├── Thẻ 3: Từ vựng Whisper STT (Kiểm tra keyword JD)
+         │
+         ├─► [Lựa chọn A: Người dùng bấm Deep Link sang Audio Test / AI Diagnostic]
+         │     │
+         │     ├── Sang trang thực hiện Calibrate VAD / Pre-warm Model / Ghim Screen
+         │     └── Bấm nút Header: "[✓ Hoàn tất & Quay lại Sảnh chờ]"
+         │           │
+         │           ▼
+         │         Quay lại Sảnh chờ với Readiness Score = 100%
+         │
+         ├─► [Lựa chọn B: Người dùng dùng Quick Action ngay tại Sảnh chờ]
+         │     ├── Bấm "Đo nhanh ồn phòng (2s)" ──► Gọi vadCalibrationService tại chỗ
+         │     └── Bấm "Đo trễ Ping AI" ──► Gọi runAILatencyBenchmark tại chỗ
+         │
+         ├─► [Lựa chọn C: Vào khẩn cấp] ──► Bấm "Bỏ qua & Vào ngay" (Chấp nhận rủi ro)
+         │
+         ▼
+[KẾT QUẢ CUỐI: CHUYỂN VÀO PHÒNG HỌP (MeetingMode)]
+   * Mount MeetingMode vào DOM (hasVisitedMeeting = true).
+   * MeetingMode tự động nạp toàn bộ cấu hình VAD, Whisper Prompt, Screen Source đã calibrate.
+   * Header hiển thị Huy hiệu Sẵn sàng: "🛡️ Combat Ready (100%)" hoặc "⚠️ Uncalibrated".
+```
+
+--------------------------------------------------------------------------------
+B. CHI TIẾT NHIỆM VỤ & TÀI SẢN DỮ LIỆU TẠO RA Ở TỪNG TRANG (PER-PAGE CONTRACTS)
+--------------------------------------------------------------------------------
+
+1. TRANG CHỦ (`Home`) - QUẢN LÝ HỒ SƠ & TỔNG HỢP NGỮ CẢNH
+   - Vai trò: Nền móng dữ liệu văn bản cho cuộc họp.
+   - Trách nhiệm & Xử lý:
+     * Cung cấp bộ soạn thảo kép: CV/Hồ sơ ứng viên & JD/Mô tả công việc (hoặc Chủ đề thảo luận).
+     * Quản lý Profile Presets (`ProfilePresetDialog`): Cho phép lưu/chuyển đổi nhanh giữa các vị trí phỏng vấn khác nhau.
+     * Tự động trích xuất từ khóa chuyên ngành từ JD (`jdKeywordExtractor.extractKeywords`) để tạo bộ từ vựng mồi ban đầu cho Whisper.
+     * Nút kích hoạt *"Vào Meeting Mode"* tại `SystemQuickStatusCard`:
+       - Đồng bộ hóa dữ liệu ngay lập tức (`flushPendingContextSync`).
+       - Lưu vào `meeting_context_data` và cập nhật Snapshot của Profile.
+       - Phát sự kiện `window.dispatchEvent(new CustomEvent('meeting-context-updated'))`.
+       - Kích hoạt Centralized Gatekeeper để quyết định mở Sảnh chờ hay vào thẳng phòng họp.
+
+2. TRANG KIỂM TRA THU ÂM (`Audio Test`) - ĐƯỜNG TRUYỀN 2 CHIỀU & KHỬ NHIỄU THỰC TẾ
+   - Vai trò: Chuẩn bị vũ khí âm học cho Whisper STT trước giờ G.
+   - Tài sản dữ liệu tạo ra phục vụ trực tiếp cho Meeting:
+     * **Tài sản 1: Hồ sơ hiệu chuẩn VAD (`VADCalibrationRecord`)**:
+       - Người dùng nhấn *"Calibrate VAD"* và giữ im lặng 3 giây trong phòng.
+       - `vadCalibrationService` thu thập 60 frame (50ms/frame), tính toán `noiseFloorDbfs` (ví dụ: -42 dBFS do quạt laptop) và thiết lập `speechThresholdDbfs = noiseFloorDbfs + 6dB` (ví dụ: -36 dBFS).
+       - Bản ghi được lưu vĩnh viễn theo ID thiết bị vào `meeting_copilot_vad_calibrations`.
+       - *Meeting tiêu thụ*: `useAudioCapture` gọi `getVADCalibration(selectedDeviceId)` và nạp trực tiếp ngưỡng này vào `AudioBufferManager` / `SpeechSegmenter`. Whisper chỉ ngắt đoạn khi người thật nói, triệt tiêu 100% hiện tượng tiếng gõ bàn phím hoặc quạt gió kích hoạt STT ảo.
+     * **Tài sản 2: Chứng chỉ Loopback 2 chiều (`DualChannelReadinessCard`)**:
+       - Phát chuông tần số chuẩn (C5-E5-G5) và xác nhận Loopback bắt được tín hiệu > -48 dBFS.
+       - Lưu cờ `systemVerified: true` vào `election_audio_system_verification`.
+       - *Meeting tiêu thụ*: Đảm bảo chắc chắn âm thanh của người phỏng vấn từ Google Meet / Zoom / MS Teams sẽ được đưa vào kênh phân tích của Copilot.
+     * **Tài sản 3: Bộ từ điển Whisper Jargon đã xác thực (`TechnicalJargonTrainer`)**:
+       - Người dùng đọc thử 1 câu mẫu chứa từ viết tắt trong JD (ví dụ: *"Microservices, gRPC, Idempotency"*).
+       - STT nhận diện đúng -> gắn nhãn `isVerified: true` cho nhóm từ vựng này.
+       - *Meeting tiêu thụ*: Nạp vào `whisperPromptBuilder` với độ ưu tiên cao nhất, giúp Whisper không bị nhận diện nhầm thuật ngữ công nghệ sang từ thông thường.
+   - Trải nghiệm điều hướng quay lại:
+     * Khi được chuyển đến từ Sảnh chờ, trên Header của `AudioTest` hiển thị thanh thông báo nổi:
+       `[Tiến trình chuẩn bị phòng họp: Đang hiệu chuẩn âm thanh] -> Nút "[✓ Hoàn tất & Quay lại Sảnh chờ]"`.
+
+3. TRANG ĐO TỐC ĐỘ AI & TEST CHỤP MÀN HÌNH (`AI Diagnostic`) - LÀM ẤM KẾT NỐI & GHIM VÙNG CHỤP
+   - Vai trò: Loại bỏ độ trễ phản xạ ban đầu của mô hình và cấu hình trước mục tiêu thị giác (Vision).
+   - Tài sản dữ liệu tạo ra phục vụ trực tiếp cho Meeting:
+     * **Tài sản 1: Kết nối làm ấm sẵn & Triệt tiêu Cold-Start (Pre-warmed AI Connection)**:
+       - Chạy một lượt ping/benchmark ngắn (prompt 20 tokens) qua `runAILatencyBenchmark`.
+       - Hành động này giữ kết nối HTTP/2 persistent connection, hoàn tất bắt tay TLS/SSL và khởi tạo Session Cache tại máy chủ AI (Gemini / OpenAI / Claude / Groq).
+       - Lưu cờ `isAIPrewarmed: true` (thời hạn 30 phút) vào `sessionStorage`.
+       - *Meeting tiêu thụ*: Câu hỏi đầu tiên của người phỏng vấn sẽ được Copilot trả lời trong vòng **< 1.2 giây** thay vì mất **4 - 7 giây** khởi động lạnh, giúp ứng viên phản xạ tức thì.
+     * **Tài sản 2: Hồ sơ chiến thuật phản xạ Copilot (AI Latency Tactical Profile)**:
+       - Căn cứ vào TTFT (Time-to-First-Token) thực tế đo được:
+         - Nếu TTFT < 1000ms: Tự động đề xuất cấu hình Copilot mode `in-depth` (sinh câu trả lời đầy đủ kèm phân tích tình huống STAR).
+         - Nếu TTFT > 2000ms: Tự động kích hoạt mode `bullet-fast` (chỉ sinh 2-3 gạch đầu dòng then chốt) để tránh làm ứng viên bị ngắc ngứ.
+     * **Tài sản 3: Nguồn chụp màn hình đề bài ghim sẵn (Screen Capture Source Preset)**:
+       - Tại tab `Multimodal Vision`, người dùng mở `ScreenCaptureSourcePicker` và chọn sẵn cửa sổ ứng dụng sẽ thi (ví dụ: Tab Chrome đang mở LeetCode hoặc cửa sổ VS Code).
+       - Lưu `targetSourceId` và vùng crop mặc định vào storage.
+       - *Meeting tiêu thụ*: Khi đang phỏng vấn, ứng viên chỉ cần nhấn phím tắt `Ctrl + Alt + S` -> Hệ thống tự động chụp ngay cửa sổ đã ghim và phân tích đề bài, **hoàn toàn không bật cửa sổ Source Picker** (tránh làm lộ màn hình họp hoặc gây bối rối khi người phỏng vấn đang quan sát).
+   - Trải nghiệm điều hướng quay lại:
+     * Tương tự AudioTest, có thanh Header: `[Tiến trình chuẩn bị phòng họp: Đang kiểm định AI & Chụp màn hình] -> Nút "[✓ Hoàn tất & Quay lại Sảnh chờ]"`.
+
+4. SẢNH CHỜ KIỂM ĐỊNH THỰC CHIẾN (`PreFlightLobbyModal`) - TRUNG TÂM ĐIỀU PHỐI (COCKPIT)
+   - Vai trò: Cửa khẩu kiểm định an toàn (Pre-Flight Checklist) hiển thị trực quan trước khi người dùng vào phòng họp.
+   - Vị trí mới: Được nâng cấp thành **Global Modal** đặt tại `App.tsx` (hoặc `Layout.tsx`), có thể mở ra từ bất kỳ đâu.
+   - Thang điểm Sẵn sàng Chiến đấu (`Combat Readiness Score` 0 - 100%):
+     * Ngữ cảnh CV/JD/Topic hợp lệ: **+30%**
+     * Âm thanh Loopback đã test & VAD đã Calibrate: **+35%** (nếu thiếu: cảnh báo STT dễ nhiễu)
+     * AI Model đã Pre-warm & Ping < 2000ms: **+35%** (nếu thiếu: cảnh báo phản xạ câu đầu chậm)
+   - Thiết kế 3 Khối Thao Tác:
+     * *Khối 1 (Âm thanh)*: Hiển thị trạng thái VAD (`Đã đo ồn phòng: -38 dBFS` vs `Chưa hiệu chuẩn`). Cung cấp 2 lựa chọn: Nút *"Đo ồn 2s tại chỗ"* (Quick VAD) HOẶC Nút *"Chuyên sâu tại Audio Test ->"*.
+     * *Khối 2 (AI & Màn hình)*: Hiển thị Ping model và nguồn chụp màn hình. Cung cấp nút *"Đo Ping tại chỗ"* HOẶC Nút *"Benchmark tại AI Diagnostic ->"*.
+     * *Khối 3 (Từ vựng)*: Hiển thị danh sách từ vựng mồi Whisper, cho phép gõ thêm nhanh các thuật ngữ lạ.
+   - Nút hành động cuối (Footer):
+     * Checkbox: *"Không hiển thị lại sảnh chờ (Vào thẳng cuộc họp lần sau)"* (chỉ có hiệu lực khi điểm >= 80%).
+     * Nút phụ: *"Bỏ qua & Vào ngay"* (Ghost Button - cho phép vào khẩn cấp khi người dùng không kịp chuẩn bị).
+     * Nút chính: *"Vào Cuộc Họp Ngay"* (Màu xanh Emerald rực rỡ, hiển thị icon khiên bảo vệ `ShieldCheck`, kèm chú thích `Đạt chuẩn thực chiến 100%`).
+
+5. PHÒNG HỌP THỰC CHIẾN (`MeetingMode`) - TIÊU THỤ CẤU HÌNH & VẬN HÀNH THỰC TẾ
+   - Vai trò: Giao diện trực chiến của ứng viên trong buổi phỏng vấn.
+   - Tiếp nhận dữ liệu:
+     * `useAudioCapture`: Đọc `getVADCalibration` để gán `vadThresholdRms`. Nhờ đó, tính năng phát hiện giọng nói hoạt động mượt mà, không bị ngắt ngang khi ứng viên ngừng nghỉ lấy hơi.
+     * `whisperPromptBuilder`: Nạp các từ vựng đã được verify từ Audio Test.
+     * `useScreenCapture`: Nhận diện `targetSourceId` đã chọn trước ở AI Diagnostic, cho phép chụp 1 chạm.
+     * `useCopilotGeneration`: Áp dụng profile phản xạ AI đã định sẵn.
+   - Trạng thái trực quan trên Header (`MeetingHeader`):
+     * Hiển thị Huy hiệu Sẵn sàng:
+       - Nếu đã qua đầy đủ quy trình: Badge `🛡️ Combat Ready 100% (VAD Calibrated • AI Pre-warmed)`.
+       - Nếu vào tắt / bỏ qua kiểm định: Badge `⚠️ Uncalibrated (Ngưỡng ồn mặc định • AI chưa làm ấm)` kèm tooltip nhắc nhở.
+================================================================================
