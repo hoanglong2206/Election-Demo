@@ -75,6 +75,25 @@ export type DocumentSourceType =
   | 'company_research'
   | 'interview_note'
 
+export interface SourceDocument {
+  documentId: string
+  sourceType: DocumentSourceType
+  text: string
+  section?: string
+  updatedAt?: number
+}
+
+export interface DocumentChunk {
+  chunkId: string
+  documentId: string
+  sourceType: DocumentSourceType
+  section?: string
+  text: string
+  tokenCount: number
+  embeddingRef: string
+  contentHash: string
+}
+
 export interface RetrievalCitation {
   citationId: string
   chunkId: string

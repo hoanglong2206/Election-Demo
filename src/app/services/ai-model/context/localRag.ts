@@ -1,25 +1,11 @@
 import { truncateToTokenLimit } from './tokenBudget'
 import { createStructuralChunks, chunkText, type StructuralChunk, type ChunkingOptions } from './chunking'
-import type { DocumentSourceType, RetrievalCitation, RetrievalDiagnostics } from './types'
+import { BM25Index, type BM25Config } from './bm25'
+import { tokenizeFiltered, PROTECTED_TECH_TERMS, VI_STOPWORDS, EN_STOPWORDS } from './stopwords'
+import type { DocumentSourceType, SourceDocument, DocumentChunk, RetrievalCitation, RetrievalDiagnostics } from './types'
 
-export interface SourceDocument {
-  documentId: string
-  sourceType: DocumentSourceType
-  text: string
-  section?: string
-  updatedAt?: number
-}
-
-export interface DocumentChunk {
-  chunkId: string
-  documentId: string
-  sourceType: DocumentSourceType
-  section?: string
-  text: string
-  tokenCount: number
-  embeddingRef: string
-  contentHash: string
-}
+export type { SourceDocument, DocumentChunk }
+export { BM25Index, type BM25Config, tokenizeFiltered, PROTECTED_TECH_TERMS, VI_STOPWORDS, EN_STOPWORDS }
 
 export interface EmbeddingProvider {
   readonly id: string
@@ -115,11 +101,12 @@ function cosine(left: number[], right: number[]): number {
   return left.reduce((sum, value, index) => sum + value * (right[index] || 0), 0)
 }
 
-function keywordScore(query: string, text: string): number {
-  const queryTokens = new Set(tokenize(query))
-  if (queryTokens.size === 0) return 0
-  const matched = tokenize(text).filter((token) => queryTokens.has(token))
-  return new Set(matched).size / queryTokens.size
+export function keywordScore(query: string, text: string): number {
+  const queryTokens = tokenizeFiltered(query)
+  if (queryTokens.length === 0) return 0
+  const textTokenSet = new Set(tokenizeFiltered(text))
+  const matched = queryTokens.filter((token) => textTokenSet.has(token))
+  return matched.length / queryTokens.length
 }
 
 export class LocalStorageVectorStore extends InMemoryVectorStore {
@@ -166,13 +153,26 @@ export class LocalRagIndex {
   private readonly documentHashes = new Map<string, string>()
   private readonly embeddingProvider: EmbeddingProvider
   private readonly vectorStore: VectorStore
+  private readonly bm25Index: BM25Index
 
   constructor(
     embeddingProvider: EmbeddingProvider = new LocalHashEmbeddingProvider(),
     vectorStore: VectorStore = new LocalStorageVectorStore(),
+    bm25Index: BM25Index = new BM25Index(),
   ) {
     this.embeddingProvider = embeddingProvider
     this.vectorStore = vectorStore
+    this.bm25Index = bm25Index
+
+    // Rehydrate BM25 index if vector store already has existing chunks
+    const existing = this.vectorStore.all()
+    if (existing.length > 0) {
+      this.bm25Index.build(existing)
+    }
+  }
+
+  getBm25Index(): BM25Index {
+    return this.bm25Index
   }
 
   async indexDocuments(documents: SourceDocument[]): Promise<void> {
@@ -182,6 +182,7 @@ export class LocalRagIndex {
       if (this.documentHashes.get(document.documentId) === contentHash ||
         (existing.length > 0 && existing.every((chunk) => chunk.contentHash === contentHash))) continue
       this.vectorStore.removeDocument(document.documentId)
+      this.bm25Index.removeDocument(document.documentId)
       const structuralChunks = createStructuralChunks(document.text, {
         defaultSection: document.section,
       })
@@ -205,6 +206,7 @@ export class LocalRagIndex {
         embeddings.set(chunk.embeddingRef, embedding)
       }
       this.vectorStore.upsert(chunks, embeddings)
+      this.bm25Index.upsert(chunks)
       this.documentHashes.set(document.documentId, contentHash)
     }
   }
@@ -218,12 +220,47 @@ export class LocalRagIndex {
       return { context: '', citations: [], diagnostics: { query, topResults: [], selectedTokenCount: 0 } }
     }
     const queryEmbedding = await this.embeddingProvider.embed(query)
-    const scored = this.vectorStore.search(queryEmbedding, Math.max(topK * 4, 12))
-      .map(({ chunk, embedding }) => ({
-        chunk,
-        score: (cosine(queryEmbedding, embedding) * (1 - keywordWeight) + keywordScore(query, chunk.text) * keywordWeight) *
-          (sourceWeights[chunk.sourceType] || 1),
-      }))
+
+    // Compute BM25 scores for corpus chunks
+    const bm25Scores = this.bm25Index.scoreAll(query)
+
+    // Pool candidates from Dense Vector Search
+    const vectorCandidates = this.vectorStore.search(queryEmbedding, Math.max(topK * 4, 16))
+    const candidateMap = new Map<string, { chunk: DocumentChunk; embedding: number[] }>()
+    for (const item of vectorCandidates) {
+      candidateMap.set(item.chunk.chunkId, item)
+    }
+
+    // Also pull top candidates from BM25 sparse search
+    const allChunks = this.vectorStore.all()
+    const chunkLookup = new Map<string, DocumentChunk>(allChunks.map((c) => [c.chunkId, c]))
+    const topBm25List = this.bm25Index.search(query, Math.max(topK * 4, 16))
+    for (const bmItem of topBm25List) {
+      if (!candidateMap.has(bmItem.chunkId)) {
+        const chunk = chunkLookup.get(bmItem.chunkId)
+        if (chunk) {
+          const emb = this.embeddingCache.get(chunk.embeddingRef) || []
+          candidateMap.set(chunk.chunkId, { chunk, embedding: emb })
+        }
+      }
+    }
+
+    // Find max BM25 score among candidates for normalization to [0, 1]
+    let maxBm25 = 0
+    for (const { chunk } of candidateMap.values()) {
+      const bScore = bm25Scores.get(chunk.chunkId) || 0
+      if (bScore > maxBm25) maxBm25 = bScore
+    }
+
+    const scored = Array.from(candidateMap.values())
+      .map(({ chunk, embedding }) => {
+        const dense = embedding.length > 0 ? Math.max(0, cosine(queryEmbedding, embedding)) : 0
+        const rawBm = bm25Scores.get(chunk.chunkId) || 0
+        const normBm = maxBm25 > 0 ? rawBm / maxBm25 : 0
+        const score = (dense * (1 - keywordWeight) + normBm * keywordWeight) *
+          (sourceWeights[chunk.sourceType] || 1)
+        return { chunk, score, dense, normBm }
+      })
       .sort((a, b) => b.score - a.score)
     const selected: RetrievalCitation[] = []
     const seenHashes = new Set<string>()
