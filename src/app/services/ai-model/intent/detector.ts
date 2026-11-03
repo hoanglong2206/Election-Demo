@@ -1,5 +1,10 @@
 import type { IntentDetectionResult } from './types'
-import { detectHeuristicIntent, detectNormalizedIntent, inferTopic } from './heuristic'
+import {
+  detectHeuristicIntent,
+  detectNormalizedIntent,
+  detectIntentModality,
+  inferTopic,
+} from './heuristic'
 import { intentMetrics } from './metrics'
 
 export function detectIntent(
@@ -8,13 +13,18 @@ export function detectIntent(
 ): IntentDetectionResult {
   const startedAt = performance.now()
   const result = detectHeuristicIntent(rawText, options)
+  const combinedText = `${result.rawText} ${result.normalizedText}`
+  const modality = detectIntentModality(combinedText)
   const enriched: IntentDetectionResult = {
     ...result,
-    normalizedIntent: detectNormalizedIntent(`${result.rawText} ${result.normalizedText}`, result.intent),
+    normalizedIntent: detectNormalizedIntent(combinedText, result.intent),
     questionText: result.isQuestion ? result.normalizedText : '',
     triggerReason: result.triggerDecisionReason,
     topic: inferTopic(result.normalizedText),
     detectionTimestamp: Date.now(),
+    isChallenge: modality.isChallenge,
+    isFollowUp: modality.isFollowUp,
+    isClarification: modality.isClarification,
   }
   if (enriched.isQuestion || enriched.shouldTriggerCopilot) intentMetrics.detectedQuestions += 1
   const count = Math.max(1, intentMetrics.detectedQuestions)

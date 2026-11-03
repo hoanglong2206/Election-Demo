@@ -55,6 +55,9 @@ export interface IntentDetectionResult {
   timestamp?: string
   gateRequired?: boolean
   isAmbiguous?: boolean
+  isChallenge?: boolean
+  isFollowUp?: boolean
+  isClarification?: boolean
 }
 
 export interface QuestionDetectorConfig {

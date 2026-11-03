@@ -75,43 +75,86 @@ export const QUESTION_PATTERNS: { regex: RegExp; pattern: string; score: number 
   { regex: /\bchưa[.?!…\s]*$/i, pattern: 'ending chưa', score: 0.8 },
 
   // 7. Indirect / Implicit interview questions (Ambiguous Band: score 0.50 - 0.58)
-  // Gated by Tier 2 Intent Gate to verify actionable question before rendering
   { regex: /\b(?:i'm\s+curious|i\s+am\s+curious|i'd\s+love\s+to\s+hear|i'd\s+love\s+to\s+know|i\s+wonder\s+how|i'm\s+interested\s+in|we\s+would\s+like\s+to\s+understand|we'd\s+like\s+to\s+know|i'd\s+like\s+to\s+see)\b/i, pattern: 'indirect question cues (en)', score: 0.55 },
   { regex: /\b(?:mình\s+muốn\s+nghe|mình\s+muốn\s+biết|mình\s+tò\s+mò\s+về|chia\s+sẻ\s+cho\s+mình|kể\s+cho\s+mình\s+nghe|thử\s+giải\s+thích|cho\s+mình\s+ví\s+dụ|muốn\s+biết\s+bạn)\b/i, pattern: 'indirect question cues (vi)', score: 0.55 },
   { regex: /\b(?:walk\s+me\s+through\s+how|give\s+me\s+an\s+example\s+of|describe\s+your\s+experience\s+with)\b/i, pattern: 'prompting cues (en)', score: 0.55 },
 ]
 
-export const CODING_TERMS = /\b(?:algorithm|complexity|leetcode|function|code|coding|bug|debug|array|string|tree|graph|dp|dynamic programming|binary search|implementation|thuật toán|độ phức tạp|hàm|mảng|chuỗi|cây|đồ thị)\b/i
-export const SYSTEM_DESIGN_TERMS = /\b(?:system design|architecture|scalab|distributed|microservice|kafka|redis|database|load balancer|kiến trúc|hệ thống phân tán|mở rộng|cơ sở dữ liệu)\b/i
-export const BEHAVIORAL_TERMS = /\b(?:tell me about a time|describe a time|conflict|strength|weakness|leadership|teamwork|hãy kể|một lần|xung đột|điểm mạnh|điểm yếu|làm việc nhóm)\b/i
+/**
+ * Explicit STAR interview prompts take highest precedence for behavioral classification.
+ */
+export const STAR_PROMPT_TERMS = /\b(?:tell me about a time|describe a time|walk me through a situation|walk me through a time|describe a situation|hãy kể về một lần|hãy kể một lần|chia sẻ về một lần|kể lại một lần|kể về một lần|một kỷ niệm|tình huống bạn gặp phải)\b/i
+
+/**
+ * Domain-specific core keywords.
+ */
+export const CODING_TERMS = /\b(?:algorithm|complexity|time complexity|space complexity|big-o|leetcode|function|code|coding|bug|debug|array|string|tree|graph|dp|dynamic programming|binary search|dijkstra|recursion|implementation|two pointers?|sliding window|stack|queue|heap|linked list|thuật toán|độ phức tạp|hàm|mảng|chuỗi|cây|đồ thị|đệ quy|sắp xếp|cấu trúc dữ liệu)\b/i
+export const SYSTEM_DESIGN_TERMS = /\b(?:system design|architecture|scalab|distributed|microservice|kafka|redis|database|load balancer|sharding|caching|replication|throughput|tps|qps|latency|message queue|pub\/?sub|failover|circuit breaker|consistent hashing|kiến trúc|hệ thống phân tán|mở rộng|chịu tải|độ trễ|cơ sở dữ liệu)\b/i
+export const BEHAVIORAL_TERMS = /\b(?:tell me about a time|describe a time|conflict|strength|weakness|leadership|teamwork|hãy kể|một lần|xung đột|điểm mạnh|điểm yếu|làm việc nhóm|thách thức lớn nhất|tình huống khó khăn)\b/i
+
+/**
+ * Conversational modality keywords (connectives, challenges, follow-ups, clarifications).
+ */
 export const CLARIFICATION_TERMS = /(?:what do you mean|could you clarify|can you clarify|ý bạn là|ý bạn là gì|giải thích rõ|nói rõ hơn|chưa hiểu)/i
 export const CHALLENGE_TERMS = /\b(?:but|however|disagree|are you sure|why not|concern|rủi ro|không đồng ý|nhưng|tại sao không|lo ngại)\b/i
 export const FOLLOW_UP_TERMS = /\b(?:and what about|how about|what if|also|then|còn|thế còn|vậy còn|nếu vậy|tiếp theo)\b/i
 
+/**
+ * Detects conversational modalities (connective intent flags).
+ */
+export function detectIntentModality(text: string): {
+  isChallenge: boolean
+  isFollowUp: boolean
+  isClarification: boolean
+} {
+  return {
+    isChallenge: CHALLENGE_TERMS.test(text),
+    isFollowUp: FOLLOW_UP_TERMS.test(text),
+    isClarification: CLARIFICATION_TERMS.test(text),
+  }
+}
+
+/**
+ * Normalized Intent Classifier with Domain-First Hierarchy.
+ * Resolves Priority Order Inversion: Technical domains (Coding, System Design, Behavioral)
+ * take precedence over conversational connective cues (challenge, follow_up, clarification).
+ */
 export function detectNormalizedIntent(text: string, legacy: CopilotIntent): NormalizedIntent {
   if (legacy === 'SMALL_TALK') return 'normal_conversation'
-  if (CLARIFICATION_TERMS.test(text)) return 'clarification_request'
-  if (CHALLENGE_TERMS.test(text)) return 'challenge_or_objection'
-  if (FOLLOW_UP_TERMS.test(text)) return 'follow_up_question'
+
+  // Tier 1: Explicit STAR Behavioral Prompts take highest priority
+  if (STAR_PROMPT_TERMS.test(text)) return 'behavioral_question'
+
+  // Tier 2: Deep Technical Domains take priority over conversational connectives
   if (CODING_TERMS.test(text)) return 'coding_problem'
   if (SYSTEM_DESIGN_TERMS.test(text)) return 'system_design_problem'
   if (BEHAVIORAL_TERMS.test(text)) return 'behavioral_question'
+
+  // Tier 3: Conversational Modalities when NOT in specialized technical domains
+  if (CLARIFICATION_TERMS.test(text)) return 'clarification_request'
+  if (CHALLENGE_TERMS.test(text)) return 'challenge_or_objection'
+  if (FOLLOW_UP_TERMS.test(text)) return 'follow_up_question'
+
+  // Tier 4: Implicit System Design cues or general statements
   if (legacy === 'UNKNOWN' && /\b(?:would be useful|need to understand|it would help|cần biết|muốn hiểu|sẽ hữu ích)\b/i.test(text)) {
     return SYSTEM_DESIGN_TERMS.test(text) ? 'system_design_problem' : 'implicit_question'
   }
   if (legacy === 'UNKNOWN') return 'normal_conversation'
+
+  // Tier 5: General question queries
   if (legacy === 'QUESTION') {
     return /[?？]/.test(text) || /^(?:what|why|how|when|where|who|which|is|are|do|does|can|could|should|có|tại sao|làm sao|vì sao|bạn|anh|chị|em)\b/i.test(text)
       ? 'direct_question'
       : 'implicit_question'
   }
+
   return 'normal_conversation'
 }
 
 export function inferTopic(text: string): string | undefined {
+  if (STAR_PROMPT_TERMS.test(text) || BEHAVIORAL_TERMS.test(text)) return 'behavioral'
   if (CODING_TERMS.test(text)) return 'coding'
   if (SYSTEM_DESIGN_TERMS.test(text)) return 'system_design'
-  if (BEHAVIORAL_TERMS.test(text)) return 'behavioral'
   return undefined
 }
 
