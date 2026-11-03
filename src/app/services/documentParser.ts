@@ -26,7 +26,12 @@ export function cleanDocumentText(rawText: string): string {
     // Condense 3+ newlines into 2
     .replace(/\n{3,}/g, '\n\n')
     .split('\n')
-    .map((line) => line.trimEnd())
+    .map((line) => {
+      // Normalize various Unicode bullet characters to markdown standard '- '
+      return line
+        .replace(/^[\t ]*[\u2022\u25E6\u25AA\u2043\u2219]\s*/, '- ')
+        .trimEnd()
+    })
     .join('\n')
     .trim()
 }

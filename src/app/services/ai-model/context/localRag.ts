@@ -1,4 +1,5 @@
-import { estimateTokenCount, truncateToTokenLimit } from './tokenBudget'
+import { truncateToTokenLimit } from './tokenBudget'
+import { createStructuralChunks, chunkText, type StructuralChunk, type ChunkingOptions } from './chunking'
 import type { DocumentSourceType, RetrievalCitation, RetrievalDiagnostics } from './types'
 
 export interface SourceDocument {
@@ -68,20 +69,7 @@ function tokenize(text: string): string[] {
   return text.toLowerCase().match(/[\p{L}\p{N}+#.-]+/gu) || []
 }
 
-function chunkText(text: string, maxChars = 900): string[] {
-  const paragraphs = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
-  const chunks: string[] = []
-  for (const paragraph of paragraphs.length > 0 ? paragraphs : [text.trim()]) {
-    if (paragraph.length <= maxChars) {
-      chunks.push(paragraph)
-      continue
-    }
-    for (let start = 0; start < paragraph.length; start += maxChars) {
-      chunks.push(paragraph.slice(start, start + maxChars).trim())
-    }
-  }
-  return chunks.filter(Boolean)
-}
+export { createStructuralChunks, chunkText, type StructuralChunk, type ChunkingOptions }
 
 export class LocalHashEmbeddingProvider implements EmbeddingProvider {
   readonly id = 'local-hash-v1'
@@ -194,14 +182,17 @@ export class LocalRagIndex {
       if (this.documentHashes.get(document.documentId) === contentHash ||
         (existing.length > 0 && existing.every((chunk) => chunk.contentHash === contentHash))) continue
       this.vectorStore.removeDocument(document.documentId)
-      const chunks = chunkText(document.text).map((text, index) => ({
+      const structuralChunks = createStructuralChunks(document.text, {
+        defaultSection: document.section,
+      })
+      const chunks = structuralChunks.map((sc, index) => ({
         chunkId: `${document.documentId}:${contentHash}:${index}`,
         documentId: document.documentId,
         sourceType: document.sourceType,
-        section: document.section,
-        text,
-        tokenCount: estimateTokenCount(text),
-        embeddingRef: hash(text),
+        section: sc.section || document.section,
+        text: sc.text,
+        tokenCount: sc.tokenCount,
+        embeddingRef: hash(sc.text),
         contentHash,
       }))
       const embeddings = new Map<string, number[]>()
