@@ -1,2 +1,8 @@
 export { LiveTranscriptPane } from './LiveTranscriptPane'
-
+export type { LiveTranscriptPaneProps } from './types'
+export { HighlightText } from './HighlightText'
+export { TranscriptLineItem } from './TranscriptLineItem'
+export { TranscriptSearchBar } from './TranscriptSearchBar'
+export { TranscriptSubToolbar } from './TranscriptSubToolbar'
+export { LatestExchangeCard } from './LatestExchangeCard'
+export { TranscriptSummarySection } from './TranscriptSummarySection'
