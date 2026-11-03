@@ -1,10 +1,14 @@
 import '@/test/setupDom'
-import { describe, it, expect, mock, afterEach } from 'bun:test'
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test'
 import { render, act, cleanup } from '@testing-library/react'
 import { AudioDeviceSelectorCard } from '../AudioDeviceSelectorCard'
 import type { AudioDeviceInfo } from '@/services/audio-devices'
 
 describe('AudioDeviceSelectorCard Component', () => {
+  beforeEach(() => {
+    cleanup()
+  })
+
   afterEach(() => {
     cleanup()
   })

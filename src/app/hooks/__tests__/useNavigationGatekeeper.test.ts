@@ -161,6 +161,39 @@ describe('useNavigationGatekeeper Hook', () => {
     expect(onHasVisitedMeetingChange).toHaveBeenCalledWith(true)
   })
 
+  it('enters meeting directly without opening lobby when skipped is true even if readiness score is below 80%', () => {
+    // Only basic context (score = 30%)
+    saveMeetingContext({
+      cvSummary: 'Senior React Developer with 5 years exp',
+      jobDescription: 'Senior Frontend Developer opening at tech company',
+      discussionTopic: '',
+      keywords: [],
+    })
+
+    // User checked "Don't show lobby again"
+    setPreflightLobbySkipped(true)
+
+    const onViewChange = mock(() => {})
+    const onHasVisitedMeetingChange = mock(() => {})
+
+    const { result } = renderHook(() =>
+      useNavigationGatekeeper({
+        currentView: 'home',
+        mode: 'interview',
+        onViewChange,
+        onHasVisitedMeetingChange,
+      })
+    )
+
+    act(() => {
+      result.current.requestNavigate('meeting')
+    })
+
+    expect(result.current.isLobbyOpen).toBe(false)
+    expect(onViewChange).toHaveBeenCalledWith('meeting')
+    expect(onHasVisitedMeetingChange).toHaveBeenCalledWith(true)
+  })
+
   it('manages deep link navigation to AudioTest and AIDiagnostic with return banner state', () => {
     const onViewChange = mock(() => {})
     const onHasVisitedMeetingChange = mock(() => {})

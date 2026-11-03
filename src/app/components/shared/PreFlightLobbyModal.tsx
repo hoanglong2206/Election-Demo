@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   Headphones,
   CheckCircle2,
+  Check,
   Volume2,
   Sparkles,
   Zap,
@@ -553,28 +554,47 @@ export function PreFlightLobbyModal({
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="px-5 py-3.5 border-t border-white/[0.08] flex items-center justify-between gap-3 bg-white/[0.02] flex-wrap">
+        <div className="px-5 py-3 border-t border-white/[0.08] flex items-center justify-between gap-4 bg-white/[0.02] shrink-0 select-none">
           {/* Skip Lobby Checkbox */}
-          <div className="flex flex-col gap-1 max-w-sm">
-            <label className="flex items-center gap-2 text-[11px] text-white/60 hover:text-white cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={skipLobby}
-                onChange={(e) => handleToggleSkipLobby(e.target.checked)}
-                className="rounded border-white/20 bg-black/40 text-violet-500 focus:ring-0 cursor-pointer"
-              />
-              <span>Không hiển thị lại sảnh chờ (Vào thẳng cuộc họp lần sau)</span>
+          <div className="flex items-center min-w-0">
+            <label
+              htmlFor="cb-skip-lobby"
+              className="flex items-center gap-2 text-[11.5px] text-white/70 hover:text-white cursor-pointer select-none transition-colors group shrink-0"
+            >
+              <div
+                className={cn(
+                  'w-4 h-4 rounded-md border flex items-center justify-center transition-all shrink-0',
+                  skipLobby
+                    ? 'bg-violet-600 border-violet-500 text-white shadow-[0_0_8px_rgba(139,92,246,0.4)]'
+                    : 'border-white/25 bg-black/40 group-hover:border-white/40 group-hover:bg-black/60'
+                )}
+              >
+                <input
+                  id="cb-skip-lobby"
+                  type="checkbox"
+                  checked={skipLobby}
+                  onChange={(e) => handleToggleSkipLobby(e.target.checked)}
+                  className="sr-only"
+                />
+                {skipLobby && <Check className="w-3 h-3 stroke-[2.5]" />}
+              </div>
+              <span className="whitespace-nowrap font-medium text-white/80 group-hover:text-white transition-colors">
+                Không hiển thị lại sảnh chờ
+                <span className="text-white/45 text-[10.5px] font-normal ml-1.5 hidden sm:inline">
+                  (Vào thẳng cuộc họp lần sau)
+                </span>
+              </span>
             </label>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto shrink-0">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={handleProceedToMeeting}
-              className="text-xs text-white/50 hover:text-white h-8 px-3 cursor-pointer"
+              className="text-xs text-white/50 hover:text-white h-8 px-3 cursor-pointer shrink-0"
               title="Bỏ qua kiểm định và vào phòng họp ngay"
             >
               Bỏ qua & Vào ngay
@@ -586,7 +606,7 @@ export function PreFlightLobbyModal({
               onClick={handleProceedToMeeting}
               disabled={!isAllChecksPassed}
               className={cn(
-                'h-8 px-4 text-xs font-semibold rounded-lg transition-all gap-1.5 shadow-md',
+                'h-8 px-4 text-xs font-semibold rounded-lg transition-all gap-1.5 shadow-md shrink-0',
                 isAllChecksPassed
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20 cursor-pointer'
                   : 'bg-white/10 text-white/35 cursor-not-allowed border border-white/5 opacity-50'

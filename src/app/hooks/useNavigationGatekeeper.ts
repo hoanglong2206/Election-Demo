@@ -109,8 +109,8 @@ export function useNavigationGatekeeper({
 
       // Step 2: Pre-Flight Readiness & Skip Check
       const isSkipped = isPreflightLobbySkipped()
-      if (isSkipped && currentReadiness.isCombatReady) {
-        // Condition met: Enter meeting directly
+      if (isSkipped || currentReadiness.isCombatReady) {
+        // Condition met: Enter meeting directly (user skipped lobby OR combat ready)
         confirmLaunchMeeting()
       } else {
         // Condition not met: Open centralized PreFlightLobbyModal

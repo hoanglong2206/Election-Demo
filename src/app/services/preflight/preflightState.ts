@@ -152,7 +152,13 @@ export function getCombatReadiness(mode: AppMode = 'interview', deviceId?: strin
   const hasVAD = isVADCalibrated(deviceId)
   const hasAudioVerified = isSystemAudioVerified()
   const aiPrewarmed = isAIPrewarmed()
-  const hasKeywords = Array.isArray(context.keywords) && context.keywords.length > 0
+  const effectiveKeywords =
+    mode === 'discussion'
+      ? (context.discussionKeywords && context.discussionKeywords.length > 0
+          ? context.discussionKeywords
+          : context.keywords)
+      : context.keywords
+  const hasKeywords = Array.isArray(effectiveKeywords) && effectiveKeywords.length > 0
 
   let score = 0
   // Context: 30%
