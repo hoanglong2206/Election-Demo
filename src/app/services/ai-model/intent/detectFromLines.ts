@@ -2,13 +2,14 @@ import type { IntentDetectionResult, QuestionDetectorConfig } from './types'
 import { assembleLatestExchange } from '../copilot/exchangeAssembler'
 import { cleanUtterance } from './patterns/smallTalk'
 import { detectIntent } from './detector'
+import { multiTurnIntentTracker } from './multiTurnTracker'
 
 export const lastIntentByKey = new Map<string, string>()
 
 /**
  * Analyzes recent transcript lines, automatically stitches fragmented split chunks
  * (e.g. Whisper chunk 1: "Can you explain..." + chunk 2: "...how Redis handles expiration?"),
- * and returns the coherent IntentDetectionResult.
+ * resolves multi-turn domain context inheritance, and returns the coherent IntentDetectionResult.
  */
 export function detectIntentFromRecentLines(
   lines: { id?: number; speaker: string; original: string; translated?: string; timestamp?: string; continuation?: boolean; sequenceId?: number }[],
@@ -40,12 +41,15 @@ export function detectIntentFromRecentLines(
     confidenceThreshold: threshold,
   })
 
+  // 3. Resolve multi-turn conversational context inheritance from prior transcript history
+  const enriched = multiTurnIntentTracker.resolveFromHistory(detection, lines)
+
   const lastLine = lines[lines.length - 1]
   const dedupeKey = config?.dedupeKey || `${mode}:${targetSpeaker}`
   const signature = `${lastLine?.id ?? assembled.timestamp ?? lines.length}:${cleanUtterance(mergedText)}`
   if (lastIntentByKey.get(dedupeKey) === signature) {
     return {
-      ...detection,
+      ...enriched,
       shouldTriggerCopilot: false,
       triggerDecisionReason: 'Skipped: duplicate STT chunks belong to the same utterance',
       triggerReason: 'Skipped: duplicate STT chunks belong to the same utterance',
@@ -54,7 +58,7 @@ export function detectIntentFromRecentLines(
   lastIntentByKey.set(dedupeKey, signature)
 
   return {
-    ...detection,
+    ...enriched,
     isSplitFragment: isSplit,
     mergedLineCount: assembled.mergedLineCount,
     timestamp: assembled.timestamp,

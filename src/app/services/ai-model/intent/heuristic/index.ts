@@ -12,6 +12,7 @@ export const COMMAND_PATTERNS: { regex: RegExp; pattern: string }[] = [
   { regex: /\b(?:viết\s+code\s+cho|tạo\s+function|viết\s+hàm)\b/i, pattern: 'viết code' },
   { regex: /\b(?:so\s+sánh\s+giúp|hãy\s+so\s+sánh)\b/i, pattern: 'so sánh' },
   { regex: /\b(?:đưa\s+ra\s+gợi\s+ý|hãy\s+đề\s+xuất|tìm\s+lỗi\s+giúp)\b/i, pattern: 'đề xuất' },
+  { regex: /(?:^|[^\p{L}\p{N}])(?:hãy\s+)?(?:thiết\s*kế|design)(?=$|[^\p{L}\p{N}])/iu, pattern: 'thiết kế' },
   { regex: /\b(?:summarize\s+this|give\s+a\s+summary)\b/i, pattern: 'summarize' },
   { regex: /\b(?:explain\s+briefly|explain\s+in\s+short)\b/i, pattern: 'explain briefly' },
   { regex: /\b(?:write\s+code\s+for|write\s+a\s+function\s+to)\b/i, pattern: 'write code' },
@@ -89,7 +90,7 @@ export const STAR_PROMPT_TERMS = /\b(?:tell me about a time|describe a time|walk
  * Domain-specific core keywords.
  */
 export const CODING_TERMS = /\b(?:algorithm|complexity|time complexity|space complexity|big-o|leetcode|function|code|coding|bug|debug|array|string|tree|graph|dp|dynamic programming|binary search|dijkstra|recursion|implementation|two pointers?|sliding window|stack|queue|heap|linked list|thuật toán|độ phức tạp|hàm|mảng|chuỗi|cây|đồ thị|đệ quy|sắp xếp|cấu trúc dữ liệu)\b/i
-export const SYSTEM_DESIGN_TERMS = /\b(?:system design|architecture|scalab|distributed|microservice|kafka|redis|database|load balancer|sharding|caching|replication|throughput|tps|qps|latency|message queue|pub\/?sub|failover|circuit breaker|consistent hashing|kiến trúc|hệ thống phân tán|mở rộng|chịu tải|độ trễ|cơ sở dữ liệu)\b/i
+export const SYSTEM_DESIGN_TERMS = /\b(?:system design|architecture|scalab|distributed|microservice|kafka|redis|database|load balancer|sharding|caching|replication|throughput|tps|qps|latency|message queue|pub\/?sub|failover|circuit breaker|consistent hashing|kiến trúc|hệ thống phân tán|phân tán|thiết kế hệ thống|mở rộng|chịu tải|độ trễ|cơ sở dữ liệu)\b/i
 export const BEHAVIORAL_TERMS = /\b(?:tell me about a time|describe a time|conflict|strength|weakness|leadership|teamwork|hãy kể|một lần|xung đột|điểm mạnh|điểm yếu|làm việc nhóm|thách thức lớn nhất|tình huống khó khăn)\b/i
 
 /**

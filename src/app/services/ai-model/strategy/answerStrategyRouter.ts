@@ -27,6 +27,28 @@ function intentIs(context: AnswerStrategyContext, ...intents: NormalizedIntent[]
   return Boolean(intent && intents.includes(intent))
 }
 
+function matchesDomain(context: AnswerStrategyContext, domain: 'coding' | 'system_design' | 'behavioral'): boolean {
+  if (context.intent?.activeDomain === domain) return true
+  if (context.intent?.parentIntent) {
+    if (domain === 'coding' && context.intent.parentIntent === 'coding_problem') return true
+    if (domain === 'system_design' && context.intent.parentIntent === 'system_design_problem') return true
+    if (domain === 'behavioral' && context.intent.parentIntent === 'behavioral_question') return true
+  }
+  return false
+}
+
+function isFollowUpOrChallenge(context: AnswerStrategyContext): boolean {
+  return Boolean(
+    context.intent?.isContextInherited ||
+    context.intent?.isFollowUp ||
+    context.intent?.isChallenge ||
+    context.intent?.isClarification ||
+    context.intent?.normalizedIntent === 'follow_up_question' ||
+    context.intent?.normalizedIntent === 'challenge_or_objection' ||
+    context.intent?.normalizedIntent === 'clarification_request'
+  )
+}
+
 export const strategies: AnswerStrategy[] = [
   {
     id: 'leadership',
@@ -37,20 +59,43 @@ export const strategies: AnswerStrategy[] = [
   {
     id: 'behavioral',
     label: 'Behavioral (STAR)',
-    matches: (context) => intentIs(context, 'behavioral_question'),
-    buildPrompt: () => 'Dùng STAR: Situation, Task, Action, Result. Chỉ dùng kinh nghiệm có trong CV hoặc transcript.',
+    matches: (context) => intentIs(context, 'behavioral_question') || matchesDomain(context, 'behavioral'),
+    buildPrompt: (context) => {
+      const base = 'Dùng STAR: Situation, Task, Action, Result. Chỉ dùng kinh nghiệm có trong CV hoặc transcript.'
+      if (isFollowUpOrChallenge(context)) {
+        return `${base} Tiếp tục câu chuyện STAR đã thảo luận, đi sâu vào hành động (Action), kết quả (Result) hoặc bài học rút ra.`
+      }
+      return base
+    },
   },
   {
     id: 'coding',
     label: 'Coding Framework',
-    matches: (context) => intentIs(context, 'coding_problem') || /\b(?:algorithm|code|coding|complexity|leetcode|thuật toán|code)\b/i.test(context.question),
-    buildPrompt: () => 'Trình bày: Clarification, Approach, Optimal Solution, Time/Space Complexity, Edge Cases; chỉ đưa code khi câu hỏi yêu cầu hoặc có dấu hiệu cần code.',
+    matches: (context) =>
+      intentIs(context, 'coding_problem') ||
+      matchesDomain(context, 'coding') ||
+      /\b(?:algorithm|code|coding|complexity|leetcode|thuật toán|code)\b/i.test(context.question),
+    buildPrompt: (context) => {
+      const base = 'Trình bày: Clarification, Approach, Optimal Solution, Time/Space Complexity, Edge Cases; chỉ đưa code khi câu hỏi yêu cầu hoặc có dấu hiệu cần code.'
+      if (isFollowUpOrChallenge(context)) {
+        return `${base} Duy trì thuật toán đã chọn, tập trung tối ưu độ phức tạp (Time/Space) hoặc xử lý edge cases theo câu hỏi tiếp nối.`
+      }
+      return base
+    },
   },
   {
     id: 'system_design',
     label: 'System Design Framework',
-    matches: (context) => intentIs(context, 'system_design_problem'),
-    buildPrompt: () => 'Trình bày: Requirements, Assumptions, API, Data Model, Architecture, Scalability, Bottlenecks, Trade-offs.',
+    matches: (context) =>
+      intentIs(context, 'system_design_problem') ||
+      matchesDomain(context, 'system_design'),
+    buildPrompt: (context) => {
+      const base = 'Trình bày: Requirements, Assumptions, API, Data Model, Architecture, Scalability, Bottlenecks, Trade-offs.'
+      if (isFollowUpOrChallenge(context)) {
+        return `${base} Duy trì kiến trúc tổng thể đã đưa ra trước đó, đào sâu phân tích thành phần cụ thể được hỏi (độ trễ, trade-offs, bottleneck hoặc giải pháp failover).`
+      }
+      return base
+    },
   },
   {
     id: 'database',
@@ -102,14 +147,19 @@ export class RegistryAnswerStrategyRouter implements AnswerStrategyRouter {
     }
 
     const intent = context.intent?.normalizedIntent
+    const parentIntent = context.intent?.parentIntent
+    const activeDomain = context.intent?.activeDomain
     const strategy = this.list().find((candidate) => candidate.matches(context)) || this.get('general')
     const reasoningTags: string[] = [strategy.id]
     if (intent) reasoningTags.push(`intent:${intent}`)
+    if (parentIntent) reasoningTags.push(`parentIntent:${parentIntent}`)
+    if (activeDomain) reasoningTags.push(`activeDomain:${activeDomain}`)
+    if (context.intent?.isContextInherited) reasoningTags.push('inherited_context')
     const domain = getDomain(context)
     if (domain) reasoningTags.push(`domain:${domain}`)
     return {
       strategyId: strategy.id,
-      confidence: strategy.id === 'general' ? 0.55 : intent ? 0.9 : 0.75,
+      confidence: strategy.id === 'general' ? 0.55 : (intent || parentIntent) ? 0.9 : 0.75,
       reasoningTags,
     }
   }

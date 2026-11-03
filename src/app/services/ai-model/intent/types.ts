@@ -58,6 +58,22 @@ export interface IntentDetectionResult {
   isChallenge?: boolean
   isFollowUp?: boolean
   isClarification?: boolean
+  // Multi-Turn Context Tracking fields
+  parentIntent?: NormalizedIntent
+  activeDomain?: 'coding' | 'system_design' | 'behavioral' | 'general'
+  isContextInherited?: boolean
+  inheritedFromTurn?: number
+  contextTurnCount?: number
+}
+
+export type InterviewDomain = 'coding' | 'system_design' | 'behavioral' | 'general'
+
+export interface MultiTurnState {
+  activeDomain?: InterviewDomain
+  activeDomainIntent?: NormalizedIntent
+  activeTopic?: string
+  lastAnchorText?: string
+  turnsSinceAnchor: number
 }
 
 export interface QuestionDetectorConfig {
