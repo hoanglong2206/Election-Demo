@@ -83,4 +83,19 @@ export function registerCredentialHandlers(): void {
       return llmService.translateText(payload)
     }
   )
+
+  ipcMain.handle(
+    IPC_CHANNELS.CREDENTIALS.EMBED_TEXTS,
+    async (
+      _event,
+      payload: {
+        texts: string[]
+        provider?: 'openai' | 'gemini' | 'auto'
+        model?: string
+        dimensions?: number
+      }
+    ) => {
+      return llmService.embedTexts(payload)
+    }
+  )
 }

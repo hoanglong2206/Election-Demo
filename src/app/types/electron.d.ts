@@ -252,6 +252,17 @@ export interface ElectronAPI {
       status?: number
       retryAfterSec?: number
     }>
+    embedTexts?: (params: {
+      texts: string[]
+      provider?: 'openai' | 'gemini' | 'auto'
+      model?: string
+      dimensions?: number
+    }) => Promise<{
+      embeddings: number[][]
+      model: string
+      provider: string
+      dimensions: number
+    } | null>
   }
 }
 

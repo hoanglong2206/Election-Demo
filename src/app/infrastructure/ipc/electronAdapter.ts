@@ -198,5 +198,7 @@ export class ElectronIpcAdapter implements IIpcClient {
     translateText: (params) =>
       getRawApi()?.credentials?.translateText?.(params) ??
       Promise.resolve({ success: false, translations: [], error: 'API unavailable' }),
+    embedTexts: (params) =>
+      getRawApi()?.credentials?.embedTexts?.(params) ?? Promise.resolve(null),
   }
 }

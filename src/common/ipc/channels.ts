@@ -92,6 +92,7 @@ export const IPC_CHANNELS = {
     SYNC_MODELS: 'credentials:syncModels',
     TRANSCRIBE_GROQ: 'credentials:transcribeGroq',
     TRANSLATE_TEXT: 'credentials:translateText',
+    EMBED_TEXTS: 'credentials:embedTexts',
   },
 
   // ── Main Process LLM Egress & Streaming ────────────────────────────────────

@@ -2,14 +2,28 @@ import { truncateToTokenLimit } from './tokenBudget'
 import { createStructuralChunks, chunkText, type StructuralChunk, type ChunkingOptions } from './chunking'
 import { BM25Index, type BM25Config } from './bm25'
 import { tokenizeFiltered, PROTECTED_TECH_TERMS, VI_STOPWORDS, EN_STOPWORDS } from './stopwords'
+import {
+  type EmbeddingProvider,
+  LocalHashEmbeddingProvider,
+  EnhancedLexicalDenseEmbeddingProvider,
+  CloudEmbeddingProvider,
+  AdaptiveEmbeddingProvider,
+} from './embedding'
 import type { DocumentSourceType, SourceDocument, DocumentChunk, RetrievalCitation, RetrievalDiagnostics } from './types'
 
 export type { SourceDocument, DocumentChunk }
-export { BM25Index, type BM25Config, tokenizeFiltered, PROTECTED_TECH_TERMS, VI_STOPWORDS, EN_STOPWORDS }
-
-export interface EmbeddingProvider {
-  readonly id: string
-  embed(text: string): Promise<number[]>
+export {
+  BM25Index,
+  type BM25Config,
+  tokenizeFiltered,
+  PROTECTED_TECH_TERMS,
+  VI_STOPWORDS,
+  EN_STOPWORDS,
+  type EmbeddingProvider,
+  LocalHashEmbeddingProvider,
+  EnhancedLexicalDenseEmbeddingProvider,
+  CloudEmbeddingProvider,
+  AdaptiveEmbeddingProvider,
 }
 
 export interface VectorStore {
@@ -51,24 +65,7 @@ function hash(text: string): string {
   return (value >>> 0).toString(16)
 }
 
-function tokenize(text: string): string[] {
-  return text.toLowerCase().match(/[\p{L}\p{N}+#.-]+/gu) || []
-}
-
 export { createStructuralChunks, chunkText, type StructuralChunk, type ChunkingOptions }
-
-export class LocalHashEmbeddingProvider implements EmbeddingProvider {
-  readonly id = 'local-hash-v1'
-
-  async embed(text: string): Promise<number[]> {
-    const vector = new Array<number>(64).fill(0)
-    for (const token of tokenize(text)) {
-      vector[parseInt(hash(token), 16) % vector.length] += 1
-    }
-    const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0)) || 1
-    return vector.map((value) => value / magnitude)
-  }
-}
 
 export class InMemoryVectorStore implements VectorStore {
   protected readonly chunks = new Map<string, { chunk: DocumentChunk; embedding: number[] }>()
@@ -97,8 +94,20 @@ export class InMemoryVectorStore implements VectorStore {
   }
 }
 
-function cosine(left: number[], right: number[]): number {
-  return left.reduce((sum, value, index) => sum + value * (right[index] || 0), 0)
+export function cosine(a: number[] | Float32Array, b: number[] | Float32Array): number {
+  let dot = 0
+  let normA = 0
+  let normB = 0
+  const len = Math.min(a.length, b.length)
+  for (let i = 0; i < len; i++) {
+    const x = a[i]!
+    const y = b[i]!
+    dot += x * y
+    normA += x * x
+    normB += y * y
+  }
+  if (normA === 0 || normB === 0) return 0
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB))
 }
 
 export function keywordScore(query: string, text: string): number {
@@ -156,7 +165,7 @@ export class LocalRagIndex {
   private readonly bm25Index: BM25Index
 
   constructor(
-    embeddingProvider: EmbeddingProvider = new LocalHashEmbeddingProvider(),
+    embeddingProvider: EmbeddingProvider = new AdaptiveEmbeddingProvider(),
     vectorStore: VectorStore = new LocalStorageVectorStore(),
     bm25Index: BM25Index = new BM25Index(),
   ) {

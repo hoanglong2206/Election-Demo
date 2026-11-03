@@ -362,6 +362,17 @@ const api = {
       status?: number
       retryAfterSec?: number
     }> => ipcRenderer.invoke('credentials:translateText', params),
+    embedTexts: (params: {
+      texts: string[]
+      provider?: 'openai' | 'gemini' | 'auto'
+      model?: string
+      dimensions?: number
+    }): Promise<{
+      embeddings: number[][]
+      model: string
+      provider: string
+      dimensions: number
+    } | null> => ipcRenderer.invoke('credentials:embedTexts', params),
   },
 }
 

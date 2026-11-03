@@ -260,5 +260,11 @@ export class MockIpcAdapter implements IIpcClient {
       success: true,
       translations: params.texts.map((t) => `[VI] ${t}`),
     }),
+    embedTexts: async (params) => ({
+      embeddings: params.texts.map(() => new Array(params.dimensions || 384).fill(0)),
+      model: params.model || 'mock-embedding',
+      provider: params.provider || 'mock',
+      dimensions: params.dimensions || 384,
+    }),
   }
 }

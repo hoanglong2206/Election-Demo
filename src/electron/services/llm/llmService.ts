@@ -1320,6 +1320,95 @@ export class ElectronLlmService {
       }
     }
   }
+
+  /**
+   * Generates dense vector embeddings via Cloud API (OpenAI text-embedding-3-small or Gemini text-embedding-004).
+   */
+  public async embedTexts(payload: {
+    texts: string[]
+    provider?: 'openai' | 'gemini' | 'auto'
+    model?: string
+    dimensions?: number
+  }): Promise<{ embeddings: number[][]; model: string; provider: string; dimensions: number } | null> {
+    const texts = (payload.texts || []).filter((t) => typeof t === 'string' && t.trim().length > 0)
+    if (texts.length === 0) {
+      return { embeddings: [], model: '', provider: '', dimensions: 0 }
+    }
+
+    const preferredProvider = payload.provider || 'auto'
+    let targetProvider = preferredProvider
+
+    if (preferredProvider === 'auto') {
+      if (this.credentialStore.getDecryptedKey('openai')) {
+        targetProvider = 'openai'
+      } else if (this.credentialStore.getDecryptedKey('gemini')) {
+        targetProvider = 'gemini'
+      } else {
+        return null // No cloud key configured
+      }
+    }
+
+    const key = this.credentialStore.getDecryptedKey(targetProvider)
+    if (!key) return null
+
+    if (targetProvider === 'openai') {
+      const model = payload.model || 'text-embedding-3-small'
+      const dimensions = payload.dimensions || 384
+      const res = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          input: texts,
+          model,
+          dimensions,
+        }),
+        signal: AbortSignal.timeout(10000),
+      })
+
+      if (!res.ok) {
+        const err = await parseJsonSafe(res)
+        throw new Error(`OpenAI Embedding error (${res.status}): ${err?.error?.message || 'Request failed'}`)
+      }
+
+      const data = await parseJsonSafe(res)
+      const embeddings = (data?.data || []).map((item: any) => item.embedding)
+      return { embeddings, model, provider: 'openai', dimensions }
+    }
+
+    if (targetProvider === 'gemini') {
+      const model = payload.model || 'text-embedding-004'
+      const dimensions = 768
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:batchEmbedContents`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': key,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requests: texts.map((t) => ({
+            model: `models/${model}`,
+            content: { parts: [{ text: t }] },
+          })),
+        }),
+        signal: AbortSignal.timeout(10000),
+      })
+
+      if (!res.ok) {
+        const err = await parseJsonSafe(res)
+        throw new Error(`Gemini Embedding error (${res.status}): ${err?.error?.message || 'Request failed'}`)
+      }
+
+      const data = await parseJsonSafe(res)
+      const embeddings = (data?.embeddings || []).map((item: any) => item.values)
+      return { embeddings, model, provider: 'gemini', dimensions }
+    }
+
+    return null
+  }
 }
 
 let llmServiceInstance: ElectronLlmService | null = null
