@@ -2,13 +2,18 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * WHISPER PROMPT BUILDER
  * ─────────────────────────────────────────────────────────────────────────────
- * Converts extracted JD keywords into a concise, natural initial_prompt
- * for Whisper (Local Whisper C++ and Cloud Whisper API).
+ * Converts extracted JD keywords and technical Vietglish lexicon into a concise,
+ * natural initial_prompt for Whisper (Local Whisper C++ and Cloud Whisper API).
  *
  * Provides specialized vocabulary conditioning so Whisper spells
  * technical terms, frameworks, databases and proper nouns accurately
- * without auditory confusion.
+ * without auditory confusion during bilingual Vietnamese/English interviews.
  */
+
+import {
+  CORE_TECHNICAL_LEXICON,
+  TECHNICAL_VIETGLISH_BASE_PROMPT,
+} from './technicalLexicon'
 
 export interface WhisperPromptOptions {
   maxChars?: number
@@ -17,6 +22,8 @@ export interface WhisperPromptOptions {
   template?: string
   previousTranscript?: string
   debugMode?: boolean
+  language?: string
+  includeDefaultLexicon?: boolean
 }
 
 const DEFAULT_MAX_CHARS = 240
@@ -27,29 +34,58 @@ export class WhisperPromptBuilder {
    * Builds an initial_prompt string from technical keywords and optional previous transcript sentence.
    *
    * Example output:
-   * "Technical interview about React, TypeScript, Kubernetes, AWS. Previous sentence transcript..."
+   * "Phỏng vấn kỹ thuật CNTT: React, TypeScript, Docker, Kubernetes, Redis, Kafka. Câu trước đó..."
    */
   public buildPrompt(
-    keywords: string[],
+    keywords: string[] = [],
     options?: WhisperPromptOptions
   ): string {
     try {
       const maxChars = options?.maxChars ?? DEFAULT_MAX_CHARS
       const maxKeywords = options?.maxKeywords ?? DEFAULT_MAX_KEYWORDS
       const contextType = options?.contextType ?? 'interview'
+      const language = options?.language ?? 'vi'
+      const includeDefaultLexicon = options?.includeDefaultLexicon ?? true
 
-      // Filter and sanitize keywords (remove punctuation, trim, ensure valid length)
-      const validKeywords = (keywords || [])
-        .map((k) => (typeof k === 'string' ? k.trim() : ''))
-        .filter((k) => k.length > 0 && k.length <= 40)
-        .slice(0, maxKeywords)
+      // Combine user/JD keywords with core technical lexicon (deduplicated)
+      const combined = new Set<string>()
 
-      // Base prefix
-      const prefix =
-        options?.template ??
-        (contextType === 'discussion'
-          ? 'Technical meeting discussing '
-          : 'Technical interview about ')
+      // 1. User / JD keywords get top priority
+      for (const k of keywords || []) {
+        if (typeof k === 'string') {
+          const trimmed = k.trim()
+          if (trimmed.length > 0 && trimmed.length <= 40) {
+            combined.add(trimmed)
+          }
+        }
+      }
+
+      // 2. Supplement with core technical lexicon for code-switching priming
+      if (includeDefaultLexicon) {
+        for (const term of CORE_TECHNICAL_LEXICON) {
+          if (combined.size >= maxKeywords) break
+          combined.add(term)
+        }
+      }
+
+      const validKeywords = Array.from(combined).slice(0, maxKeywords)
+
+      // Base prefix adapted for bilingual technical discussions
+      let prefix = options?.template
+      if (!prefix) {
+        const isVietnamese = language === 'vi' || language === 'auto'
+        if (isVietnamese) {
+          prefix =
+            contextType === 'discussion'
+              ? 'Hội thảo kỹ thuật CNTT: '
+              : 'Phỏng vấn kỹ thuật CNTT: '
+        } else {
+          prefix =
+            contextType === 'discussion'
+              ? 'Technical meeting discussing '
+              : 'Technical interview about '
+        }
+      }
 
       let assembled = validKeywords.length > 0 ? prefix : ''
       const includedKeywords: string[] = []
@@ -69,13 +105,18 @@ export class WhisperPromptBuilder {
 
       let finalPrompt = assembled ? `${assembled}.` : ''
 
+      // Fallback to base prompt if no keywords could be assembled
+      if (!finalPrompt.trim()) {
+        finalPrompt = TECHNICAL_VIETGLISH_BASE_PROMPT.slice(0, maxChars)
+      }
+
       // Append ~1 previous transcript sentence if provided and space permits
       if (options?.previousTranscript && typeof options.previousTranscript === 'string') {
         const rawPrev = options.previousTranscript.trim()
         if (rawPrev) {
           const sentences = rawPrev.split(/[.?!;\n]+/).map((s) => s.trim()).filter(Boolean)
           const lastSentence = sentences[sentences.length - 1] || rawPrev
-          const cleanPrev = lastSentence.replace(/\s+/g, ' ').slice(0, 90).trim()
+          const cleanPrev = lastSentence.replace(/\s+/g, ' ').slice(0, 70).trim()
 
           if (cleanPrev) {
             const separator = finalPrompt.length > 0 ? ' ' : ''
@@ -96,7 +137,7 @@ export class WhisperPromptBuilder {
       return finalPrompt
     } catch (err) {
       console.warn('[WhisperPromptBuilder] Failed to build prompt, falling back to empty:', err)
-      return ''
+      return TECHNICAL_VIETGLISH_BASE_PROMPT.slice(0, DEFAULT_MAX_CHARS)
     }
   }
 }

@@ -6,4 +6,5 @@ export * from './transcriptAssembler'
 export * from './sttJobQueue'
 export * from './jdKeywordExtractor'
 export * from './whisperPromptBuilder'
+export * from './technicalLexicon'
 

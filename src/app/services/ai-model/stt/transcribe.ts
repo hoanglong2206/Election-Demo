@@ -4,10 +4,9 @@ import { base64ToBlob, blobToBase64 } from './audioUtils'
 import { encodeWavBlob } from '@/core/audio'
 import { usageTrackerService, type AIUsageFeature } from '../../usage-tracker'
 import { whisperPort, credentialsPort } from '@/infrastructure/ipc'
+import { correctVietglishJargon } from './technicalLexicon'
+import { whisperPromptBuilder } from './whisperPromptBuilder'
 
-/**
- * Estimate audio duration in seconds based on 16kHz 16-bit mono PCM bytes.
- */
 /**
  * Estimate audio duration in seconds based on 16kHz 16-bit mono PCM bytes.
  */
@@ -39,6 +38,9 @@ function estimateAudioDurationSeconds(
  * Transcribe audio using the chosen STT Engine:
  * - Local Whisper (ggml-base.bin, ggml-tiny.bin) via persistent whisper-server / whisper-cli fallback
  * - Groq Whisper (whisper-large-v3-turbo, whisper-large-v3) via Groq Cloud LPU
+ *
+ * Automatically primes Whisper with bilingual technical lexicon and post-corrects
+ * Vietglish phonetic mis-transcriptions.
  */
 export async function transcribeAudio(
   audioData: string | Blob | ArrayBuffer | Uint8Array | Float32Array | Int16Array,
@@ -67,6 +69,12 @@ export async function transcribeAudio(
   const startTime = performance.now()
   const durationSec = estimateAudioDurationSeconds(audioData)
 
+  // Ensure prompt has at least technical lexicon conditioning if not provided
+  const effectivePrompt =
+    prompt && prompt.trim()
+      ? prompt.trim()
+      : whisperPromptBuilder.buildPrompt([], { language })
+
   // ── 1. LOCAL WHISPER C++ ENGINE ──────────────────────────────────────────
   if (engine?.provider === 'Local') {
     if (whisperPort.isAvailable) {
@@ -79,7 +87,7 @@ export async function transcribeAudio(
       const res = await whisperPort.transcribe(rawData, {
         modelId: engineId,
         language: language || 'auto',
-        prompt,
+        prompt: effectivePrompt,
       })
 
       // Track usage (Local is always $0 free)
@@ -101,12 +109,15 @@ export async function transcribeAudio(
         .replace(/\[pause\]/gi, '')
         .trim()
 
+      // Post-correct Vietglish phonetic mis-transcriptions
+      const correctedText = correctVietglishJargon(cleanText)
+
       // Translation is handled asynchronously by TranslationService on transcript commit
       const translatedVi = ''
 
       return {
         success: Boolean(res.success),
-        text: cleanText,
+        text: correctedText,
         translatedVi,
         latencyMs: res.latencyMs || elapsed,
         inferenceMs: res.inferenceMs || res.latencyMs || elapsed,
@@ -161,7 +172,7 @@ export async function transcribeAudio(
         }
         const rawBase64 = typeof audioData === 'string' ? audioData : await blobToBase64(blob)
         const audioBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '').trim()
-        const res = await credentialsPort.transcribeGroq(audioBase64, engineId, language, prompt)
+        const res = await credentialsPort.transcribeGroq(audioBase64, engineId, language, effectivePrompt)
         if (res) {
           try {
             usageTrackerService.trackUsage({
@@ -174,17 +185,20 @@ export async function transcribeAudio(
           } catch {}
 
           const cleanText = (res.text || '').trim()
+          // Post-correct Vietglish phonetic mis-transcriptions
+          const correctedText = correctVietglishJargon(cleanText)
+
           // Translation is handled asynchronously by TranslationService on transcript commit
           const translatedVi = ''
           return {
             success: true,
-            text: cleanText,
+            text: correctedText,
             translatedVi,
             latencyMs: res.latencyMs || Math.round(performance.now() - startTime),
             engineId,
             engineName: engine.name,
             provider: 'Groq',
-            confidence: cleanText ? 98 : 0,
+            confidence: correctedText ? 98 : 0,
           }
         }
       } catch (err: any) {
