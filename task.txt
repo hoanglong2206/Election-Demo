@@ -11,7 +11,7 @@ MỤC LỤC 7 VẤN ĐỀ KỸ THUẬT CẦN CẢI TIẾN
 4. [IPC] Tối Ưu Hóa Đường Truyền Audio IPC (Zero-Copy Buffer Transfer cho Groq STT) [ĐÃ HOÀN TẤT]
 5. [STT] Tăng Tốc Local Whisper C++ Bằng GPU Acceleration (DirectML / Vulkan / CUDA) [ĐÃ HOÀN TẤT]
 6. [LLM] Tối Ưu TTFT (Time-to-First-Token) & Kích Hoạt Prompt Caching Nhà Cung Cấp [ĐÃ HOÀN TẤT]
-7. [NAV/UX] Đồng Bộ Gatekeeper Sảnh Chờ (Pre-Flight) & Ràng Buộc Dữ Liệu Thực Chiến Từ Audio Test / AI Diagnostic
+7. [NAV/UX] Đồng Bộ Gatekeeper Sảnh Chờ (Pre-Flight) & Ràng Buộc Dữ Liệu Thực Chiến Từ Audio Test / AI Diagnostic [ĐÃ HOÀN TẤT]
 
 --------------------------------------------------------------------------------
 1. NÂNG CẤP TỪ HASHING TRICK SANG SEMANTIC VECTOR EMBEDDING

@@ -16,7 +16,9 @@ import { CvJdMatchDialog } from './components/dialogs/CvJdMatchDialog'
 import { ProfilePresetDialog } from './components/dialogs/ProfilePresetDialog'
 import { ProfileDeleteDialog } from './components/dialogs/ProfileDeleteDialog'
 import { ProfileImportExportDialog } from './components/dialogs/ProfileImportExportDialog'
-import { PreFlightLobbyModal } from '@/components/shared/PreFlightLobbyModal'
+import { showToast } from '@/components/ui/toast'
+import { isValidCvContent, isValidJdContent } from '@/services/meeting-context/validation'
+import { useEffect } from 'react'
 
 export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
   // 1. Audio Devices
@@ -49,6 +51,27 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
     onInterviewTabChange: profile.setInterviewTab,
     flushPendingContextSync: profile.flushPendingContextSync,
   })
+
+  // Listen for centralized Gatekeeper missing context event to focus appropriate tab & notify
+  useEffect(() => {
+    const handleMissing = () => {
+      if (mode === 'interview') {
+        const hasCV = isValidCvContent(profile.contextData.cvSummary)
+        const hasJD = isValidJdContent(profile.contextData.jobDescription)
+        if (!hasCV) {
+          profile.setInterviewTab('cv')
+          showToast('Vui lòng nhập tóm tắt CV ứng viên trước khi vào phòng phỏng vấn.', 'warning')
+        } else if (!hasJD) {
+          profile.setInterviewTab('jd')
+          showToast('Vui lòng nhập mô tả công việc (JD) trước khi vào phòng phỏng vấn.', 'warning')
+        }
+      } else {
+        showToast('Vui lòng nhập chủ đề thảo luận (tối thiểu 5 ký tự) trước khi vào cuộc họp.', 'warning')
+      }
+    }
+    window.addEventListener('meeting-context-missing', handleMissing)
+    return () => window.removeEventListener('meeting-context-missing', handleMissing)
+  }, [mode, profile.contextData.cvSummary, profile.contextData.jobDescription, profile.setInterviewTab])
 
   return (
     <div className="flex flex-col h-full p-2.5 sm:p-3 overflow-y-auto [scrollbar-gutter:stable] custom-scrollbar select-none animate-fade-in">
@@ -220,20 +243,6 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
         onClose={() => profile.setIsImportExportOpen(false)}
       />
 
-      {/* Pre-Flight Lobby Modal */}
-      <PreFlightLobbyModal
-        isOpen={nav.isLobbyOpen}
-        onClose={() => nav.setIsLobbyOpen(false)}
-        onEnterMeeting={nav.handleConfirmLaunchMeeting}
-        onOpenAudioTest={() => {
-          nav.setIsLobbyOpen(false)
-          onViewChange('audio-test')
-        }}
-        onOpenAIDiagnostic={() => {
-          nav.setIsLobbyOpen(false)
-          onViewChange('ai-diagnostic')
-        }}
-      />
-    </div>
+      </div>
   )
 }

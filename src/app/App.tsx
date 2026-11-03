@@ -4,6 +4,8 @@ import type { AppMode } from './types/electron.d'
 import { modelRegistryService } from './services/ai-model/model-registry'
 import { windowPort } from '@/infrastructure/ipc'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { PreFlightLobbyModal } from './components/shared/PreFlightLobbyModal'
+import { useNavigationGatekeeper } from './hooks/useNavigationGatekeeper'
 import { cn } from './lib/utils'
 
 const Home = lazy(() =>
@@ -33,10 +35,35 @@ function App() {
   const [mode, setMode] = useState<AppMode>('interview')
   const [hasVisitedMeeting, setHasVisitedMeeting] = useState(false)
 
+  // Centralized Navigation Gatekeeper
+  const gatekeeper = useNavigationGatekeeper({
+    currentView: view,
+    mode,
+    onViewChange: (newView) => {
+      if (newView === 'meeting') {
+        setHasVisitedMeeting(true)
+      }
+      setView(newView)
+    },
+    onHasVisitedMeetingChange: setHasVisitedMeeting,
+  })
+
   // Background model sync on startup without blocking UI
   useEffect(() => {
     modelRegistryService.syncInBackground(1000)
   }, [])
+
+  // Global hotkey: Ctrl+M / Cmd+M to request meeting navigation via Gatekeeper
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault()
+        gatekeeper.requestNavigate('meeting')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [gatekeeper])
 
   const handleModeChange = (newMode: AppMode) => {
     setMode(newMode)
@@ -44,10 +71,7 @@ function App() {
   }
 
   const handleViewChange = (newView: ViewState) => {
-    if (newView === 'meeting') {
-      setHasVisitedMeeting(true)
-    }
-    setView(newView)
+    gatekeeper.requestNavigate(newView)
   }
 
   return (
@@ -89,12 +113,20 @@ function App() {
 
             {view === 'audio-test' && (
               <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
-                <AudioTest onViewChange={handleViewChange} />
+                <AudioTest
+                  onViewChange={handleViewChange}
+                  returnToLobby={gatekeeper.isReturnToLobby}
+                  onReturnToLobby={gatekeeper.returnToLobbyFromPage}
+                />
               </div>
             )}
             {view === 'ai-diagnostic' && (
               <div className="w-full h-full flex flex-col flex-1 min-h-0 animate-page-enter">
-                <AIDiagnostic onViewChange={handleViewChange} />
+                <AIDiagnostic
+                  onViewChange={handleViewChange}
+                  returnToLobby={gatekeeper.isReturnToLobby}
+                  onReturnToLobby={gatekeeper.returnToLobbyFromPage}
+                />
               </div>
             )}
             {view === 'history' && (
@@ -115,9 +147,17 @@ function App() {
           </div>
         </Suspense>
       </ErrorBoundary>
+
+      {/* Global Pre-Flight Lobby Modal (Centralized Gatekeeper) */}
+      <PreFlightLobbyModal
+        isOpen={gatekeeper.isLobbyOpen}
+        onClose={gatekeeper.closeLobby}
+        onEnterMeeting={gatekeeper.confirmLaunchMeeting}
+        onOpenAudioTest={gatekeeper.openAudioTestFromLobby}
+        onOpenAIDiagnostic={gatekeeper.openAIDiagnosticFromLobby}
+      />
     </Layout>
   )
 }
 
 export default App
-

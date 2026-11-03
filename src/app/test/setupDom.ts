@@ -15,6 +15,7 @@ export function ensureDomEnvironment(): void {
     ;(globalThis as any).CustomEvent = dom.CustomEvent
     ;(globalThis as any).Node = dom.Node
     ;(globalThis as any).localStorage = dom.localStorage
+    ;(globalThis as any).sessionStorage = dom.sessionStorage
     ;(globalThis as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0)
     ;(globalThis as any).cancelAnimationFrame = (id: number) => clearTimeout(id)
   }
@@ -27,9 +28,9 @@ export function ensureDomEnvironment(): void {
 
 ensureDomEnvironment()
 
-if (!globalThis.localStorage || typeof (globalThis.localStorage as any).clear !== 'function') {
+function createMemoryStorage() {
   const storage = new Map<string, string>()
-  const mockStorage = {
+  return {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, val: string) => storage.set(key, String(val)),
     removeItem: (key: string) => storage.delete(key),
@@ -39,8 +40,20 @@ if (!globalThis.localStorage || typeof (globalThis.localStorage as any).clear !=
       return storage.size
     },
   }
+}
+
+if (!globalThis.localStorage || typeof (globalThis.localStorage as any).clear !== 'function') {
+  const mockStorage = createMemoryStorage()
   ;(globalThis as any).localStorage = mockStorage
   if ((globalThis as any).window) {
     ;(globalThis as any).window.localStorage = mockStorage
+  }
+}
+
+if (!globalThis.sessionStorage || typeof (globalThis.sessionStorage as any).clear !== 'function') {
+  const mockSessionStorage = createMemoryStorage()
+  ;(globalThis as any).sessionStorage = mockSessionStorage
+  if ((globalThis as any).window) {
+    ;(globalThis as any).window.sessionStorage = mockSessionStorage
   }
 }

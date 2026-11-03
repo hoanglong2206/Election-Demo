@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { ScreenCaptureSourcePicker } from '@/components/shared/ScreenCaptureSourcePicker'
 import { ScreenshotCropOverlay } from '@/components/shared/ScreenshotCropOverlay'
+import { LobbyReturnBanner } from '@/components/shared/LobbyReturnBanner'
 import { AIDiagnosticHeader } from './components/header'
 import { AILatencyBenchmarkSection } from './components/benchmark'
 import { ScreenCaptureVisionSection } from './components/vision'
@@ -19,9 +20,12 @@ export interface AIDiagnosticProps {
       | 'history'
       | 'settings'
   ) => void
+  returnToLobby?: boolean
+  onReturnToLobby?: () => void
 }
 
-export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
+export function AIDiagnostic({ onViewChange, returnToLobby, onReturnToLobby }: AIDiagnosticProps) {
+  const [dismissReturnBanner, setDismissReturnBanner] = useState(false);
   const [activeTab, setActiveTab] = useState<DiagnosticViewTab>('llm-speed')
   const [generalError, setGeneralError] = useState<string | null>(null)
 
@@ -63,6 +67,12 @@ export function AIDiagnostic({ onViewChange }: AIDiagnosticProps) {
 
   return (
     <div className="h-full overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-3.5 animate-fade-in custom-scrollbar select-none">
+      {returnToLobby && onReturnToLobby && !dismissReturnBanner && (
+        <LobbyReturnBanner
+          onReturnToLobby={onReturnToLobby}
+          onDismiss={() => setDismissReturnBanner(true)}
+        />
+      )}
       {/* Top Header */}
       <AIDiagnosticHeader
         activeTab={activeTab}

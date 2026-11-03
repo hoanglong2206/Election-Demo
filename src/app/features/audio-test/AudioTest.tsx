@@ -3,6 +3,7 @@ import { AlertTriangle, X } from 'lucide-react'
 import { useAudioPipeline } from '@/hooks/useAudioPipeline'
 import { computePipelineStages } from '@/infrastructure/audio/pipelineStages'
 import type { AudioTestProps } from './types'
+import { LobbyReturnBanner } from '@/components/shared/LobbyReturnBanner'
 import { AudioTestHeader } from './components/header'
 import { AudioControlsToolbar } from './components/controls'
 import { STTPreviewPanel } from './components/stt-preview'
@@ -12,7 +13,8 @@ import { DualChannelReadinessCard } from './components/readiness'
 import { TechnicalJargonTrainer } from './components/jargon'
 import { useAudioDeviceSelection, useAudioTestSTT } from './hooks'
 
-export function AudioTest({ onViewChange }: AudioTestProps = {}) {
+export function AudioTest({ onViewChange, returnToLobby, onReturnToLobby }: AudioTestProps = {}) {
+  const [dismissReturnBanner, setDismissReturnBanner] = useState(false);
   const {
     isCapturing,
     captureOwner,
@@ -130,6 +132,12 @@ export function AudioTest({ onViewChange }: AudioTestProps = {}) {
 
   return (
     <div className="h-full overflow-y-auto [scrollbar-gutter:stable] p-4 space-y-3.5 animate-fade-in custom-scrollbar select-none">
+      {returnToLobby && onReturnToLobby && !dismissReturnBanner && (
+        <LobbyReturnBanner
+          onReturnToLobby={onReturnToLobby}
+          onDismiss={() => setDismissReturnBanner(true)}
+        />
+      )}
       {/* Header and Layout Switcher */}
       <AudioTestHeader
         showTip={showTip}

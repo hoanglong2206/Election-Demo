@@ -13,6 +13,7 @@ import {
   Brain,
   AlertTriangle,
   ExternalLink,
+  Mic,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,6 +46,11 @@ export function PreFlightLobbyModal({
     audioVerified,
     isPlayingChime,
     handlePlayChime,
+    vadCalibrated,
+    isQuickCalibrating,
+    quickCalibrateError,
+    handleQuickCalibrateVAD,
+    activeVadRecord,
     activeModelId,
     allModels,
     handleSwitchModel,
@@ -150,7 +156,7 @@ export function PreFlightLobbyModal({
 
         {/* Modal Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 custom-scrollbar flex-1 text-xs">
-          {/* Card 1: System Audio Loopback */}
+          {/* Card 1: System Audio Loopback & Mic Noise */}
           <div
             className={cn(
               'border rounded-xl p-3.5 space-y-2.5 transition-all duration-200',
@@ -181,23 +187,47 @@ export function PreFlightLobbyModal({
                 </div>
               </div>
 
-              {audioVerified ? (
-                <Badge
-                  variant="outline"
-                  className="bg-emerald-500/20 text-emerald-300 border-emerald-500/35 text-[9.5px] py-0.5 px-2 font-mono flex items-center gap-1 font-semibold"
-                >
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  Đạt chuẩn tai nghe
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="bg-amber-500/15 text-amber-300 border-amber-500/30 text-[9.5px] py-0.5 px-2"
-                >
-                  Chưa phát chuông test
-                </Badge>
-              )}
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                {vadCalibrated && (
+                  <Badge
+                    variant="outline"
+                    className="bg-cyan-500/15 text-cyan-300 border-cyan-500/30 text-[9.5px] py-0.5 px-2 font-mono flex items-center gap-1"
+                    title={
+                      activeVadRecord
+                        ? `Ngưỡng ồn: ${activeVadRecord.noiseFloorDbfs} dBFS`
+                        : 'Đã hiệu chuẩn VAD'
+                    }
+                  >
+                    <Mic className="w-3 h-3 text-cyan-400" />
+                    {activeVadRecord ? `${activeVadRecord.noiseFloorDbfs} dBFS` : 'VAD OK'}
+                  </Badge>
+                )}
+
+                {audioVerified ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/20 text-emerald-300 border-emerald-500/35 text-[9.5px] py-0.5 px-2 font-mono flex items-center gap-1 font-semibold"
+                  >
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    Đạt chuẩn tai nghe
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-500/15 text-amber-300 border-amber-500/30 text-[9.5px] py-0.5 px-2"
+                  >
+                    Chưa phát chuông test
+                  </Badge>
+                )}
+              </div>
             </div>
+
+            {quickCalibrateError && (
+              <div className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 flex items-center gap-1.5">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                <span>{quickCalibrateError}</span>
+              </div>
+            )}
 
             <div className="pt-2 border-t border-white/[0.05] flex items-center justify-between gap-2 flex-wrap">
               <span className="text-[10.5px] text-white/50">
@@ -206,19 +236,47 @@ export function PreFlightLobbyModal({
                   : 'Hãy bấm nút bên cạnh để nghe thử 1 giây chuông chuông test'}
               </span>
 
-              <div className="flex items-center gap-1.5 ml-auto">
+              <div className="flex items-center gap-1.5 ml-auto flex-wrap">
                 {onOpenAudioTest && (
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
                     onClick={onOpenAudioTest}
-                    className="h-7 px-2 text-[10.5px] text-white/50 hover:text-white"
+                    className="h-7 px-2 text-[10.5px] text-white/50 hover:text-white cursor-pointer"
                     title="Mở trang Audio Test chuyên sâu"
                   >
                     Audio Test <ExternalLink className="w-3 h-3 ml-1" />
                   </Button>
                 )}
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleQuickCalibrateVAD}
+                  disabled={isQuickCalibrating}
+                  className={cn(
+                    'h-7 px-2.5 text-[10.5px] font-medium border rounded-lg transition-all cursor-pointer',
+                    vadCalibrated
+                      ? 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 border-cyan-500/30'
+                      : 'bg-white/5 hover:bg-white/10 text-white/80 border-white/10'
+                  )}
+                  title="Đo nhanh mức ồn nền phòng (2 giây) để tối ưu độ nhạy STT"
+                >
+                  <Mic
+                    className={cn(
+                      'w-3 h-3 mr-1 text-cyan-300',
+                      isQuickCalibrating && 'animate-pulse text-cyan-400'
+                    )}
+                  />
+                  {isQuickCalibrating
+                    ? 'Đang đo (2s)...'
+                    : vadCalibrated
+                      ? 'Đo lại ồn (2s)'
+                      : 'Đo ồn nhanh (2s)'}
+                </Button>
+
                 <Button
                   type="button"
                   size="sm"
@@ -346,7 +404,7 @@ export function PreFlightLobbyModal({
                     size="sm"
                     variant="ghost"
                     onClick={onOpenAIDiagnostic}
-                    className="h-7 px-2 text-[10.5px] text-white/50 hover:text-white"
+                    className="h-7 px-2 text-[10.5px] text-white/50 hover:text-white cursor-pointer"
                     title="Mở trang AI Benchmark chuyên sâu"
                   >
                     AI Benchmark <ExternalLink className="w-3 h-3 ml-1" />
@@ -375,7 +433,7 @@ export function PreFlightLobbyModal({
               </div>
             </div>
 
-            {/* Tactical Advice Container - Fixed Min Height to Prevent UI Jumping */}
+            {/* Tactical Advice Container */}
             <div className="min-h-[46px] bg-black/40 border border-white/[0.05] rounded-lg px-2.5 py-1.5 flex items-center text-[11px] transition-all">
               {tacticalAdvice ? (
                 <div className="space-y-0.5 text-white/80 w-full animate-fade-in">
@@ -438,7 +496,7 @@ export function PreFlightLobbyModal({
                     size="sm"
                     variant="ghost"
                     onClick={onOpenAudioTest}
-                    className="h-6 px-2 text-[10px] text-white/50 hover:text-emerald-300"
+                    className="h-6 px-2 text-[10px] text-white/50 hover:text-emerald-300 cursor-pointer"
                     title="Mở trang Audio Test để huấn luyện sâu hơn"
                   >
                     Huấn luyện sâu <ExternalLink className="w-2.5 h-2.5 ml-1" />
@@ -453,7 +511,7 @@ export function PreFlightLobbyModal({
               </div>
             </div>
 
-            {/* Keyword tags and quick add - capped at 2 lines (max-h-[76px]) with smooth scrolling */}
+            {/* Keyword tags and quick add */}
             <div className="p-2 bg-black/40 border border-white/[0.06] rounded-xl flex flex-wrap items-center gap-1.5 min-h-[36px] max-h-[68px] overflow-y-auto custom-scrollbar">
               {keywords.map((kw) => (
                 <span
@@ -496,7 +554,7 @@ export function PreFlightLobbyModal({
 
         {/* Modal Footer Actions */}
         <div className="px-5 py-3.5 border-t border-white/[0.08] flex items-center justify-between gap-3 bg-white/[0.02] flex-wrap">
-          {/* Skip Lobby Checkbox & Notification */}
+          {/* Skip Lobby Checkbox */}
           <div className="flex flex-col gap-1 max-w-sm">
             <label className="flex items-center gap-2 text-[11px] text-white/60 hover:text-white cursor-pointer select-none">
               <input
@@ -536,7 +594,7 @@ export function PreFlightLobbyModal({
               title={
                 isAllChecksPassed
                   ? 'Tất cả các kiểm định đã đạt chuẩn! Vào cuộc họp ngay.'
-                  : 'Cần hoàn tất cả 3 kiểm định (Tai nghe loopback, Đo trễ AI, Từ vựng Whisper) để mở khóa.'
+                  : 'Cần hoàn tất cả 3 kiểm định (Tai nghe loopback/VAD, Đo trễ AI, Từ vựng Whisper) để mở khóa.'
               }
             >
               <span>Vào Cuộc Họp Ngay</span>

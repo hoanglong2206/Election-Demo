@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { UserCheck, Brain, Save, Check, Mic, Pencil, X, Clock } from 'lucide-react'
+import { UserCheck, Brain, Save, Check, Mic, Pencil, X, Clock, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { getCombatReadiness, type CombatReadinessResult } from '@/services/preflight'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -46,6 +47,24 @@ export function MeetingHeader({
   hasDiscussionContext: _hasDiscussionContext,
   isAnalyzingBackground,
 }: MeetingHeaderProps) {
+  const [readiness, setReadiness] = useState<CombatReadinessResult>(() => getCombatReadiness(mode))
+
+  useEffect(() => {
+    const handleSync = () => setReadiness(getCombatReadiness(mode))
+    window.addEventListener('storage', handleSync)
+    window.addEventListener('preflight-vad-calibrated', handleSync)
+    window.addEventListener('preflight-audio-verified', handleSync)
+    window.addEventListener('preflight-ai-prewarmed', handleSync)
+    window.addEventListener('meeting-context-updated', handleSync)
+    return () => {
+      window.removeEventListener('storage', handleSync)
+      window.removeEventListener('preflight-vad-calibrated', handleSync)
+      window.removeEventListener('preflight-audio-verified', handleSync)
+      window.removeEventListener('preflight-ai-prewarmed', handleSync)
+      window.removeEventListener('meeting-context-updated', handleSync)
+    }
+  }, [mode])
+
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editedTitle, setEditedTitle] = useState(sessionTitle || '')
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -99,6 +118,26 @@ export function MeetingHeader({
             {mode === 'interview' ? <UserCheck className="w-3 h-3" /> : <Brain className="w-3 h-3" />}
             <span>{mode === 'interview' ? 'Phỏng vấn' : 'Thảo luận'}</span>
           </Badge>
+
+          {readiness.isCombatReady ? (
+            <Badge
+              variant="outline"
+              className="bg-emerald-500/15 border-emerald-500/35 text-emerald-300 text-[10px] px-2 py-0.5 font-mono font-semibold flex items-center gap-1 shrink-0 rounded-md shadow-sm"
+              title={`Hệ thống đạt chuẩn thực chiến: ${readiness.score}% sẵn sàng`}
+            >
+              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+              <span>🛡️ Combat Ready ${readiness.score}%</span>
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="bg-amber-500/15 border-amber-500/35 text-amber-300 text-[10px] px-2 py-0.5 font-mono font-semibold flex items-center gap-1 shrink-0 rounded-md shadow-sm"
+              title={`Hệ thống chưa qua kiểm định đầy đủ (${readiness.score}%). Hãy chạy kiểm tra tai nghe hoặc đo trễ AI.`}
+            >
+              <AlertTriangle className="w-3 h-3 text-amber-400" />
+              <span>⚠️ Uncalibrated (${readiness.score}%)</span>
+            </Badge>
+          )}
 
           {isEditingTitle ? (
             <div className="flex items-center gap-1 min-w-0 flex-1 max-w-sm">

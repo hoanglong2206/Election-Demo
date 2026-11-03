@@ -19,6 +19,8 @@ export type STTLang = 'auto' | 'en' | 'vi'
 
 export interface AudioTestProps {
   onViewChange?: (view: 'home' | 'meeting' | 'audio-test' | 'ai-diagnostic' | 'history' | 'settings') => void
+  returnToLobby?: boolean
+  onReturnToLobby?: () => void
 }
 
 export type CalibrationStep = 'idle' | 'countdown' | 'sampling' | 'analyzed' | 'guard_error'
