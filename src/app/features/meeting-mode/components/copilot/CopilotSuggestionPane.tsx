@@ -309,15 +309,15 @@ export function CopilotSuggestionPane({
   return (
     <section className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden relative">
       {/* Header (Row 1: Pane Title, Generating Status & Screen Capture Action) */}
-      <div className="flex items-center justify-between gap-2 px-3.5 py-1.5 shrink-0 border-b border-white/[0.04]">
-        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 shrink-0 border-b border-white/[0.04] min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {mode === "interview" ? (
             <UserCheck className="w-3.5 h-3.5 text-violet-400 shrink-0" />
           ) : (
             <Brain className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
           )}
           <span
-            className="text-[11px] text-white/70 font-semibold uppercase tracking-wider whitespace-nowrap shrink-0"
+            className="text-[11px] text-white/70 font-semibold uppercase tracking-wider truncate min-w-0"
             title={
               mode === "interview"
                 ? "Suggested Answer — Theo CV & Chuẩn STAR"
@@ -337,11 +337,10 @@ export function CopilotSuggestionPane({
           {isGeneratingAIResponse && (
             <Badge
               variant="outline"
-              className="text-[8.5px] px-1.5 py-0 h-4 bg-amber-500/15 text-amber-300 border-amber-500/30 font-mono animate-pulse flex items-center gap-1 shrink-0"
+              className="text-[9px] px-2 py-0 h-4 bg-amber-500/15 text-amber-300 border-amber-500/30 font-mono animate-pulse flex items-center gap-1 shrink-0 whitespace-nowrap"
             >
-              <RotateCcw className="w-2.5 h-2.5 animate-spin text-amber-400" />
-              <span className="hidden sm:inline">AI đang suy luận...</span>
-              <span className="sm:hidden">Suy luận...</span>
+              <RotateCcw className="w-2.5 h-2.5 animate-spin text-amber-400 shrink-0" />
+              <span>AI đang suy luận...</span>
             </Badge>
           )}
         </div>
@@ -383,7 +382,7 @@ export function CopilotSuggestionPane({
               <>
                 <Camera className="w-2.5 h-2.5 text-violet-400" />
                 <span>Chụp câu hỏi</span>
-                <kbd className="hidden sm:inline text-[9px] px-1 py-0 bg-white/10 text-white/50 rounded font-mono">
+                <kbd className="hidden xl:inline text-[9px] px-1 py-0 bg-white/10 text-white/50 rounded font-mono">
                   Ctrl+Shift+S
                 </kbd>
               </>

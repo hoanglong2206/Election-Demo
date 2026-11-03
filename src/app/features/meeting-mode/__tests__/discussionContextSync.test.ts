@@ -1,5 +1,5 @@
 import '@/test/setupDom'
-import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'bun:test'
 import { formatDiscussionTitleSnippet } from '../hooks/useMeetingSession'
 import { formatDiscussionContextSnippet } from '../components/shell/MeetingHeader'
 import {
