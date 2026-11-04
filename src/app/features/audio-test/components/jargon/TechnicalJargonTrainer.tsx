@@ -52,6 +52,16 @@ export function TechnicalJargonTrainer() {
   const [isSaved, setIsSaved] = useState(false)
   const [copiedSentenceIdx, setCopiedSentenceIdx] = useState<number | null>(null)
 
+  // Ensure initial keywords are persisted to meeting context on mount if empty
+  useEffect(() => {
+    const saved = getSavedMeetingContext().keywords
+    if (!Array.isArray(saved) || saved.length === 0) {
+      const current = getSavedMeetingContext()
+      saveMeetingContext({ ...current, keywords: DEFAULT_JARGON_PRESETS })
+      window.dispatchEvent(new CustomEvent('meeting-context-updated'))
+    }
+  }, [])
+
   // Listen for context updates from other parts of the app
   useEffect(() => {
     const handleContextUpdate = () => {
@@ -68,12 +78,23 @@ export function TechnicalJargonTrainer() {
     }
   }, [])
 
+  const persistAndBroadcast = useCallback((newKeywords: string[]) => {
+    setKeywords(newKeywords)
+    const current = getSavedMeetingContext()
+    saveMeetingContext({
+      ...current,
+      keywords: newKeywords,
+    })
+    window.dispatchEvent(new CustomEvent('meeting-context-updated', { detail: { keywords: newKeywords } }))
+  }, [])
+
   const handleAddKeyword = (e?: React.FormEvent) => {
     e?.preventDefault()
     const trimmed = inputKw.trim()
     if (!trimmed) return
     if (!keywords.includes(trimmed)) {
-      setKeywords((prev) => [...prev, trimmed])
+      const next = [...keywords, trimmed]
+      persistAndBroadcast(next)
     }
     setInputKw('')
   }
@@ -86,25 +107,22 @@ export function TechnicalJargonTrainer() {
   }
 
   const handleRemoveKeyword = (kwToRemove: string) => {
-    setKeywords((prev) => prev.filter((k) => k !== kwToRemove))
+    const next = keywords.filter((k) => k !== kwToRemove)
+    persistAndBroadcast(next)
   }
 
   const handleQuickAdd = (preset: string) => {
     if (!keywords.includes(preset)) {
-      setKeywords((prev) => [...prev, preset])
+      const next = [...keywords, preset]
+      persistAndBroadcast(next)
     }
   }
 
   const handleSyncToWhisper = useCallback(() => {
-    const current = getSavedMeetingContext()
-    saveMeetingContext({
-      ...current,
-      keywords,
-    })
-    window.dispatchEvent(new CustomEvent('meeting-context-updated'))
+    persistAndBroadcast(keywords)
     setIsSaved(true)
     setTimeout(() => setIsSaved(false), 2500)
-  }, [keywords])
+  }, [keywords, persistAndBroadcast])
 
   const handleCopySentence = (text: string, idx: number) => {
     navigator.clipboard.writeText(text)
@@ -136,9 +154,15 @@ export function TechnicalJargonTrainer() {
               >
                 {keywords.length} thuật ngữ
               </Badge>
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1.5 py-0 bg-emerald-500/10 text-emerald-400/90 border-emerald-500/20 font-mono"
+              >
+                Auto-Synced
+              </Badge>
             </div>
             <p className="text-[10.5px] text-white/45">
-              Nạp các từ viết tắt kỹ thuật vào <strong className="text-white/70">Whisper Initial Prompt</strong> để AI không nghe nhầm khi phỏng vấn.
+              Nạp các từ viết tắt kỹ thuật vào <strong className="text-white/70">Whisper Initial Prompt</strong> để AI nhận diện chuẩn xác khi phỏng vấn hoặc xem tài liệu.
             </p>
           </div>
         </div>
@@ -219,7 +243,7 @@ export function TechnicalJargonTrainer() {
         {/* Quick Add Suggestions */}
         <div className="flex items-center gap-1.5 text-[10.5px] text-white/40 flex-wrap">
           <span>Gợi ý thêm nhanh:</span>
-          {['GraphQL', 'Elasticsearch', 'CI/CD', 'Prometheus', 'Redis', 'Tailwind'].map((tag) => (
+          {['GraphQL', 'Elasticsearch', 'CI/CD', 'Prometheus', 'Redis', 'Tailwind', 'SQL Server', 'SSMS'].map((tag) => (
             <button
               key={tag}
               type="button"

@@ -1,5 +1,5 @@
-import { useEffect, type RefObject } from 'react'
-import { Radio } from 'lucide-react'
+import { useEffect, type ReactNode, type RefObject } from 'react'
+import { Radio, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { STTPreviewLine } from '../../types'
@@ -12,6 +12,40 @@ export interface STTSubtitlesStreamProps {
   isSimulatingSTT: boolean
   isTranscribing: boolean
   currentSTTEngine: STTEngineConfig
+  activeKeywords?: string[]
+}
+
+function highlightJargonKeywords(text: string, keywords?: string[]): ReactNode {
+  if (!text || !keywords || keywords.length === 0) return text
+
+  const valid = keywords
+    .map((k) => k.trim())
+    .filter((k) => k.length >= 2)
+
+  if (valid.length === 0) return text
+
+  const sorted = [...valid].sort((a, b) => b.length - a.length)
+  const escaped = sorted.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const pattern = new RegExp(`(\\b(?:${escaped.join('|')})\\b)`, 'gi')
+
+  const parts = text.split(pattern)
+  if (parts.length <= 1) return text
+
+  return parts.map((part, i) => {
+    const matched = valid.some((kw) => kw.toLowerCase() === part.toLowerCase())
+    if (matched) {
+      return (
+        <mark
+          key={i}
+          className="bg-emerald-500/25 text-emerald-200 font-semibold px-1 py-0.5 rounded border border-emerald-500/40 inline-block text-[inherit]"
+          title={`Từ vựng kỹ thuật được nạp: ${part}`}
+        >
+          {part}
+        </mark>
+      )
+    }
+    return part
+  })
 }
 
 export function STTSubtitlesStream({
@@ -21,6 +55,7 @@ export function STTSubtitlesStream({
   isSimulatingSTT,
   isTranscribing,
   currentSTTEngine,
+  activeKeywords,
 }: STTSubtitlesStreamProps) {
   // Auto scroll STT container when lines change
   useEffect(() => {
@@ -65,51 +100,73 @@ export function STTSubtitlesStream({
           </p>
         </div>
       ) : (
-        sttLines.map((line, idx) => (
-          <div
-            key={line.id}
-            className={cn(
-              'animate-fade-in transition-opacity border-b border-white/[0.05] pb-2.5 last:border-b-0 last:pb-0',
-              idx === sttLines.length - 1 ? 'opacity-100' : 'opacity-75'
-            )}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                  {line.speaker}
-                </span>
-                <span className="text-white/20">&bull;</span>
-                <span className="text-[10px] text-white/35 font-mono">{line.timestamp}</span>
+        sttLines.map((line, idx) => {
+          const hasJargonMatch =
+            activeKeywords &&
+            activeKeywords.length > 0 &&
+            activeKeywords.some((kw) => {
+              const k = kw.trim().toLowerCase()
+              return (
+                k.length >= 2 &&
+                (line.originalEn.toLowerCase().includes(k) || line.translatedVi.toLowerCase().includes(k))
+              )
+            })
+
+          return (
+            <div
+              key={line.id}
+              className={cn(
+                'animate-fade-in transition-opacity border-b border-white/[0.05] pb-2.5 last:border-b-0 last:pb-0',
+                idx === sttLines.length - 1 ? 'opacity-100' : 'opacity-75'
+              )}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    {line.speaker}
+                  </span>
+                  <span className="text-white/20">&bull;</span>
+                  <span className="text-[10px] text-white/35 font-mono">{line.timestamp}</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 font-mono text-[9px]">
+                  {hasJargonMatch && (
+                    <Badge
+                      variant="outline"
+                      className="px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-300 border-emerald-500/30 flex items-center gap-1 font-mono"
+                    >
+                      <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                      <span>Từ vựng khớp</span>
+                    </Badge>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className="px-1.5 py-0 h-4 bg-violet-500/10 text-violet-300 border-violet-500/25"
+                  >
+                    {line.engineBadge || currentSTTEngine.id}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="px-1 py-0 h-4 bg-emerald-500/10 text-emerald-300 border-emerald-500/25"
+                  >
+                    Độ chuẩn: {line.confidence}%
+                  </Badge>
+                  <span className="text-white/40">{line.latencyMs}ms</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1.5 font-mono text-[9px]">
-                <Badge
-                  variant="outline"
-                  className="px-1.5 py-0 h-4 bg-violet-500/10 text-violet-300 border-violet-500/25"
-                >
-                  {line.engineBadge || currentSTTEngine.id}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="px-1 py-0 h-4 bg-emerald-500/10 text-emerald-300 border-emerald-500/25"
-                >
-                  Độ chuẩn: {line.confidence}%
-                </Badge>
-                <span className="text-white/40">{line.latencyMs}ms</span>
-              </div>
+              {/* English original: Gray 60% with jargon highlighted */}
+              <p className="text-[11.5px] leading-relaxed text-white/60 font-normal mb-0.5">
+                {highlightJargonKeywords(line.originalEn, activeKeywords)}
+              </p>
+
+              {/* Vietnamese instant translation: Bright Bold White with jargon highlighted */}
+              <p className="text-[12.5px] leading-relaxed text-white font-medium tracking-normal">
+                {highlightJargonKeywords(line.translatedVi, activeKeywords)}
+              </p>
             </div>
-
-            {/* English original: Gray 60% */}
-            <p className="text-[11.5px] leading-relaxed text-white/60 font-normal mb-0.5">
-              {line.originalEn}
-            </p>
-
-            {/* Vietnamese instant translation: Bright Bold White */}
-            <p className="text-[12.5px] leading-relaxed text-white font-medium tracking-normal">
-              {line.translatedVi}
-            </p>
-          </div>
-        ))
+          )
+        })
       )}
 
       {/* Typing pulse indicator */}

@@ -1,5 +1,5 @@
 import type { RefObject } from 'react'
-import { Sparkles, Clock, Loader2, RotateCcw, AlertCircle } from 'lucide-react'
+import { Sparkles, Clock, Loader2, RotateCcw, AlertCircle, BrainCircuit } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { STTLang, STTPreviewLine } from '../../types'
@@ -23,6 +23,7 @@ export interface STTPreviewPanelProps {
   onSimulateSTT: () => void
   onClearSTT: () => void
   scrollRef: RefObject<HTMLDivElement | null>
+  activeKeywords?: string[]
 }
 
 export function STTPreviewPanel({
@@ -40,6 +41,7 @@ export function STTPreviewPanel({
   onSimulateSTT,
   onClearSTT,
   scrollRef,
+  activeKeywords,
 }: STTPreviewPanelProps) {
   return (
     <div className="w-full space-y-3.5">
@@ -183,6 +185,28 @@ export function STTPreviewPanel({
           </div>
         )}
 
+        {/* Active Technical Jargon Conditioning Ribbon */}
+        {activeKeywords && activeKeywords.length > 0 && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-lg text-[11px] animate-fade-in">
+            <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+              <span className="flex items-center gap-1.5 text-emerald-300 font-medium shrink-0">
+                <BrainCircuit className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Huấn luyện từ vựng:</span>
+              </span>
+              <span className="text-white/60 truncate font-mono text-[10.5px]" title={activeKeywords.join(', ')}>
+                {activeKeywords.slice(0, 7).join(', ')}{activeKeywords.length > 7 ? ` +${activeKeywords.length - 7}` : ''}
+              </span>
+            </div>
+            <Badge
+              variant="outline"
+              className="text-[9px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-300 border-emerald-500/30 font-mono shrink-0"
+              title="Danh sách từ khóa chuyên ngành được nạp trực tiếp vào Whisper initial prompt"
+            >
+              {activeKeywords.length} từ đã nạp Whisper
+            </Badge>
+          </div>
+        )}
+
         {/* Subtitles Stream Container */}
         <STTSubtitlesStream
           scrollRef={scrollRef}
@@ -191,6 +215,7 @@ export function STTPreviewPanel({
           isSimulatingSTT={isSimulatingSTT}
           isTranscribing={isTranscribing}
           currentSTTEngine={currentSTTEngine}
+          activeKeywords={activeKeywords}
         />
 
         {/* STT Status Footnote */}

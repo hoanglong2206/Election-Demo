@@ -39,6 +39,7 @@ export function AudioTest({ onViewChange, returnToLobby, onReturnToLobby }: Audi
     clearBuffer,
     downloadWav,
     getAudioSegmentSince,
+    subscribeAudioFrames,
     pipelineStages,
     inputSampleRateHz,
     getAudioMetrics,
@@ -114,11 +115,13 @@ export function AudioTest({ onViewChange, returnToLobby, onReturnToLobby }: Audi
     queueMetrics,
     handleSimulateSTT,
     handleClearSTT,
+    activeKeywords,
   } = useAudioTestSTT({
     isCapturing: isAudioTestRecording,
     captureOwner,
     sourceType,
     getAudioSegmentSince,
+    subscribeAudioFrames,
   })
 
   // Reset dismissed error state if a new error occurs
@@ -259,6 +262,7 @@ export function AudioTest({ onViewChange, returnToLobby, onReturnToLobby }: Audi
             onSimulateSTT={handleSimulateSTT}
             onClearSTT={handleClearSTT}
             scrollRef={sttScrollRef}
+            activeKeywords={activeKeywords}
           />
 
           {/* Technical Jargon & Accent Training */}

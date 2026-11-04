@@ -10,6 +10,7 @@ import {
   type STTQueueMetrics,
   whisperPromptBuilder,
 } from "@/services/ai-model/stt";
+import { SpeechSegmenter } from "@/core/audio";
 import { getSavedMeetingContext } from "@/services/meeting-context";
 import { YOUTUBE_STT_SAMPLES } from "../constants";
 import { DEFAULT_JARGON_PRESETS } from "../components/jargon/TechnicalJargonTrainer";
@@ -21,9 +22,12 @@ export interface UseAudioTestSTTParams {
   isCapturing: boolean;
   captureOwner?: AudioCaptureOwner;
   sourceType: "mic" | "system";
-  getAudioSegmentSince: (
+  subscribeAudioFrames?: (
+    listener: (pcm16: Int16Array, totalSamples: number) => void
+  ) => () => void;
+  getAudioSegmentSince?: (
     sinceSample: number,
-    minDurationSec?: number,
+    minDurationSec?: number
   ) => AudioSegment | null;
 }
 
@@ -31,19 +35,46 @@ export function useAudioTestSTT({
   isCapturing,
   captureOwner,
   sourceType,
+  subscribeAudioFrames,
   getAudioSegmentSince,
 }: UseAudioTestSTTParams) {
   const isTestingActive =
-    isCapturing &&
-    (captureOwner === "audio-test" || captureOwner === undefined);
+    isCapturing && (captureOwner === "audio-test" || captureOwner === undefined);
   const [selectedSTT, setSelectedSTT] = useState<string>(getSavedSTTEngineId);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [sttLines, setSttLines] = useState<STTPreviewLine[]>([]);
   const [isSimulatingSTT, setIsSimulatingSTT] = useState(false);
   const [queueMetrics, setQueueMetrics] = useState<STTQueueMetrics>(() =>
-    sttJobQueue.getMetrics(),
+    sttJobQueue.getMetrics()
   );
   const [sttLang, setSttLang] = useState<STTLang>("auto");
+
+  // Active keywords tracking in sync with Jargon Trainer
+  const [activeKeywords, setActiveKeywords] = useState<string[]>(() => {
+    const saved = getSavedMeetingContext().keywords;
+    return Array.isArray(saved) && saved.length > 0 ? saved : DEFAULT_JARGON_PRESETS;
+  });
+  const activeKeywordsRef = useRef<string[]>(activeKeywords);
+
+  useEffect(() => {
+    activeKeywordsRef.current = activeKeywords;
+  }, [activeKeywords]);
+
+  useEffect(() => {
+    const handleContextUpdate = () => {
+      const saved = getSavedMeetingContext().keywords;
+      if (Array.isArray(saved) && saved.length > 0) {
+        setActiveKeywords(saved);
+        activeKeywordsRef.current = saved;
+      }
+    };
+    window.addEventListener("meeting-context-updated", handleContextUpdate);
+    window.addEventListener("storage", handleContextUpdate);
+    return () => {
+      window.removeEventListener("meeting-context-updated", handleContextUpdate);
+      window.removeEventListener("storage", handleContextUpdate);
+    };
+  }, []);
 
   const availableSTTEngines = getAvailableSTTEngines();
   const currentSTTEngine =
@@ -55,6 +86,7 @@ export function useAudioTestSTT({
   const [initialSessionId] = useState(() => "audiotest_" + Date.now());
   const sessionIdRef = useRef<string>(initialSessionId);
   const lastProcessedSampleRef = useRef<number>(0);
+  const segmenterRef = useRef<SpeechSegmenter | null>(null);
 
   const sttLangRef = useRef<STTLang>("auto");
   const selectedSTTRef = useRef<string>(selectedSTT);
@@ -133,62 +165,126 @@ export function useAudioTestSTT({
     };
   }, []);
 
-  // Real-Time Automatic Speech-to-Text Queue Producer Loop
+  const dispatchSegment = useCallback(
+    (segment: { blob: Blob; hasSpeech: boolean; durationMs?: number }) => {
+      if (!segment.hasSpeech) return;
+
+    const seqId = sequenceIdRef.current++;
+    const now = new Date();
+    const timeStr = `${String(now.getMinutes()).padStart(2, "0")}:${String(
+      now.getSeconds()
+    ).padStart(2, "0")}`;
+
+    const effectiveLang =
+      sttLangRef.current === "auto"
+        ? sourceTypeRef.current === "system"
+          ? "en"
+          : "vi"
+        : sttLangRef.current;
+
+    const dynamicPrompt = whisperPromptBuilder.buildPrompt(activeKeywordsRef.current, {
+      language: effectiveLang,
+      contextType: "discussion",
+    });
+
+    const job: STTJob = {
+      jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
+      sessionId: sessionIdRef.current,
+      sequenceId: seqId,
+      audioBuffer: segment.blob,
+      hasSpeech: true,
+      createdAt: Date.now(),
+      priority: 1,
+      engineId: selectedSTTRef.current,
+      language: sttLangRef.current,
+      sourceType: sourceTypeRef.current as "system" | "mic",
+      speakerLabel:
+        sourceTypeRef.current === "system"
+          ? "YouTube / Loopback"
+          : "Microphone Speaker",
+      timestampStr: timeStr,
+      prompt: dynamicPrompt || undefined,
+      feature: "audio_signal_test",
+      durationMs: segment.durationMs,
+    };
+
+    sttJobQueue.enqueue(job);
+  }, []);
+
+  // Real-Time Sentence-Boundary Speech-to-Text Pipeline
   useEffect(() => {
     if (!isTestingActive) {
+      if (segmenterRef.current) {
+        const flushed = segmenterRef.current.flush();
+        if (flushed && flushed.hasSpeech) {
+          dispatchSegment(flushed);
+        }
+        segmenterRef.current.reset();
+      }
       sttJobQueue.pause();
       return;
     }
 
     sttJobQueue.resume();
 
-    const intervalTimer = setInterval(() => {
-      const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 0.8);
-      if (!segment) return;
+    // Use intelligent sentence segmenter with VAD:
+    // Natural human pauses (silenceEndMs = 400ms) or max sentence ceiling (4500ms)
+    // Prevents aggressive 1-second chopping that causes queue backpressure and dropped chunks.
+    const segmenter = new SpeechSegmenter({
+      sampleRate: 16000,
+      silenceEndMs: 400,
+      maxSegmentMs: 4500,
+      vadThresholdRms: 0.012,
+    });
+    segmenterRef.current = segmenter;
 
-      lastProcessedSampleRef.current = segment.endSample;
+    if (subscribeAudioFrames) {
+      const unsub = subscribeAudioFrames((pcm16, totalSamples) => {
+        if (!isTestingActive || !segmenterRef.current) return;
+        const closed = segmenterRef.current.feed(pcm16, totalSamples);
+        for (const seg of closed) {
+          if (seg.hasSpeech) {
+            dispatchSegment(seg);
+          }
+        }
+      });
 
-      const seqId = sequenceIdRef.current++;
-      const now = new Date();
-      const timeStr = `${String(now.getMinutes()).padStart(2, "0")}:${String(
-        now.getSeconds(),
-      ).padStart(2, "0")}`;
-
-      const savedKws = getSavedMeetingContext().keywords;
-      const activeKws =
-        Array.isArray(savedKws) && savedKws.length > 0
-          ? savedKws
-          : DEFAULT_JARGON_PRESETS;
-
-      const job: STTJob = {
-        jobId: `stt_${sessionIdRef.current}_${seqId}_${Date.now()}`,
-        sessionId: sessionIdRef.current,
-        sequenceId: seqId,
-        audioBuffer: segment.blob,
-        hasSpeech: segment.hasAudio,
-        createdAt: Date.now(),
-        priority: segment.hasAudio ? 1 : 0,
-        engineId: selectedSTTRef.current,
-        language: sttLangRef.current,
-        sourceType: sourceTypeRef.current as "system" | "mic",
-        speakerLabel:
-          sourceTypeRef.current === "system"
-            ? "YouTube / Loopback"
-            : "Microphone Speaker",
-        timestampStr: timeStr,
-        prompt:
-          whisperPromptBuilder.buildPrompt(activeKws) || undefined,
-        feature: "audio_signal_test",
+      return () => {
+        unsub();
+        if (segmenterRef.current) {
+          const flushed = segmenterRef.current.flush();
+          if (flushed && flushed.hasSpeech) {
+            dispatchSegment(flushed);
+          }
+          segmenterRef.current.reset();
+        }
+        sttJobQueue.pause();
       };
+    } else if (getAudioSegmentSince) {
+      // Fallback for mocked unit tests or environments without subscribeAudioFrames
+      const intervalTimer = setInterval(() => {
+        // Backpressure guard: if queue is already processing or waiting, don't overload
+        if (sttJobQueue.getMetrics().queueDepth >= 2) return;
 
-      sttJobQueue.enqueue(job);
-    }, 1000);
+        const segment = getAudioSegmentSince(lastProcessedSampleRef.current, 2.5);
+        if (!segment) return;
 
-    return () => {
-      clearInterval(intervalTimer);
-      sttJobQueue.pause();
-    };
-  }, [isTestingActive, getAudioSegmentSince]);
+        lastProcessedSampleRef.current = segment.endSample;
+        if (segment.hasAudio) {
+          dispatchSegment({
+            blob: segment.blob,
+            hasSpeech: true,
+            durationMs: Math.round((segment.sampleCount / 16000) * 1000),
+          });
+        }
+      }, 1500);
+
+      return () => {
+        clearInterval(intervalTimer);
+        sttJobQueue.pause();
+      };
+    }
+  }, [isTestingActive, subscribeAudioFrames, getAudioSegmentSince, dispatchSegment]);
 
   const handleSimulateSTT = useCallback(() => {
     setIsSimulatingSTT(true);
@@ -236,6 +332,9 @@ export function useAudioTestSTT({
     sessionIdRef.current = "audiotest_" + Date.now();
     lastProcessedSampleRef.current = 0;
     sttJobQueue.reset(sessionIdRef.current);
+    if (segmenterRef.current) {
+      segmenterRef.current.reset();
+    }
   }, []);
 
   const handleSelectSTTEngine = useCallback((engineId: string) => {
@@ -256,5 +355,6 @@ export function useAudioTestSTT({
     queueMetrics,
     handleSimulateSTT,
     handleClearSTT,
+    activeKeywords,
   };
 }
