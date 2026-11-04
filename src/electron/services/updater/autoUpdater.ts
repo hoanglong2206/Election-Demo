@@ -1,5 +1,8 @@
 import { app } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import { createRequire } from 'node:module'
+import type { AppUpdater } from 'electron-updater'
+
+const require = createRequire(import.meta.url)
 
 /**
  * Initializes the background auto-updater service for production builds.
@@ -13,6 +16,14 @@ export function initializeAutoUpdater(): void {
   }
 
   try {
+    const updaterModule = require('electron-updater')
+    const autoUpdater: AppUpdater = updaterModule.autoUpdater || updaterModule.default?.autoUpdater
+
+    if (!autoUpdater) {
+      console.warn('[AutoUpdater] autoUpdater instance not found in electron-updater module')
+      return
+    }
+
     // Automatically download update in background once detected
     autoUpdater.autoDownload = true
     // Automatically install when the user quits the application
@@ -56,4 +67,5 @@ export function initializeAutoUpdater(): void {
     console.error('[AutoUpdater] Failed to initialize AutoUpdater:', err)
   }
 }
+
 
