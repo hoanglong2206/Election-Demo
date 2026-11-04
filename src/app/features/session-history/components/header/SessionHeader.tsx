@@ -52,7 +52,7 @@ export function SessionHeader({
   }, [])
 
   return (
-    <div className="flex items-center bg-white/[0.02] border border-white/[0.06] rounded-xl px-3 py-2 gap-2">
+    <div className="flex items-center bg-white/[0.02] border border-white/[0.06] rounded-xl px-3 py-2 gap-2 shrink-0">
       <div className="flex items-center gap-2.5 flex-1 min-w-0">
         <div className="w-7 h-7 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center shrink-0">
           <FileText className="w-3.5 h-3.5 text-violet-400" />
@@ -60,12 +60,12 @@ export function SessionHeader({
 
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-[13px] font-semibold text-white/95 truncate">
+            <h2 className="text-[13px] font-semibold text-white/95 truncate whitespace-nowrap">
               Lịch Sử Cuộc Họp & Phỏng Vấn (Session History)
             </h2>
             <Badge
               variant="outline"
-              className="text-[9px] px-1.5 py-0 border-violet-500/30 bg-violet-500/10 text-violet-300 shrink-0"
+              className="text-[9px] px-1.5 py-0 border-violet-500/30 bg-violet-500/10 text-violet-300 shrink-0 whitespace-nowrap"
             >
               {totalSessions} buổi họp
             </Badge>
@@ -77,23 +77,23 @@ export function SessionHeader({
       </div>
 
       {/* Action, Retention & Export Dropdown */}
-      <div className="flex items-center gap-1.5 justify-end shrink-0">
+      <div className="flex items-center gap-1.5 justify-end shrink-0 whitespace-nowrap">
         {/* Retention Policy Dropdown */}
         {onRetentionDaysChange && (
-          <div ref={retentionRef} className="relative">
+          <div ref={retentionRef} className="relative shrink-0">
             <button
               type="button"
               onClick={() => setIsRetentionOpen(!isRetentionOpen)}
               aria-haspopup="listbox"
               aria-expanded={isRetentionOpen}
               className={cn(
-                'flex items-center gap-1.5 bg-black/50 hover:bg-black/70 border border-white/10 hover:border-violet-500/40 text-white/90 px-2.5 py-1.5 rounded-xl text-[10.5px] transition-all duration-200 active:scale-[0.99] shadow-inner select-none cursor-pointer',
+                'flex items-center gap-1.5 bg-black/50 hover:bg-black/70 border border-white/10 hover:border-violet-500/40 text-white/90 px-2.5 py-1.5 rounded-xl text-[10.5px] transition-all duration-200 active:scale-[0.99] shadow-inner select-none cursor-pointer whitespace-nowrap shrink-0',
                 isRetentionOpen && 'border-violet-500/60 ring-2 ring-violet-500/25'
               )}
               title="Cấu hình thời gian tự động dọn dẹp các phiên họp cũ (Local Retention)"
             >
               <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>Retention: {retentionDays === 0 ? 'Vĩnh viễn' : `${retentionDays}d`}</span>
+              <span className="whitespace-nowrap">Retention: {retentionDays === 0 ? 'Vĩnh viễn' : `${retentionDays}d`}</span>
               <ChevronDown
                 className={cn(
                   'w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ease-out',
@@ -143,17 +143,17 @@ export function SessionHeader({
             size="sm"
             variant="outline"
             onClick={onClearAll}
-            className="bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 text-[10.5px] h-7 px-2.5 gap-1.5 transition-colors"
+            className="bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 text-[10.5px] h-7 px-2.5 gap-1.5 transition-colors whitespace-nowrap shrink-0"
             title="Xóa toàn bộ lịch sử cuộc họp"
           >
-            <Trash2 className="w-3 h-3 text-rose-400" />
-            <span>Xóa tất cả</span>
+            <Trash2 className="w-3 h-3 text-rose-400 shrink-0" />
+            <span className="whitespace-nowrap">Xóa tất cả</span>
           </Button>
         )}
 
         {/* Consolidated Export Dropdown */}
         {currentSession && (
-          <div ref={exportRef} className="relative">
+          <div ref={exportRef} className="relative shrink-0">
             <button
               id="btn-export-dropdown"
               type="button"
@@ -161,13 +161,13 @@ export function SessionHeader({
               aria-haspopup="menu"
               aria-expanded={isExportOpen}
               className={cn(
-                'flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white px-2.5 py-1.5 rounded-xl text-[10.5px] font-medium transition-all duration-200 active:scale-[0.99] shadow-sm select-none cursor-pointer',
+                'flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white px-2.5 py-1.5 rounded-xl text-[10.5px] font-medium transition-all duration-200 active:scale-[0.99] shadow-sm select-none cursor-pointer whitespace-nowrap shrink-0',
                 isExportOpen && 'ring-2 ring-violet-400/40 bg-violet-500'
               )}
               title="Xuất báo cáo cuộc họp (PDF, Markdown, JSON)"
             >
               <Download className="w-3.5 h-3.5 text-white shrink-0" />
-              <span>Xuất báo cáo</span>
+              <span className="whitespace-nowrap">Xuất báo cáo</span>
               <ChevronDown
                 className={cn(
                   'w-3.5 h-3.5 text-white/70 shrink-0 transition-transform duration-200 ease-out',

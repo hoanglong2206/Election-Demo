@@ -59,7 +59,7 @@ export function SessionSidebar({
     filteredSessions.length > 0 && selectedSessionIds.size === filteredSessions.length
 
   return (
-    <div className="w-[316px] min-w-[316px] max-w-[316px] shrink-0 flex flex-col gap-2 bg-white/[0.02] border border-white/[0.06] rounded-xl p-2.5">
+    <div className="w-[280px] min-w-[280px] max-w-[280px] shrink-0 flex flex-col gap-2 bg-white/[0.02] border border-white/[0.06] rounded-xl p-2.5">
       {/* Search and Advanced Filters */}
       <SidebarFilterHeader
         searchTerm={searchTerm}
@@ -123,4 +123,3 @@ export function SessionSidebar({
     </div>
   )
 }
-

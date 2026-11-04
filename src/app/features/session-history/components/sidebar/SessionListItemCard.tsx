@@ -134,7 +134,7 @@ export function SessionListItemCard({
         <Badge
           variant="outline"
           className={cn(
-            'text-[8px] px-1 py-0 border font-medium',
+            'text-[8px] px-1 py-0 border font-medium shrink-0 whitespace-nowrap',
             s.mode === 'interview'
               ? 'bg-violet-500/15 text-violet-300 border-violet-500/30'
               : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
@@ -143,45 +143,45 @@ export function SessionListItemCard({
           {s.mode === 'interview' ? 'Interview' : 'Discussion'}
         </Badge>
 
-        <span className="text-white/40 flex items-center gap-0.5">
-          <Clock className="w-2 h-2" />
-          {s.durationMinutes}m
+        <span className="text-white/40 flex items-center gap-0.5 shrink-0 whitespace-nowrap">
+          <Clock className="w-2 h-2 shrink-0" />
+          <span>{s.durationMinutes}m</span>
         </span>
 
-        <span className="text-white/40 flex items-center gap-0.5 ml-auto">
-          <Calendar className="w-2 h-2" />
-          {s.date.split(' ')[0]}
+        <span className="text-white/40 flex items-center gap-0.5 ml-auto shrink-0 whitespace-nowrap">
+          <Calendar className="w-2 h-2 shrink-0" />
+          <span>{s.date.split(' ')[0]}</span>
         </span>
       </div>
 
       {/* Interaction Count Metrics Bar */}
-      <div className="flex items-center justify-between text-[9px] text-white/40 pt-1 border-t border-white/[0.04]">
-        <span className="flex items-center gap-1">
-          <Layers className="w-2.5 h-2.5 text-white/30" />
-          <span>{totalInteractions} tương tác</span>
-          <span className="opacity-40">
+      <div className="flex items-center justify-between text-[9px] text-white/40 pt-1 border-t border-white/[0.04] gap-1">
+        <span className="flex items-center gap-1 min-w-0 truncate whitespace-nowrap">
+          <Layers className="w-2.5 h-2.5 text-white/30 shrink-0" />
+          <span className="shrink-0 whitespace-nowrap">{totalInteractions} tương tác</span>
+          <span className="opacity-40 truncate whitespace-nowrap">
             ({(s.transcripts || []).length} thoại, {(s.suggestions || []).length} AI
             {s.screenshotQuestions?.length ? `, ${s.screenshotQuestions.length} ảnh` : ''})
           </span>
         </span>
 
-        <div className="flex items-center gap-1.5 ml-auto font-mono text-[8.5px]">
+        <div className="flex items-center gap-1.5 ml-auto font-mono text-[8.5px] shrink-0 whitespace-nowrap">
           {s.metrics?.totalTokens && s.metrics.totalTokens > 0 ? (
-            <span className="flex items-center gap-0.5 text-cyan-400">
-              <Coins className="w-2 h-2" />
+            <span className="flex items-center gap-0.5 text-cyan-400 shrink-0 whitespace-nowrap">
+              <Coins className="w-2 h-2 shrink-0" />
               <span>{(s.metrics.totalTokens / 1000).toFixed(1)}k</span>
             </span>
           ) : null}
           {s.metrics?.costStatus === 'free' ? (
-            <span className="text-emerald-400 bg-emerald-500/15 px-1 py-0.2 rounded border border-emerald-500/20 font-sans font-medium text-[8px]">
+            <span className="text-emerald-400 bg-emerald-500/15 px-1 py-0.2 rounded border border-emerald-500/20 font-sans font-medium text-[8px] shrink-0 whitespace-nowrap">
               Free
             </span>
           ) : s.metrics?.costStatus === 'unknown' ? (
-            <span className="text-amber-400 bg-amber-500/15 px-1 py-0.2 rounded border border-amber-500/20 font-sans font-medium text-[8px]">
+            <span className="text-amber-400 bg-amber-500/15 px-1 py-0.2 rounded border border-amber-500/20 font-sans font-medium text-[8px] shrink-0 whitespace-nowrap">
               Unknown
             </span>
           ) : s.metrics?.estimatedCostUsd !== undefined && s.metrics.estimatedCostUsd > 0 ? (
-            <span className="text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20 font-medium">
+            <span className="text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20 font-medium shrink-0 whitespace-nowrap">
               ${s.metrics.estimatedCostUsd < 0.01 ? s.metrics.estimatedCostUsd.toFixed(4) : s.metrics.estimatedCostUsd.toFixed(3)}
             </span>
           ) : null}
@@ -190,4 +190,3 @@ export function SessionListItemCard({
     </div>
   )
 }
-

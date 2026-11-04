@@ -148,18 +148,18 @@ export function DetailHeaderMeta({
           )}
 
           {/* Date, Duration, and AI Model line */}
-          <div className="flex items-center gap-2 mt-1 text-[10.5px] text-white/45 truncate">
-            <span className="flex items-center gap-1 shrink-0">
-              <Calendar className="w-2.5 h-2.5 text-white/30" />
+          <div className="flex items-center gap-2 mt-1 text-[10.5px] text-white/45 truncate whitespace-nowrap">
+            <span className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+              <Calendar className="w-2.5 h-2.5 text-white/30 shrink-0" />
               {currentSession.date}
             </span>
             <span>&bull;</span>
-            <span className="flex items-center gap-1 shrink-0">
-              <Clock className="w-2.5 h-2.5 text-white/30" />
+            <span className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+              <Clock className="w-2.5 h-2.5 text-white/30 shrink-0" />
               {currentSession.durationMinutes} phút
             </span>
             <span>&bull;</span>
-            <span className="flex items-center gap-1 text-violet-300/80 truncate">
+            <span className="flex items-center gap-1 text-violet-300/80 truncate whitespace-nowrap">
               <Cpu className="w-2.5 h-2.5 text-violet-400 shrink-0" />
               {currentSession.aiModel}
             </span>
@@ -169,7 +169,7 @@ export function DetailHeaderMeta({
         <Badge
           variant="outline"
           className={cn(
-            'text-[9.5px] px-2 py-0.5 border font-medium shrink-0',
+            'text-[9.5px] px-2 py-0.5 border font-medium shrink-0 whitespace-nowrap',
             currentSession.mode === 'interview'
               ? 'bg-violet-500/15 text-violet-300 border-violet-500/30'
               : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
@@ -183,13 +183,13 @@ export function DetailHeaderMeta({
       {currentSession.profileSnapshot && (
         <div className="p-2 rounded-lg bg-violet-950/20 border border-violet-500/20 flex flex-wrap items-center justify-between gap-2 text-[10px]">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1 text-violet-300 font-semibold">
-              <User className="w-3 h-3 text-violet-400" />
+            <span className="flex items-center gap-1 text-violet-300 font-semibold whitespace-nowrap">
+              <User className="w-3 h-3 text-violet-400 shrink-0" />
               Hồ sơ: {currentSession.profileSnapshot.role} ({currentSession.profileSnapshot.name})
             </span>
             {currentSession.profileSnapshot.companyName && (
-              <span className="flex items-center gap-1 text-white/60">
-                <Briefcase className="w-2.5 h-2.5 text-white/40" />
+              <span className="flex items-center gap-1 text-white/60 whitespace-nowrap">
+                <Briefcase className="w-2.5 h-2.5 text-white/40 shrink-0" />
                 {currentSession.profileSnapshot.companyName}
               </span>
             )}
@@ -200,7 +200,7 @@ export function DetailHeaderMeta({
               {currentSession.profileSnapshot.keywords.slice(0, 4).map((kw) => (
                 <span
                   key={kw}
-                  className="bg-violet-500/10 text-violet-200 border border-violet-500/20 px-1.5 py-0.2 rounded text-[9px] font-mono"
+                  className="bg-violet-500/10 text-violet-200 border border-violet-500/20 px-1.5 py-0.2 rounded text-[9px] font-mono whitespace-nowrap"
                 >
                   {kw}
                 </span>
@@ -211,20 +211,20 @@ export function DetailHeaderMeta({
       )}
 
       {/* Metrics Strip: Interactions, Questions, Tokens & Cost */}
-      <div className="flex items-center justify-between text-[10px] text-white/50 pt-1 border-t border-white/[0.04]">
-        <div className="flex items-center gap-3">
-          <span>
+      <div className="flex items-center justify-between text-[10px] text-white/50 pt-1 border-t border-white/[0.04] gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-3 shrink-0 whitespace-nowrap">
+          <span className="whitespace-nowrap">
             Tương tác: <strong className="text-white/80">{totalTimelineCount}</strong>
           </span>
-          <span>
+          <span className="whitespace-nowrap">
             Thoại: <strong className="text-white/80">{(currentSession.transcripts || []).length}</strong>
           </span>
-          <span>
+          <span className="whitespace-nowrap">
             Gợi ý AI: <strong className="text-violet-300">{(currentSession.suggestions || []).length}</strong>
           </span>
           {currentSession.screenshotQuestions && currentSession.screenshotQuestions.length > 0 && (
-            <span className="text-cyan-300 flex items-center gap-1">
-              <Camera className="w-2.5 h-2.5" />
+            <span className="text-cyan-300 flex items-center gap-1 whitespace-nowrap">
+              <Camera className="w-2.5 h-2.5 shrink-0" />
               {currentSession.screenshotQuestions.length} ảnh
             </span>
           )}
@@ -233,15 +233,17 @@ export function DetailHeaderMeta({
         {((currentSession.metrics?.totalTokens && currentSession.metrics.totalTokens > 0) ||
           (currentSession.metrics?.audioDurationSeconds && currentSession.metrics.audioDurationSeconds > 0) ||
           currentSession.metrics?.estimatedCostUsd !== undefined) && (
-          <div className="flex items-center gap-1.5 font-mono text-[9.5px]">
-            <Coins className="w-3 h-3 text-cyan-400" />
+          <div className="flex items-center gap-1.5 font-mono text-[9.5px] shrink-0 whitespace-nowrap ml-auto">
+            <Coins className="w-3 h-3 text-cyan-400 shrink-0" />
             {currentSession.metrics?.totalTokens && currentSession.metrics.totalTokens > 0 ? (
-              <span className="text-cyan-400">{currentSession.metrics.totalTokens.toLocaleString()} tokens</span>
+              <span className="text-cyan-400 whitespace-nowrap">{currentSession.metrics.totalTokens.toLocaleString()} tokens</span>
             ) : null}
             {currentSession.metrics?.audioDurationSeconds && currentSession.metrics.audioDurationSeconds > 0 ? (
-              <span className="text-white/40">({currentSession.metrics.audioDurationSeconds}s audio)</span>
+              <span className="text-white/40 whitespace-nowrap">
+                ({Math.round(currentSession.metrics.audioDurationSeconds)}s audio)
+              </span>
             ) : null}
-            <span className="text-emerald-400 font-semibold bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-500/20">
+            <span className="text-emerald-400 font-semibold bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-500/20 whitespace-nowrap">
               {currentSession.metrics?.costStatus === 'free'
                 ? 'Miễn phí ($0)'
                 : currentSession.metrics?.costStatus === 'unknown'
@@ -254,4 +256,3 @@ export function DetailHeaderMeta({
     </div>
   )
 }
-
