@@ -18,7 +18,10 @@ import { ProfileDeleteDialog } from './components/dialogs/ProfileDeleteDialog'
 import { ProfileImportExportDialog } from './components/dialogs/ProfileImportExportDialog'
 import { showToast } from '@/components/ui/toast'
 import { isValidCvContent, isValidJdContent } from '@/services/meeting-context/validation'
-import { useEffect } from 'react'
+import { getSavedMeetingContext, saveMeetingContext } from '@/services/meeting-context'
+import { sessionsPort } from '@/infrastructure/ipc'
+import { RotateCcw } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
 
 export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
   // 1. Audio Devices
@@ -73,8 +76,106 @@ export function Home({ onViewChange, mode, onModeChange }: HomeProps) {
     return () => window.removeEventListener('meeting-context-missing', handleMissing)
   }, [mode, profile.contextData.cvSummary, profile.contextData.jobDescription, profile.setInterviewTab])
 
+  // 7. Crash Recovery Detection on App Startup
+  const [unfinishedSession, setUnfinishedSession] = useState<any | null>(null)
+  const [isRecoveryBannerOpen, setIsRecoveryBannerOpen] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    void sessionsPort.recovery
+      .list({ minEventsThreshold: 1 })
+      .then((records) => {
+        if (!cancelled && records.length > 0) {
+          setUnfinishedSession(records[0])
+        }
+      })
+      .catch((err) => console.warn('[Home] Failed to scan recovery sessions:', err))
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleRecoverFromHome = useCallback(() => {
+    if (!unfinishedSession) return
+
+    const snapshot = unfinishedSession.snapshot
+    const recoveryId = unfinishedSession.sessionId
+
+    // 1. Mark pending session restore for Gatekeeper and MeetingMode
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('pending_session_restore', recoveryId)
+    }
+
+    // 2. Switch mode if recovered mode was different
+    if (snapshot?.mode && onModeChange && snapshot.mode !== mode) {
+      onModeChange(snapshot.mode)
+    }
+
+    // 3. Restore discussion context topic if applicable
+    let topic = snapshot?.discussionTopic
+    if (!topic && snapshot?.title?.startsWith('Thảo luận:')) {
+      topic = snapshot.title.replace(/^Thảo luận:\s*/i, '').trim()
+    }
+    if (topic) {
+      const curr = getSavedMeetingContext()
+      const updated = { ...curr, discussionTopic: topic }
+      saveMeetingContext(updated)
+      window.dispatchEvent(new CustomEvent('meeting-context-updated', { detail: updated }))
+    }
+
+    // 4. Navigate directly to meeting
+    onViewChange('meeting')
+  }, [unfinishedSession, onModeChange, mode, onViewChange])
+
+  const handleDiscardRecoveryFromHome = useCallback(async () => {
+    if (!unfinishedSession) return
+    const recoveryId = unfinishedSession.sessionId
+    await sessionsPort.recovery.complete(recoveryId, 'discarded')
+    setUnfinishedSession(null)
+    setIsRecoveryBannerOpen(false)
+  }, [unfinishedSession])
+
   return (
     <div className="flex flex-col h-full p-2.5 sm:p-3 overflow-y-auto [scrollbar-gutter:stable] custom-scrollbar select-none animate-fade-in">
+      {/* Crash Recovery Notification on Home */}
+      {unfinishedSession && isRecoveryBannerOpen && (
+        <div className="mb-2.5 flex items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-xs text-amber-100 shadow-md animate-fade-in shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <div className="min-w-0">
+              <span className="font-semibold text-amber-200 block">
+                Phát hiện phiên họp chưa hoàn thành do sự cố trước đó:
+              </span>
+              <p className="text-white/80 truncate text-[11px]">
+                <strong className="text-white font-medium">"{unfinishedSession.snapshot?.title || 'Cuộc họp trước'}"</strong>
+                {' '}&bull; {unfinishedSession.snapshot?.mode === 'discussion' ? 'Chế độ Thảo luận' : 'Chế độ Phỏng vấn'}
+                {unfinishedSession.snapshot?.transcripts?.length
+                  ? ` (${unfinishedSession.snapshot.transcripts.length} câu thoại)`
+                  : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              className="rounded-lg bg-amber-400 hover:bg-amber-300 px-3 py-1.5 text-xs text-black font-semibold transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
+              onClick={handleRecoverFromHome}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Khôi phục & Tiếp tục
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-white/20 hover:bg-white/10 px-2.5 py-1.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer"
+              onClick={handleDiscardRecoveryFromHome}
+            >
+              Bỏ qua
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Main Working Grid (2 Columns) ── */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 min-h-full flex-1">
         {/* ── Left Column: Box 1 (Context Editor) + Box 2 (System Quick Status & Launch) ── */}

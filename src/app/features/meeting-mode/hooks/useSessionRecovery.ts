@@ -6,6 +6,17 @@ import { usageTrackerService } from '@/services/usage-tracker'
 import { transcriptStore } from '../controllers/transcriptStore'
 import type { VisualQuestionItem } from '@/services/screen-capture'
 
+export interface RecoveredSessionData {
+  sessionId: string
+  title?: string
+  mode?: AppMode
+  startedAt?: number
+  discussionTopic?: string
+  discussionKeywords?: string[]
+  screenshotQuestions?: VisualQuestionItem[]
+  transcripts?: TranscriptLine[]
+}
+
 export interface UseSessionRecoveryProps {
   sessionId: string
   sessionTitle: string
@@ -14,7 +25,9 @@ export interface UseSessionRecoveryProps {
   validLines: TranscriptLine[]
   visualQuestionsHistory: VisualQuestionItem[]
   isSavedToHistory?: boolean
-  onSessionRestored?: (recoveredSessionId: string) => void
+  discussionTopic?: string
+  discussionKeywords?: string[]
+  onSessionRestored?: (recovered: RecoveredSessionData) => void
 }
 
 export interface UseSessionRecoveryReturn {
@@ -33,6 +46,8 @@ export function useSessionRecovery({
   validLines,
   visualQuestionsHistory,
   isSavedToHistory = false,
+  discussionTopic,
+  discussionKeywords,
   onSessionRestored,
 }: UseSessionRecoveryProps): UseSessionRecoveryReturn {
   const [unfinishedRecovery, setUnfinishedRecovery] = useState<any | null>(null)
@@ -45,12 +60,46 @@ export function useSessionRecovery({
   const modeRef = useRef(mode)
   const visualQuestionsRef = useRef(visualQuestionsHistory)
   const isSavedRef = useRef(isSavedToHistory)
+  const discussionTopicRef = useRef(discussionTopic)
+  const discussionKeywordsRef = useRef(discussionKeywords)
 
   useEffect(() => {
     sessionTitleRef.current = sessionTitle
     modeRef.current = mode
     visualQuestionsRef.current = visualQuestionsHistory
-  }, [sessionTitle, mode, visualQuestionsHistory])
+    discussionTopicRef.current = discussionTopic
+    discussionKeywordsRef.current = discussionKeywords
+  }, [sessionTitle, mode, visualQuestionsHistory, discussionTopic, discussionKeywords])
+
+  const extractRecoveredData = useCallback((record: any): RecoveredSessionData | null => {
+    const snap = record?.snapshot
+    if (!snap) return null
+    const recoveredLines = Array.isArray(snap.transcripts) ? snap.transcripts : []
+    const recoveredTitle = typeof snap.title === 'string' ? snap.title : undefined
+    const recoveredMode = snap.mode === 'discussion' || snap.mode === 'interview' ? snap.mode : undefined
+    const recoveredStartedAt = typeof snap.startedAt === 'number' ? snap.startedAt : undefined
+
+    let recoveredTopic =
+      typeof snap.discussionTopic === 'string' && snap.discussionTopic.trim()
+        ? snap.discussionTopic.trim()
+        : undefined
+
+    if (!recoveredTopic && recoveredTitle && recoveredTitle.startsWith('Thảo luận:')) {
+      const extracted = recoveredTitle.replace(/^Thảo luận:\s*/i, '').trim()
+      if (extracted) recoveredTopic = extracted
+    }
+
+    return {
+      sessionId: String(snap.id || record.sessionId),
+      title: recoveredTitle,
+      mode: recoveredMode,
+      startedAt: recoveredStartedAt,
+      discussionTopic: recoveredTopic,
+      discussionKeywords: Array.isArray(snap.discussionKeywords) ? snap.discussionKeywords : undefined,
+      screenshotQuestions: Array.isArray(snap.screenshotQuestions) ? snap.screenshotQuestions : undefined,
+      transcripts: recoveredLines,
+    }
+  }, [])
 
   // Theo dõi trạng thái đã lưu: nếu đã lưu thì complete recovery và khóa checkpoint
   useEffect(() => {
@@ -67,7 +116,26 @@ export function useSessionRecovery({
       .list({ activeSessionId: sessionId })
       .then((records) => {
         if (!cancelled && records.length > 0) {
-          setUnfinishedRecovery(records[0])
+          const first = records[0]
+          setUnfinishedRecovery(first)
+
+          // Check if auto-restore was requested from Home
+          const pendingRestoreId =
+            typeof sessionStorage !== 'undefined'
+              ? sessionStorage.getItem('pending_session_restore')
+              : null
+
+          if (pendingRestoreId && (pendingRestoreId === first.sessionId || pendingRestoreId === 'any')) {
+            sessionStorage.removeItem('pending_session_restore')
+            const recData = extractRecoveredData(first)
+            if (recData) {
+              transcriptStore.setLines(recData.transcripts || [])
+              onSessionRestored?.(recData)
+              void sessionsPort.recovery.complete(first.sessionId, 'completed')
+              setUnfinishedRecovery(null)
+              setIsRecoveryOpen(false)
+            }
+          }
         }
       })
       .catch((error) => console.warn('[useSessionRecovery] Recovery scan failed:', error))
@@ -75,7 +143,7 @@ export function useSessionRecovery({
     return () => {
       cancelled = true
     }
-  }, [sessionId])
+  }, [sessionId, extractRecoveredData, onSessionRestored])
 
   const hasRecordedMetaRef = useRef<string | null>(null)
 
@@ -97,6 +165,8 @@ export function useSessionRecovery({
           title: sessionTitleRef.current,
           mode: modeRef.current,
           startedAt: meetingStartTime,
+          discussionTopic: discussionTopicRef.current,
+          discussionKeywords: discussionKeywordsRef.current,
           lifecycle: 'active',
         },
       })
@@ -108,6 +178,8 @@ export function useSessionRecovery({
         title: sessionTitleRef.current,
         mode: modeRef.current,
         startedAt: meetingStartTime,
+        discussionTopic: discussionTopicRef.current,
+        discussionKeywords: discussionKeywordsRef.current,
         lifecycle: 'active',
       })
       .catch((error) => console.warn('[useSessionRecovery] Initial checkpoint failed:', error))
@@ -168,6 +240,8 @@ export function useSessionRecovery({
         title: sessionTitleRef.current,
         mode: modeRef.current,
         startedAt: meetingStartTime,
+        discussionTopic: discussionTopicRef.current,
+        discussionKeywords: discussionKeywordsRef.current,
         screenshotQuestions: visualQuestionsRef.current,
         usageRecords: [usageTrackerService.getSessionUsageSummary(sessionId)],
         lifecycle: 'active',
@@ -204,15 +278,12 @@ export function useSessionRecovery({
   }, [sessionId, triggerCheckpoint])
 
   const handleRestoreRecovery = useCallback(() => {
-    const recovered = unfinishedRecovery?.snapshot
-    if (!recovered) return
+    if (!unfinishedRecovery) return
+    const recData = extractRecoveredData(unfinishedRecovery)
+    if (!recData) return
 
-    const recoveredLines = Array.isArray(recovered.transcripts) ? recovered.transcripts : []
-    transcriptStore.setLines(recoveredLines)
-
-    if (typeof recovered.id === 'string' && onSessionRestored) {
-      onSessionRestored(recovered.id)
-    }
+    transcriptStore.setLines(recData.transcripts || [])
+    onSessionRestored?.(recData)
 
     // Đánh dấu hoàn tất recovery cho phiên cũ để banner không xuất hiện lại
     const recoverySessionId = unfinishedRecovery?.sessionId
@@ -222,7 +293,7 @@ export function useSessionRecovery({
 
     setUnfinishedRecovery(null)
     setIsRecoveryOpen(false)
-  }, [unfinishedRecovery, onSessionRestored])
+  }, [unfinishedRecovery, extractRecoveredData, onSessionRestored])
 
   const handleCompleteRecovery = useCallback(
     async (lifecycle: 'completed' | 'discarded') => {

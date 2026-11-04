@@ -91,6 +91,15 @@ export function useNavigationGatekeeper({
         return
       }
 
+      // Bypass checks & lobby when recovering an interrupted session directly from crash
+      const isPendingRestore =
+        typeof sessionStorage !== 'undefined' && sessionStorage.getItem('pending_session_restore')
+      if (isPendingRestore) {
+        onHasVisitedMeetingChange(true)
+        onViewChange('meeting')
+        return
+      }
+
       // Step 1: Context Guard Check
       const currentReadiness = getCombatReadiness(mode)
       setCombatReadiness(currentReadiness)

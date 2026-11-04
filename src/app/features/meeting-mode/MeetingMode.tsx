@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import type { AppMode } from '@/types/electron.d'
-import { getSavedMeetingContext, isValidCvContent, isValidJdContent } from '@/services/meeting-context'
+import { getSavedMeetingContext, saveMeetingContext, isValidCvContent, isValidJdContent } from '@/services/meeting-context'
 import {
   getSavedAIModelId,
   getSelectedModelConfig,
@@ -37,6 +37,7 @@ import {
   useScreenCapture,
   useSessionRecovery,
   useMeetingHotkeys,
+  type RecoveredSessionData,
 } from './hooks'
 import {
   MeetingHeader,
@@ -52,7 +53,7 @@ import {
 } from '@/components/shared'
 import { sessionsPort } from '@/infrastructure/ipc'
 
-export function MeetingMode({ mode: controlledMode, onViewChange, isActive }: MeetingModeProps) {
+export function MeetingMode({ mode: controlledMode, onModeChange, onViewChange, isActive }: MeetingModeProps) {
   const [internalMode] = useState<AppMode>('interview')
   const mode = controlledMode ?? internalMode
 
@@ -288,6 +289,40 @@ export function MeetingMode({ mode: controlledMode, onViewChange, isActive }: Me
   })
 
   // 10. Session Recovery
+  const handleSessionRestored = useCallback(
+    (recoveredData: RecoveredSessionData) => {
+      session.restoreSessionMeta({
+        id: recoveredData.sessionId,
+        title: recoveredData.title,
+        startedAt: recoveredData.startedAt,
+      })
+
+      // 1. Restore Discussion Topic & Context if present
+      if (recoveredData.discussionTopic) {
+        const current = getSavedMeetingContext()
+        const updated = {
+          ...current,
+          discussionTopic: recoveredData.discussionTopic,
+          ...(recoveredData.discussionKeywords ? { discussionKeywords: recoveredData.discussionKeywords } : {}),
+        }
+        saveMeetingContext(updated)
+        setContextData(updated)
+        window.dispatchEvent(new CustomEvent('meeting-context-updated', { detail: updated }))
+      }
+
+      // 2. Restore Mode if different
+      if (recoveredData.mode && onModeChange && recoveredData.mode !== mode) {
+        onModeChange(recoveredData.mode)
+      }
+
+      // 3. Restore Visual Questions History if present
+      if (recoveredData.screenshotQuestions && recoveredData.screenshotQuestions.length > 0) {
+        capture.setVisualQuestionsHistory(recoveredData.screenshotQuestions)
+      }
+    },
+    [mode, onModeChange, session, capture]
+  )
+
   const recovery = useSessionRecovery({
     sessionId: session.sessionId,
     sessionTitle: session.currentSessionTitle,
@@ -296,7 +331,9 @@ export function MeetingMode({ mode: controlledMode, onViewChange, isActive }: Me
     validLines: transcript.validLines,
     visualQuestionsHistory: capture.visualQuestionsHistory,
     isSavedToHistory: session.isSavedToHistory,
-    onSessionRestored: session.setSessionId,
+    discussionTopic: contextData.discussionTopic,
+    discussionKeywords: contextData.discussionKeywords,
+    onSessionRestored: handleSessionRestored,
   })
 
   // 11. Hotkeys

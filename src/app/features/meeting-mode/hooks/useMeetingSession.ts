@@ -38,7 +38,9 @@ export interface UseMeetingSessionReturn {
   currentSessionTitle: string
   isSavedToHistory: boolean
   setCustomSessionTitle: (title: string) => void
+  setMeetingStartTime: (time: number) => void
   setSessionId: (id: string) => void
+  restoreSessionMeta: (meta: { id: string; title?: string; startedAt?: number }) => void
   handleSaveToHistory: (options: SaveSessionOptions) => Promise<void>
   resetSession: () => void
 }
@@ -76,6 +78,7 @@ export function useMeetingSession({
   const [customSessionTitle, setCustomSessionTitle] = useState<string>('')
   const [isSavedToHistory, setIsSavedToHistory] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isRestoringRef = useRef(false)
 
   const defaultSessionTitle = useMemo(() => {
     return mode === 'interview'
@@ -91,6 +94,11 @@ export function useMeetingSession({
   const prevContextIdentityRef = useRef(`${mode}:${discussionTopic || ''}:${profileSnapshot.name || ''}`)
   useEffect(() => {
     const nextIdentity = `${mode}:${discussionTopic || ''}:${profileSnapshot.name || ''}`
+    if (isRestoringRef.current) {
+      isRestoringRef.current = false
+      prevContextIdentityRef.current = nextIdentity
+      return
+    }
     if (prevContextIdentityRef.current !== nextIdentity) {
       prevContextIdentityRef.current = nextIdentity
       setCustomSessionTitle('')
@@ -98,6 +106,18 @@ export function useMeetingSession({
   }, [mode, discussionTopic, profileSnapshot.name])
 
   const currentSessionTitle = customSessionTitle || defaultSessionTitle
+
+  const restoreSessionMeta = useCallback((meta: { id: string; title?: string; startedAt?: number }) => {
+    isRestoringRef.current = true
+    setSessionId(meta.id)
+    if (typeof meta.startedAt === 'number' && Number.isFinite(meta.startedAt)) {
+      setMeetingStartTime(meta.startedAt)
+    }
+    if (meta.title) {
+      setCustomSessionTitle(meta.title)
+    }
+    setIsSavedToHistory(false)
+  }, [])
 
   const resetSession = useCallback(() => {
     const newId = `session_${Date.now()}`
@@ -283,7 +303,9 @@ export function useMeetingSession({
     currentSessionTitle,
     isSavedToHistory,
     setCustomSessionTitle,
+    setMeetingStartTime,
     setSessionId,
+    restoreSessionMeta,
     handleSaveToHistory,
     resetSession,
   }

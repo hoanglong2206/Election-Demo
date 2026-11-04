@@ -32,6 +32,7 @@ export interface UseScreenCaptureReturn {
   capturedImageInfo: CapturedImageInfo | null
   activeVisualQuestion: VisualQuestionItem | null
   visualQuestionsHistory: VisualQuestionItem[]
+  setVisualQuestionsHistory: React.Dispatch<React.SetStateAction<VisualQuestionItem[]>>
   setIsScreenSourcePickerOpen: (open: boolean) => void
   handleCancelPicker: () => void
   handleTriggerScreenCapture: () => void
@@ -282,6 +283,7 @@ export function useScreenCapture({
     capturedImageInfo,
     activeVisualQuestion,
     visualQuestionsHistory,
+    setVisualQuestionsHistory,
     setIsScreenSourcePickerOpen,
     handleCancelPicker,
     handleTriggerScreenCapture,
