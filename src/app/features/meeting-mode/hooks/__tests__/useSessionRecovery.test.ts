@@ -48,7 +48,7 @@ describe('useSessionRecovery Hook', () => {
 
     mockRecoveryList.mockImplementation(async () => [mockUnfinished])
 
-    let restoredData: RecoveredSessionData | null = null
+    let restoredData: any = null
     const onSessionRestored = mock((data: RecoveredSessionData) => {
       restoredData = data
     })
@@ -115,7 +115,7 @@ describe('useSessionRecovery Hook', () => {
 
     mockRecoveryList.mockImplementation(async () => [mockLegacyUnfinished])
 
-    let restoredData: RecoveredSessionData | null = null
+    let restoredData: any = null
     const onSessionRestored = mock((data: RecoveredSessionData) => {
       restoredData = data
     })
@@ -167,7 +167,7 @@ describe('useSessionRecovery Hook', () => {
 
     mockRecoveryList.mockImplementation(async () => [mockUnfinished])
 
-    let restoredData: RecoveredSessionData | null = null
+    let restoredData: any = null
     const onSessionRestored = mock((data: RecoveredSessionData) => {
       restoredData = data
     })
